@@ -34,7 +34,7 @@ export default function Navbar() {
 
           <span className="brand-copy">
             <strong>
-              Liga de Tenis
+              Liga de Tenis - San Pedro
             </strong>
 
             <small>

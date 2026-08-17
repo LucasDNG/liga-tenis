@@ -1,4 +1,7 @@
-import { Routes, Route } from "react-router-dom";
+import {
+  Routes,
+  Route,
+} from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -8,6 +11,8 @@ import RankingPage from "./pages/RankingPage";
 import EloPage from "./pages/EloPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ChallengesPage from "./pages/ChallengesPage";
 import MatchesPage from "./pages/MatchesPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -42,6 +47,20 @@ export default function App() {
         <Route
           path="/register"
           element={<RegisterPage />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={
+            <ForgotPasswordPage />
+          }
+        />
+
+        <Route
+          path="/reset-password/:token"
+          element={
+            <ResetPasswordPage />
+          }
         />
 
         <Route
