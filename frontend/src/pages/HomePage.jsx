@@ -33,8 +33,8 @@ export default function HomePage() {
         <div className="site-width home-grid">
           <div className="hero-copy-dark">
             <h1>
-              El Ranking
-              <span>San Pedro</span>
+              
+              <span>Tenis Libre</span>
             </h1>
 
             <p>

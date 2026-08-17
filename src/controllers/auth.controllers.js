@@ -23,8 +23,17 @@ export const signUp = async (req, res, next) => {
       gender,
     } = req.body;
 
-    if (!first_name || !last_name || !dni || !phone || !email || !password) {
-      return res.status(400).json({ message: "Completá todos los campos" });
+    if (
+      !first_name ||
+      !last_name ||
+      !dni ||
+      !phone ||
+      !email ||
+      !password
+    ) {
+      return res.status(400).json({
+        message: "Completá todos los campos",
+      });
     }
 
     if (!LEAGUES.includes(gender)) {
@@ -33,7 +42,10 @@ export const signUp = async (req, res, next) => {
       });
     }
 
-    if (!req.files?.dni_front?.[0] || !req.files?.dni_back?.[0]) {
+    if (
+      !req.files?.dni_front?.[0] ||
+      !req.files?.dni_back?.[0]
+    ) {
       return res.status(400).json({
         message: "Debés subir frente y dorso del DNI",
       });
@@ -42,23 +54,57 @@ export const signUp = async (req, res, next) => {
     const first = titleCase(first_name);
     const last = titleCase(last_name);
     const name = `${first} ${last}`;
-    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      10,
+    );
 
     const result = await pool.query(
       `
       INSERT INTO users (
-        name, first_name, last_name, dni, phone, email, password,
-        city, gender, rank_position, rating, matches_played,
-        dni_front_path, dni_back_path, verification_status
+        name,
+        first_name,
+        last_name,
+        dni,
+        phone,
+        email,
+        password,
+        city,
+        gender,
+        rank_position,
+        rating,
+        matches_played,
+        dni_front_path,
+        dni_back_path,
+        verification_status
       )
       VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,
-        COALESCE((
-          SELECT MAX(rank_position)
-          FROM users
-          WHERE city = $8 AND gender = $9
-        ),0) + 1,
-        1500,0,$10,$11,'pending_verification'
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8::varchar,
+        $9::varchar,
+
+        COALESCE(
+          (
+            SELECT MAX(rank_position)
+            FROM users
+            WHERE city = $8::varchar
+              AND gender = $9::varchar
+          ),
+          0
+        ) + 1,
+
+        1500,
+        0,
+        $10,
+        $11,
+        'pending_verification'
       )
       RETURNING *
       `,
@@ -78,17 +124,25 @@ export const signUp = async (req, res, next) => {
     );
 
     const user = toPublicUser(result.rows[0]);
-    const token = await createAccessToken({ id: user.id });
+
+    const token = await createAccessToken({
+      id: user.id,
+    });
 
     res.cookie("token", token, cookieOptions);
+
     res.status(201).json(user);
   } catch (error) {
     if (error.code === "23505") {
       const message = error.constraint?.includes("dni")
         ? "Ese DNI ya está registrado"
         : "Ese email ya está registrado";
-      return res.status(400).json({ message });
+
+      return res.status(400).json({
+        message,
+      });
     }
+
     next(error);
   }
 };
@@ -98,22 +152,39 @@ export const signIn = async (req, res, next) => {
     const { dni, password } = req.body;
 
     const result = await pool.query(
-      "SELECT * FROM users WHERE dni = $1",
+      `
+      SELECT *
+      FROM users
+      WHERE dni = $1
+      `,
       [dni?.trim()],
     );
 
     if (!result.rowCount) {
-      return res.status(400).json({ message: "El DNI no está registrado" });
+      return res.status(400).json({
+        message: "El DNI no está registrado",
+      });
     }
 
-    const valid = await bcrypt.compare(password, result.rows[0].password);
+    const valid = await bcrypt.compare(
+      password,
+      result.rows[0].password,
+    );
+
     if (!valid) {
-      return res.status(400).json({ message: "La contraseña es incorrecta" });
+      return res.status(400).json({
+        message: "La contraseña es incorrecta",
+      });
     }
 
     const user = toPublicUser(result.rows[0]);
-    const token = await createAccessToken({ id: user.id });
+
+    const token = await createAccessToken({
+      id: user.id,
+    });
+
     res.cookie("token", token, cookieOptions);
+
     res.json(user);
   } catch (error) {
     next(error);
@@ -124,8 +195,12 @@ export const signOut = (_req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    sameSite:
+      process.env.NODE_ENV === "production"
+        ? "none"
+        : "lax",
   });
+
   res.sendStatus(200);
 };
 
@@ -133,9 +208,22 @@ export const profile = async (req, res, next) => {
   try {
     const result = await pool.query(
       `
-      SELECT id,name,first_name,last_name,dni,phone,email,city,gender,
-             rating,matches_played,verification_status,verified_at,
-             created_at,updated_at
+      SELECT
+        id,
+        name,
+        first_name,
+        last_name,
+        dni,
+        phone,
+        email,
+        city,
+        gender,
+        rating,
+        matches_played,
+        verification_status,
+        verified_at,
+        created_at,
+        updated_at
       FROM users
       WHERE id = $1
       `,
@@ -143,7 +231,9 @@ export const profile = async (req, res, next) => {
     );
 
     if (!result.rowCount) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
+      return res.status(404).json({
+        message: "Usuario no encontrado",
+      });
     }
 
     res.json(result.rows[0]);
@@ -152,7 +242,11 @@ export const profile = async (req, res, next) => {
   }
 };
 
-export const chooseLeague = async (req, res, next) => {
+export const chooseLeague = async (
+  req,
+  res,
+  next,
+) => {
   try {
     const { gender } = req.body;
 
@@ -165,20 +259,35 @@ export const chooseLeague = async (req, res, next) => {
     const result = await pool.query(
       `
       UPDATE users
-      SET gender = $1,
-          rank_position = COALESCE((
+      SET
+        gender = $1::varchar,
+
+        rank_position = COALESCE(
+          (
             SELECT MAX(rank_position)
             FROM users
-            WHERE city = $2 AND gender = $1
-          ),0) + 1,
-          updated_at = CURRENT_TIMESTAMP
+            WHERE city = $2::varchar
+              AND gender = $1::varchar
+          ),
+          0
+        ) + 1,
+
+        updated_at = CURRENT_TIMESTAMP
+
       WHERE id = $3
+
       RETURNING *
       `,
-      [gender, LEAGUE_CITY, req.userId],
+      [
+        gender,
+        LEAGUE_CITY,
+        req.userId,
+      ],
     );
 
-    res.json(toPublicUser(result.rows[0]));
+    res.json(
+      toPublicUser(result.rows[0]),
+    );
   } catch (error) {
     next(error);
   }
