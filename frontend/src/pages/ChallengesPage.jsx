@@ -1,78 +1,148 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 
-const statusLabels = {
-  pending: "Pendiente",
-  accepted: "Aceptado",
-  rejected: "Rechazado",
-};
-
-const formatPhone = (phone) => {
-  if (!phone) return "";
-
-  let numbers = phone.replace(/\D/g, "");
-
-  // Quita el 0 de la característica
-  if (numbers.startsWith("0")) {
-    numbers = numbers.slice(1);
-  }
-
-  // Ejemplo:
-  // 3329400704 -> (3329) 400704
-  if (numbers.length === 10) {
-    const areaCode = numbers.slice(0, 4);
-    const localNumber = numbers.slice(4);
-
-    return `(${areaCode}) ${localNumber}`;
-  }
-
-  // Si por algún motivo el número tiene otro formato,
-  // lo mostramos sin modificar para no romperlo.
-  return numbers;
-};
-
-export default function ChallengesPage() {
+export default function RankingPage() {
   const { user } = useAuth();
 
-  const [challenges, setChallenges] = useState([]);
-  const [message, setMessage] = useState("");
+  const [params, setParams] =
+    useSearchParams();
 
-  const load = () =>
-    api
-      .get("/challenges")
-      .then(({ data }) => setChallenges(data.challenges));
+  const initial =
+    params.get("gender") ||
+    user?.gender ||
+    "male";
+
+  const [league, setLeague] =
+    useState(initial);
+
+  const [players, setPlayers] =
+    useState([]);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [challengingId, setChallengingId] =
+    useState(null);
 
   useEffect(() => {
-    load();
-  }, []);
+    const loadRanking = async () => {
+      try {
+        setLoading(true);
+        setMessage("");
 
-  const action = async (id, type) => {
+        setParams({
+          gender: league,
+        });
+
+        const { data } =
+          await api.get(
+            `/ranking?gender=${league}`,
+          );
+
+        setPlayers(data.players);
+      } catch (error) {
+        setMessage(
+          error.response?.data?.message ||
+            "No se pudo cargar el ranking",
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadRanking();
+  }, [league, setParams]);
+
+  const challenge = async (id) => {
+    if (challengingId) return;
+
     try {
-      const { data } = await api.patch(
-        `/challenges/${id}/${type}`,
-      );
+      setMessage("");
+      setChallengingId(id);
+
+      const { data } =
+        await api.post(
+          "/challenges",
+          {
+            challenged_id: id,
+          },
+        );
 
       setMessage(data.message);
-
-      load();
     } catch (error) {
       setMessage(
         error.response?.data?.message ||
-          "No se pudo actualizar el desafío",
+          "No se pudo crear el desafío",
       );
+    } finally {
+      setChallengingId(null);
     }
   };
+
+  const myPosition =
+    players.find(
+      (player) =>
+        player.id === user?.id,
+    )?.rank_position;
+
+  const isVerified =
+    user?.verification_status ===
+    "verified";
 
   return (
     <main className="page-dark">
       <div className="site-width page-content">
         <div className="page-heading">
           <div>
-            <span>TU LIGA</span>
-            <h1>Desafíos</h1>
+            <span>
+              CLASIFICACIÓN
+            </span>
+
+            <h1>Ranking</h1>
+          </div>
+
+          <div className="league-switch">
+            <button
+              className={
+                league === "male"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                setLeague("male")
+              }
+            >
+              Masculina
+            </button>
+
+            <button
+              className={
+                league === "female"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                setLeague("female")
+              }
+            >
+              Femenina
+            </button>
           </div>
         </div>
+
+        {!isVerified && user && (
+          <div className="notice">
+            Tu cuenta todavía no está habilitada para competir.
+            Podés ver el ranking, pero para desafiar jugadores
+            primero tenés que tener la identidad verificada.
+          </div>
+        )}
 
         {message && (
           <div className="notice">
@@ -80,125 +150,113 @@ export default function ChallengesPage() {
           </div>
         )}
 
-        <div className="cards-dark">
-          {challenges.length === 0 && (
-            <div className="empty-dark">
-              No tenés desafíos todavía.
+        {loading ? (
+          <div className="notice">
+            Cargando ranking...
+          </div>
+        ) : (
+          <div className="ranking-box">
+            <div className="ranking-head">
+              <span>#</span>
+              <span>Jugador</span>
+              <span>Elo</span>
+              <span>Partidos</span>
+              <span>Acción</span>
             </div>
-          )}
 
-          {challenges.map((challenge) => {
-            const incoming =
-              challenge.challenged_id === user?.id;
+            {players.map(
+              (player) => {
+                const canChallenge =
+                  user &&
+                  isVerified &&
+                  user.gender === league &&
+                  player.id !== user.id &&
+                  myPosition &&
+                  player.rank_position <
+                    myPosition &&
+                  myPosition -
+                    player.rank_position <=
+                    3;
 
-            const rivalName = incoming
-              ? challenge.challenger_name
-              : challenge.challenged_name;
+                const isSending =
+                  challengingId ===
+                  player.id;
 
-            const rivalPhone = incoming
-              ? challenge.challenger_phone
-              : challenge.challenged_phone;
-
-            const statusLabel =
-              statusLabels[challenge.status] ||
-              challenge.status;
-
-            const cleanPhone =
-              rivalPhone?.replace(/\D/g, "");
-
-            const formattedPhone =
-              formatPhone(rivalPhone);
-
-            return (
-              <article
-                key={challenge.id}
-                className="card-dark"
-              >
-                <div>
-                  <span className="card-label">
-                    {incoming
-                      ? "TE DESAFIÓ"
-                      : "DESAFIASTE A"}
-                  </span>
-
-                  <h2>{rivalName}</h2>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: "18px",
-                    marginTop: "18px",
-                  }}
-                >
-                  <span
-                    className={`status-dark ${challenge.status}`}
+                return (
+                  <div
+                    className="ranking-row"
+                    key={player.id}
                   >
-                    {statusLabel}
-                  </span>
+                    <span className="rank-digit">
+                      {String(
+                        player.rank_position,
+                      ).padStart(
+                        2,
+                        "0",
+                      )}
+                    </span>
 
-                  {challenge.status === "accepted" &&
-                    rivalPhone && (
-                      <>
-                        <a
-                          className="whatsapp"
+                    <strong>
+                      {player.name}
+
+                      {player.id ===
+                        user?.id && (
+                        <em>
+                          {" "}
+                          VOS
+                        </em>
+                      )}
+                    </strong>
+
+                    <span>
+                      {player.rating}
+                    </span>
+
+                    <span>
+                      {
+                        player.matches_played
+                      }
+                    </span>
+
+                    <span>
+                      {canChallenge ? (
+                        <button
+                          className="small-action"
+                          onClick={() =>
+                            challenge(
+                              player.id,
+                            )
+                          }
+                          disabled={
+                            Boolean(
+                              challengingId,
+                            )
+                          }
                           style={{
-                            marginTop: 0,
-                          }}
-                          href={`https://wa.me/54${cleanPhone}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          WhatsApp del rival
-                        </a>
-
-                        <span
-                          style={{
-                            color: "#c0c7c0",
-                            fontSize: "13px",
-                            letterSpacing: "0.03em",
+                            opacity:
+                              challengingId
+                                ? 0.7
+                                : 1,
+                            cursor:
+                              challengingId
+                                ? "wait"
+                                : "pointer",
                           }}
                         >
-                          {formattedPhone}
-                        </span>
-                      </>
-                    )}
-                </div>
-
-                {incoming &&
-                  challenge.status === "pending" && (
-                    <div className="card-actions">
-                      <button
-                        onClick={() =>
-                          action(
-                            challenge.id,
-                            "accept",
-                          )
-                        }
-                        className="small-action"
-                      >
-                        Aceptar
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          action(
-                            challenge.id,
-                            "reject",
-                          )
-                        }
-                        className="small-action secondary"
-                      >
-                        Rechazar
-                      </button>
-                    </div>
-                  )}
-              </article>
-            );
-          })}
-        </div>
+                          {isSending
+                            ? "ENVIANDO..."
+                            : "Desafiar"}
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </span>
+                  </div>
+                );
+              },
+            )}
+          </div>
+        )}
       </div>
     </main>
   );

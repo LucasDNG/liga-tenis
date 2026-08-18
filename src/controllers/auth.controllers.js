@@ -678,6 +678,7 @@ export const profile = async (
           gender,
           rating,
           matches_played,
+          role,
           verification_status,
           verified_at,
           created_at,

@@ -1,10 +1,13 @@
 import {
   Routes,
   Route,
+  Navigate,
 } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
+
+import { useAuth } from "./context/AuthContext";
 
 import HomePage from "./pages/HomePage";
 import RankingPage from "./pages/RankingPage";
@@ -16,7 +19,37 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ChallengesPage from "./pages/ChallengesPage";
 import MatchesPage from "./pages/MatchesPage";
 import ProfilePage from "./pages/ProfilePage";
+import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
+
+function AdminRoute({ children }) {
+  const { user, loadingAuth } =
+    useAuth();
+
+  if (loadingAuth) {
+    return null;
+  }
+
+  if (!user) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+      />
+    );
+  }
+
+  if (user.role !== "admin") {
+    return (
+      <Navigate
+        to="/"
+        replace
+      />
+    );
+  }
+
+  return children;
+}
 
 export default function App() {
   return (
@@ -87,6 +120,15 @@ export default function App() {
             <ProtectedRoute>
               <ProfilePage />
             </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminPage />
+            </AdminRoute>
           }
         />
 

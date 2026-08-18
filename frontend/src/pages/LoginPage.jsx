@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 import {
   useNavigate,
   Link,
@@ -20,10 +21,16 @@ export default function LoginPage() {
   const [error, setError] =
     useState("");
 
+  const [loading, setLoading] =
+    useState(false);
+
   const submit = async (event) => {
     event.preventDefault();
 
+    if (loading) return;
+
     setError("");
+    setLoading(true);
 
     try {
       await signin({
@@ -37,6 +44,8 @@ export default function LoginPage() {
         err.response?.data?.message ||
           "No se pudo iniciar sesión",
       );
+
+      setLoading(false);
     }
   };
 
@@ -58,6 +67,7 @@ export default function LoginPage() {
               onChange={(e) =>
                 setDni(e.target.value)
               }
+              disabled={loading}
               required
             />
           </label>
@@ -73,6 +83,7 @@ export default function LoginPage() {
                   e.target.value,
                 )
               }
+              disabled={loading}
               required
             />
           </label>
@@ -87,8 +98,16 @@ export default function LoginPage() {
               style={{
                 color: "#9bbe61",
                 fontSize: "13px",
-                textDecoration: "underline",
-                textUnderlineOffset: "4px",
+                textDecoration:
+                  "underline",
+                textUnderlineOffset:
+                  "4px",
+                pointerEvents: loading
+                  ? "none"
+                  : "auto",
+                opacity: loading
+                  ? 0.5
+                  : 1,
               }}
             >
               ¿Olvidaste tu contraseña?
@@ -101,11 +120,28 @@ export default function LoginPage() {
             </div>
           )}
 
+          {loading && (
+            <div className="notice">
+              Iniciando sesión...
+            </div>
+          )}
+
           <button
             className="btn-solid"
             type="submit"
+            disabled={loading}
+            style={{
+              opacity: loading
+                ? 0.7
+                : 1,
+              cursor: loading
+                ? "wait"
+                : "pointer",
+            }}
           >
-            INGRESAR
+            {loading
+              ? "INGRESANDO..."
+              : "INGRESAR"}
           </button>
         </form>
 

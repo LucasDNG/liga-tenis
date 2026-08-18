@@ -6,7 +6,8 @@ import {
 import { useAuth } from "../context/AuthContext";
 
 export default function Navbar() {
-  const { user, signout } = useAuth();
+  const { user, signout } =
+    useAuth();
 
   const navigate = useNavigate();
 
@@ -38,9 +39,11 @@ export default function Navbar() {
             </strong>
 
             <small>
-              {user?.gender === "female"
+              {user?.gender ===
+              "female"
                 ? "Liga Femenina"
-                : user?.gender === "male"
+                : user?.gender ===
+                    "male"
                   ? "Liga Masculina"
                   : "San Pedro · Buenos Aires"}
             </small>
@@ -84,6 +87,16 @@ export default function Navbar() {
               >
                 Mi perfil
               </Link>
+
+              {user.role ===
+                "admin" && (
+                <Link
+                  to="/admin"
+                  className="nav-link"
+                >
+                  Administración
+                </Link>
+              )}
 
               <button
                 onClick={out}

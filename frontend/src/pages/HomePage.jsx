@@ -36,6 +36,7 @@ export default function HomePage() {
               
               <span>Tenis Libre</span>
             </h1>
+           
 
             <p>
               Una liga abierta para jugadores de la ciudad. Desafiá, coordiná el
