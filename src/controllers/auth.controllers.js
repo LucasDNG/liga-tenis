@@ -4,11 +4,23 @@ import crypto from "crypto";
 import { pool } from "../db.js";
 import { createAccessToken } from "../libs/jwt.js";
 
-import { LEAGUE_CITY, LEAGUES } from "../constants/league.js";
+import {
+  LEAGUE_CITY,
+  LEAGUES,
+} from "../constants/league.js";
 
-import { titleCase, toPublicUser } from "../utils/user.js";
+import {
+  titleCase,
+  toPublicUser,
+} from "../utils/user.js";
 
-import { sendPasswordResetEmail } from "../services/email.service.js";
+import {
+  sendPasswordResetEmail,
+} from "../services/email.service.js";
+
+import {
+  uploadDniImages,
+} from "../services/cloudinary.service.js";
 
 /*
   CONFIGURACIÓN DE LA COOKIE
@@ -17,50 +29,176 @@ import { sendPasswordResetEmail } from "../services/email.service.js";
 const cookieOptions = {
   httpOnly: true,
 
-  secure: process.env.NODE_ENV === "production",
+  secure:
+    process.env.NODE_ENV === "production",
 
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  sameSite:
+    process.env.NODE_ENV === "production"
+      ? "none"
+      : "lax",
 
-  maxAge: 1000 * 60 * 60 * 24,
+  maxAge:
+    1000 * 60 * 60 * 24,
 };
 
 /*
   REGISTRO
 */
 
-export const signUp = async (req, res, next) => {
+export const signUp = async (
+  req,
+  res,
+  next,
+) => {
   try {
-    const { first_name, last_name, dni, phone, email, password, gender } =
-      req.body;
+    const {
+      first_name,
+      last_name,
+      dni,
+      phone,
+      email,
+      password,
+      gender,
+    } = req.body;
 
-    if (!first_name || !last_name || !dni || !phone || !email || !password) {
+    if (
+      !first_name ||
+      !last_name ||
+      !dni ||
+      !phone ||
+      !email ||
+      !password
+    ) {
       return res.status(400).json({
-        message: "Completá todos los campos",
+        message:
+          "Completá todos los campos",
       });
     }
 
-    if (!LEAGUES.includes(gender)) {
+    if (
+      !LEAGUES.includes(gender)
+    ) {
       return res.status(400).json({
-        message: "Elegí Liga Masculina o Liga Femenina",
+        message:
+          "Elegí Liga Masculina o Liga Femenina",
       });
     }
 
-    if (!req.files?.dni_front?.[0] || !req.files?.dni_back?.[0]) {
+    if (
+      !req.files?.dni_front?.[0] ||
+      !req.files?.dni_back?.[0]
+    ) {
       return res.status(400).json({
-        message: "Debés subir frente y dorso del DNI",
+        message:
+          "Debés subir frente y dorso del DNI",
       });
     }
 
-    const first = titleCase(first_name);
+    const first =
+      titleCase(first_name);
 
-    const last = titleCase(last_name);
+    const last =
+      titleCase(last_name);
 
-    const name = `${first} ${last}`;
+    const name =
+      `${first} ${last}`;
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const normalizedDni =
+      dni.trim();
 
-    const result = await pool.query(
-      `
+    const normalizedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    /*
+      Primero comprobamos que DNI
+      y email no estén registrados.
+
+      Esto evita subir imágenes a
+      Cloudinary innecesariamente.
+    */
+
+    const existing =
+      await pool.query(
+        `
+        SELECT
+          dni,
+          email
+        FROM users
+        WHERE dni = $1
+           OR email = $2
+        `,
+        [
+          normalizedDni,
+          normalizedEmail,
+        ],
+      );
+
+    if (existing.rowCount) {
+      const dniExists =
+        existing.rows.some(
+          (user) =>
+            user.dni ===
+            normalizedDni,
+        );
+
+      return res
+        .status(400)
+        .json({
+          message:
+            dniExists
+              ? "Ese DNI ya está registrado"
+              : "Ese email ya está registrado",
+        });
+    }
+
+    /*
+      Subimos frente y dorso del DNI
+      a Cloudinary.
+
+      Se almacenan como archivos
+      authenticated, no públicos.
+    */
+
+    const uploadedDni =
+      await uploadDniImages({
+        frontBuffer:
+          req.files
+            .dni_front[0]
+            .buffer,
+
+        backBuffer:
+          req.files
+            .dni_back[0]
+            .buffer,
+
+        userReference:
+          normalizedDni,
+      });
+
+    /*
+      Guardamos los public_id.
+
+      No guardamos una URL pública
+      porque las imágenes son privadas.
+    */
+
+    const dniFrontPath =
+      uploadedDni.front.public_id;
+
+    const dniBackPath =
+      uploadedDni.back.public_id;
+
+    const hashedPassword =
+      await bcrypt.hash(
+        password,
+        10,
+      );
+
+    const result =
+      await pool.query(
+        `
         INSERT INTO users (
           name,
           first_name,
@@ -107,43 +245,56 @@ export const signUp = async (req, res, next) => {
         )
         RETURNING *
         `,
-      [
-        name,
-        first,
-        last,
-        dni.trim(),
-        phone.trim(),
+        [
+          name,
+          first,
+          last,
+          normalizedDni,
+          phone.trim(),
+          normalizedEmail,
+          hashedPassword,
+          LEAGUE_CITY,
+          gender,
+          dniFrontPath,
+          dniBackPath,
+        ],
+      );
 
-        email.trim().toLowerCase(),
+    const user =
+      toPublicUser(
+        result.rows[0],
+      );
 
-        hashedPassword,
-        LEAGUE_CITY,
-        gender,
+    const token =
+      await createAccessToken({
+        id: user.id,
+      });
 
-        req.files.dni_front[0].path,
-
-        req.files.dni_back[0].path,
-      ],
+    res.cookie(
+      "token",
+      token,
+      cookieOptions,
     );
 
-    const user = toPublicUser(result.rows[0]);
-
-    const token = await createAccessToken({
-      id: user.id,
-    });
-
-    res.cookie("token", token, cookieOptions);
-
-    res.status(201).json(user);
+    res
+      .status(201)
+      .json(user);
   } catch (error) {
-    if (error.code === "23505") {
-      const message = error.constraint?.includes("dni")
-        ? "Ese DNI ya está registrado"
-        : "Ese email ya está registrado";
+    if (
+      error.code === "23505"
+    ) {
+      const message =
+        error.constraint?.includes(
+          "dni",
+        )
+          ? "Ese DNI ya está registrado"
+          : "Ese email ya está registrado";
 
-      return res.status(400).json({
-        message,
-      });
+      return res
+        .status(400)
+        .json({
+          message,
+        });
     }
 
     next(error);
@@ -154,46 +305,83 @@ export const signUp = async (req, res, next) => {
   LOGIN
 */
 
-export const signIn = async (req, res, next) => {
+export const signIn = async (
+  req,
+  res,
+  next,
+) => {
   try {
-    const { dni, password } = req.body;
+    const {
+      dni,
+      password,
+    } = req.body;
 
-    if (!dni || !password) {
-      return res.status(400).json({
-        message: "Ingresá DNI y contraseña",
-      });
+    if (
+      !dni ||
+      !password
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Ingresá DNI y contraseña",
+        });
     }
 
-    const result = await pool.query(
-      `
+    const result =
+      await pool.query(
+        `
         SELECT *
         FROM users
         WHERE dni = $1
         `,
-      [dni.trim()],
-    );
+        [
+          dni.trim(),
+        ],
+      );
 
-    if (!result.rowCount) {
-      return res.status(400).json({
-        message: "El DNI no está registrado",
-      });
+    if (
+      !result.rowCount
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "El DNI no está registrado",
+        });
     }
 
-    const valid = await bcrypt.compare(password, result.rows[0].password);
+    const valid =
+      await bcrypt.compare(
+        password,
+        result.rows[0]
+          .password,
+      );
 
     if (!valid) {
-      return res.status(400).json({
-        message: "La contraseña es incorrecta",
-      });
+      return res
+        .status(400)
+        .json({
+          message:
+            "La contraseña es incorrecta",
+        });
     }
 
-    const user = toPublicUser(result.rows[0]);
+    const user =
+      toPublicUser(
+        result.rows[0],
+      );
 
-    const token = await createAccessToken({
-      id: user.id,
-    });
+    const token =
+      await createAccessToken({
+        id: user.id,
+      });
 
-    res.cookie("token", token, cookieOptions);
+    res.cookie(
+      "token",
+      token,
+      cookieOptions,
+    );
 
     res.json(user);
   } catch (error) {
@@ -205,35 +393,57 @@ export const signIn = async (req, res, next) => {
   LOGOUT
 */
 
-export const signOut = (_req, res) => {
-  res.clearCookie("token", {
-    httpOnly: true,
+export const signOut = (
+  _req,
+  res,
+) => {
+  res.clearCookie(
+    "token",
+    {
+      httpOnly: true,
 
-    secure: process.env.NODE_ENV === "production",
+      secure:
+        process.env.NODE_ENV ===
+        "production",
 
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  });
+      sameSite:
+        process.env.NODE_ENV ===
+        "production"
+          ? "none"
+          : "lax",
+    },
+  );
 
   res.sendStatus(200);
 };
 
 /*
   SOLICITAR RECUPERACIÓN
-  DE CONTRASEÑA
 */
 
-export const forgotPassword = async (req, res, next) => {
+export const forgotPassword = async (
+  req,
+  res,
+  next,
+) => {
   try {
-    const email = req.body.email?.trim().toLowerCase();
+    const email =
+      req.body.email
+        ?.trim()
+        .toLowerCase();
 
     if (!email) {
-      return res.status(400).json({
-        message: "Ingresá tu email",
-      });
+      return res
+        .status(400)
+        .json({
+          message:
+            "Ingresá tu email",
+        });
     }
 
-    const result = await pool.query(
-      `
+    const result =
+      await pool.query(
+        `
         SELECT
           id,
           name,
@@ -241,52 +451,37 @@ export const forgotPassword = async (req, res, next) => {
         FROM users
         WHERE email = $1
         `,
-      [email],
-    );
+        [email],
+      );
 
-    /*
-      Si el email no existe devolvemos
-      igualmente una respuesta positiva.
-
-      Así alguien externo no puede
-      descubrir qué emails están
-      registrados.
-    */
-
-    if (!result.rowCount) {
+    if (
+      !result.rowCount
+    ) {
       return res.json({
         message:
           "Si el email está registrado, vas a recibir un enlace para recuperar tu contraseña.",
       });
     }
 
-    const user = result.rows[0];
+    const user =
+      result.rows[0];
 
-    /*
-      Creamos un token aleatorio.
+    const resetToken =
+      crypto
+        .randomBytes(32)
+        .toString("hex");
 
-      Este es el token REAL que va
-      dentro del enlace enviado por email.
-    */
+    const resetTokenHash =
+      crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
 
-    const resetToken = crypto.randomBytes(32).toString("hex");
-
-    /*
-      En Neon NO guardamos el token real.
-
-      Guardamos solamente su hash.
-    */
-
-    const resetTokenHash = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
-
-    /*
-      El enlace dura 30 minutos.
-    */
-
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const expiresAt =
+      new Date(
+        Date.now() +
+          30 * 60 * 1000,
+      );
 
     await pool.query(
       `
@@ -297,37 +492,38 @@ export const forgotPassword = async (req, res, next) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $3
       `,
-      [resetTokenHash, expiresAt, user.id],
+      [
+        resetTokenHash,
+        expiresAt,
+        user.id,
+      ],
     );
 
-    /*
-      Mientras trabajamos localmente:
+    const frontendUrl =
+      (
+        process.env.FRONTEND_URL ||
+        "http://localhost:5173"
+      ).replace(
+        /\/$/,
+        "",
+      );
 
-      http://localhost:5173
-
-      Cuando hagamos deploy usará
-      FRONTEND_URL.
-    */
-
-    const frontendUrl = (
-      process.env.FRONTEND_URL || "http://localhost:5173"
-    ).replace(/\/$/, "");
-
-    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+    const resetUrl =
+      `${frontendUrl}/reset-password/${resetToken}`;
 
     try {
       await sendPasswordResetEmail({
-        email: user.email,
-        name: user.name,
+        email:
+          user.email,
+
+        name:
+          user.name,
+
         resetUrl,
       });
-    } catch (emailError) {
-      /*
-        Si falla el envío del correo,
-        eliminamos el token que acabamos
-        de generar.
-      */
-
+    } catch (
+      emailError
+    ) {
       await pool.query(
         `
         UPDATE users
@@ -336,7 +532,9 @@ export const forgotPassword = async (req, res, next) => {
           password_reset_expires = NULL
         WHERE id = $1
         `,
-        [user.id],
+        [
+          user.id,
+        ],
       );
 
       throw emailError;
@@ -352,69 +550,83 @@ export const forgotPassword = async (req, res, next) => {
 };
 
 /*
-  CAMBIAR LA CONTRASEÑA
-  USANDO EL TOKEN
+  CAMBIAR CONTRASEÑA
 */
 
-export const resetPassword = async (req, res, next) => {
+export const resetPassword = async (
+  req,
+  res,
+  next,
+) => {
   try {
-    const { token } = req.params;
+    const {
+      token,
+    } = req.params;
 
-    const { password } = req.body;
+    const {
+      password,
+    } = req.body;
 
     if (!token) {
-      return res.status(400).json({
-        message: "El enlace de recuperación no es válido",
-      });
+      return res
+        .status(400)
+        .json({
+          message:
+            "El enlace de recuperación no es válido",
+        });
     }
 
-    if (!password || password.length < 6) {
-      return res.status(400).json({
-        message: "La nueva contraseña debe tener al menos 6 caracteres",
-      });
+    if (
+      !password ||
+      password.length < 6
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "La nueva contraseña debe tener al menos 6 caracteres",
+        });
     }
 
-    /*
-      El token recibido por URL se
-      convierte al mismo hash que
-      guardamos anteriormente en Neon.
-    */
+    const tokenHash =
+      crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
 
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-
-    const result = await pool.query(
-      `
+    const result =
+      await pool.query(
+        `
         SELECT id
         FROM users
         WHERE password_reset_token = $1
           AND password_reset_expires >
               CURRENT_TIMESTAMP
         `,
-      [tokenHash],
-    );
+        [
+          tokenHash,
+        ],
+      );
 
-    if (!result.rowCount) {
-      return res.status(400).json({
-        message: "El enlace de recuperación es inválido o venció",
-      });
+    if (
+      !result.rowCount
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "El enlace de recuperación es inválido o venció",
+        });
     }
 
-    const user = result.rows[0];
+    const user =
+      result.rows[0];
 
-    /*
-      Hasheamos la contraseña nueva
-      antes de guardarla.
-    */
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    /*
-      Actualizamos la contraseña y
-      destruimos inmediatamente el token.
-
-      Por lo tanto el enlace no puede
-      utilizarse dos veces.
-    */
+    const hashedPassword =
+      await bcrypt.hash(
+        password,
+        10,
+      );
 
     await pool.query(
       `
@@ -426,11 +638,15 @@ export const resetPassword = async (req, res, next) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $2
       `,
-      [hashedPassword, user.id],
+      [
+        hashedPassword,
+        user.id,
+      ],
     );
 
     res.json({
-      message: "Contraseña actualizada correctamente",
+      message:
+        "Contraseña actualizada correctamente",
     });
   } catch (error) {
     next(error);
@@ -441,10 +657,15 @@ export const resetPassword = async (req, res, next) => {
   PERFIL
 */
 
-export const profile = async (req, res, next) => {
+export const profile = async (
+  req,
+  res,
+  next,
+) => {
   try {
-    const result = await pool.query(
-      `
+    const result =
+      await pool.query(
+        `
         SELECT
           id,
           name,
@@ -464,16 +685,25 @@ export const profile = async (req, res, next) => {
         FROM users
         WHERE id = $1
         `,
-      [req.userId],
-    );
+        [
+          req.userId,
+        ],
+      );
 
-    if (!result.rowCount) {
-      return res.status(404).json({
-        message: "Usuario no encontrado",
-      });
+    if (
+      !result.rowCount
+    ) {
+      return res
+        .status(404)
+        .json({
+          message:
+            "Usuario no encontrado",
+        });
     }
 
-    res.json(result.rows[0]);
+    res.json(
+      result.rows[0],
+    );
   } catch (error) {
     next(error);
   }
@@ -483,18 +713,32 @@ export const profile = async (req, res, next) => {
   ELEGIR / CAMBIAR LIGA
 */
 
-export const chooseLeague = async (req, res, next) => {
+export const chooseLeague = async (
+  req,
+  res,
+  next,
+) => {
   try {
-    const { gender } = req.body;
+    const {
+      gender,
+    } = req.body;
 
-    if (!LEAGUES.includes(gender)) {
-      return res.status(400).json({
-        message: "Liga inválida",
-      });
+    if (
+      !LEAGUES.includes(
+        gender,
+      )
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Liga inválida",
+        });
     }
 
-    const result = await pool.query(
-      `
+    const result =
+      await pool.query(
+        `
         UPDATE users
         SET
           gender = $1::varchar,
@@ -520,16 +764,29 @@ export const chooseLeague = async (req, res, next) => {
 
         RETURNING *
         `,
-      [gender, LEAGUE_CITY, req.userId],
-    );
+        [
+          gender,
+          LEAGUE_CITY,
+          req.userId,
+        ],
+      );
 
-    if (!result.rowCount) {
-      return res.status(404).json({
-        message: "Usuario no encontrado",
-      });
+    if (
+      !result.rowCount
+    ) {
+      return res
+        .status(404)
+        .json({
+          message:
+            "Usuario no encontrado",
+        });
     }
 
-    res.json(toPublicUser(result.rows[0]));
+    res.json(
+      toPublicUser(
+        result.rows[0],
+      ),
+    );
   } catch (error) {
     next(error);
   }
