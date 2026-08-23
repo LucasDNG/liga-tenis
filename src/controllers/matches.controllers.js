@@ -4,6 +4,16 @@ const PLACEMENT_MATCHES = 5;
 const PLACEMENT_K = 64;
 const NORMAL_K = 32;
 
+/*
+  Si el resultado se carga demasiado
+  cerca del horario de inicio,
+  lo marcamos para revisión.
+
+  No bloqueamos el partido:
+  solo queda una bandera para el admin.
+*/
+const TOO_FAST_RESULT_MINUTES = 20;
+
 const isValidSet = (a, b) => {
   if (
     !Number.isInteger(a) ||
@@ -51,14 +61,18 @@ const parseScore = (score) => {
     i < score.length;
     i++
   ) {
-    const a = Number(score[i]?.p1);
-    const b = Number(score[i]?.p2);
+    const a =
+      Number(score[i]?.p1);
+
+    const b =
+      Number(score[i]?.p2);
 
     if (!isValidSet(a, b)) {
       return {
-        error: `El Set ${
-          i + 1
-        } no es válido. Ejemplos: 6-4, 7-5 o 7-6.`,
+        error:
+          `El Set ${
+            i + 1
+          } no es válido. Ejemplos: 6-4, 7-5 o 7-6.`,
       };
     }
 
@@ -81,7 +95,8 @@ const parseScore = (score) => {
 
   if (
     score.length === 3 &&
-    (p1Sets === 3 || p2Sets === 3)
+    (p1Sets === 3 ||
+      p2Sets === 3)
   ) {
     return {
       error:
@@ -91,135 +106,26 @@ const parseScore = (score) => {
 
   return {
     winnerSide:
-      p1Sets > p2Sets ? 1 : 2,
+      p1Sets > p2Sets
+        ? 1
+        : 2,
   };
 };
 
-const getKFactor = (matchesPlayed) => {
-  return matchesPlayed < PLACEMENT_MATCHES
+const getKFactor = (
+  matchesPlayed,
+) => {
+  return matchesPlayed <
+    PLACEMENT_MATCHES
     ? PLACEMENT_K
     : NORMAL_K;
 };
 
+
+/*
+  PARTIDOS DEL USUARIO
+*/
 export const getMyMatches = async (
-  req,
-  res,
-  next,
-) => {
-  try {
-    const result = await pool.query(
-      `
-      SELECT
-        m.*,
-        p1.name AS player1_name,
-        p1.phone AS player1_phone,
-        p2.name AS player2_name,
-        p2.phone AS player2_phone,
-        w.name AS winner_name
-      FROM matches m
-      JOIN users p1
-        ON p1.id = m.player1_id
-      JOIN users p2
-        ON p2.id = m.player2_id
-      LEFT JOIN users w
-        ON w.id = m.winner_id
-      WHERE
-        m.player1_id = $1
-        OR m.player2_id = $1
-      ORDER BY m.created_at DESC
-      `,
-      [req.userId],
-    );
-
-    res.json({
-      matches: result.rows,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const submitMatchResult = async (
-  req,
-  res,
-  next,
-) => {
-  try {
-    const { score } = req.body;
-
-    const parsed =
-      parseScore(score);
-
-    if (parsed.error) {
-      return res.status(400).json({
-        message: parsed.error,
-      });
-    }
-
-    const matchResult =
-      await pool.query(
-        `
-        SELECT *
-        FROM matches
-        WHERE id = $1
-          AND status = 'pending'
-          AND (
-            player1_id = $2
-            OR player2_id = $2
-          )
-        `,
-        [
-          req.params.id,
-          req.userId,
-        ],
-      );
-
-    if (!matchResult.rowCount) {
-      return res.status(404).json({
-        message:
-          "Partido pendiente no encontrado",
-      });
-    }
-
-    const match =
-      matchResult.rows[0];
-
-    const winnerId =
-      parsed.winnerSide === 1
-        ? match.player1_id
-        : match.player2_id;
-
-    const updated =
-      await pool.query(
-        `
-        UPDATE matches
-        SET
-          proposed_winner_id = $1,
-          proposed_score = $2,
-          result_submitted_by = $3,
-          status = 'awaiting_confirmation'
-        WHERE id = $4
-        RETURNING *
-        `,
-        [
-          winnerId,
-          JSON.stringify(score),
-          req.userId,
-          match.id,
-        ],
-      );
-
-    res.json({
-      message:
-        "Resultado enviado. Esperando confirmación del rival.",
-      match: updated.rows[0],
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const rejectMatchResult = async (
   req,
   res,
   next,
@@ -228,19 +134,412 @@ export const rejectMatchResult = async (
     const result =
       await pool.query(
         `
-        UPDATE matches
-        SET
-          proposed_winner_id = NULL,
-          proposed_score = NULL,
-          result_submitted_by = NULL,
-          status = 'pending'
+        SELECT
+          m.*,
+
+          p1.name AS
+            player1_name,
+
+          p1.phone AS
+            player1_phone,
+
+          p2.name AS
+            player2_name,
+
+          p2.phone AS
+            player2_phone,
+
+          w.name AS
+            winner_name,
+
+          confirmer.name AS
+            result_confirmed_by_name
+
+        FROM matches m
+
+        JOIN users p1
+          ON p1.id =
+             m.player1_id
+
+        JOIN users p2
+          ON p2.id =
+             m.player2_id
+
+        LEFT JOIN users w
+          ON w.id =
+             m.winner_id
+
+        LEFT JOIN users confirmer
+          ON confirmer.id =
+             m.result_confirmed_by
+
+        WHERE
+          m.player1_id = $1
+
+          OR
+
+          m.player2_id = $1
+
+        ORDER BY
+          m.created_at DESC
+        `,
+        [
+          req.userId,
+        ],
+      );
+
+    res.json({
+      matches:
+        result.rows,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+/*
+  CARGAR RESULTADO
+*/
+export const submitMatchResult = async (
+  req,
+  res,
+  next,
+) => {
+  const client =
+    await pool.connect();
+
+  try {
+    await client.query(
+      "BEGIN",
+    );
+
+    const {
+      score,
+    } = req.body;
+
+    const parsed =
+      parseScore(score);
+
+    if (parsed.error) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+      return res
+        .status(400)
+        .json({
+          message:
+            parsed.error,
+
+          reason:
+            "invalid_score",
+        });
+    }
+
+    const matchResult =
+      await client.query(
+        `
+        SELECT *
+
+        FROM matches
+
         WHERE id = $1
-          AND status = 'awaiting_confirmation'
-          AND result_submitted_by <> $2
+
+          AND status = 'pending'
+
+          AND annulled_at IS NULL
+
           AND (
             player1_id = $2
             OR player2_id = $2
           )
+
+        FOR UPDATE
+        `,
+        [
+          req.params.id,
+          req.userId,
+        ],
+      );
+
+    if (
+      !matchResult.rowCount
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+      return res
+        .status(404)
+        .json({
+          message:
+            "Partido pendiente no encontrado",
+
+          reason:
+            "match_not_found",
+        });
+    }
+
+    const match =
+      matchResult.rows[0];
+
+
+    /*
+      REGLA:
+      el partido debe tener
+      un turno registrado.
+    */
+    if (
+      !match.scheduled_at
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+      return res
+        .status(400)
+        .json({
+          message:
+            "Este partido no tiene fecha y hora registradas.",
+
+          reason:
+            "schedule_missing",
+        });
+    }
+
+
+    const scheduledTime =
+      new Date(
+        match.scheduled_at,
+      ).getTime();
+
+    const now =
+      Date.now();
+
+
+    /*
+      NO SE PUEDE CARGAR
+      ANTES DEL HORARIO.
+    */
+    if (
+      scheduledTime > now
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+      return res
+        .status(403)
+        .json({
+          message:
+            "Todavía no podés cargar el resultado. El partido aún no llegó a su horario programado.",
+
+          reason:
+            "match_not_started",
+
+          available_at:
+            match.scheduled_at,
+        });
+    }
+
+
+    const winnerId =
+      parsed.winnerSide === 1
+        ? match.player1_id
+        : match.player2_id;
+
+
+    const updated =
+      await client.query(
+        `
+        UPDATE matches
+
+        SET
+          proposed_winner_id = $1,
+
+          proposed_score = $2,
+
+          result_submitted_by = $3,
+
+          result_submitted_at =
+            CURRENT_TIMESTAMP,
+
+          status =
+            'awaiting_confirmation'
+
+        WHERE id = $4
+
+        RETURNING *
+        `,
+        [
+          winnerId,
+          JSON.stringify(
+            score,
+          ),
+          req.userId,
+          match.id,
+        ],
+      );
+
+
+    /*
+      AUDITORÍA
+    */
+    await client.query(
+      `
+      INSERT INTO audit_events (
+        user_id,
+        match_id,
+        challenge_id,
+        event_type,
+        details
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'match_result_submitted',
+        $4
+      )
+      `,
+      [
+        req.userId,
+        match.id,
+        match.challenge_id,
+
+        JSON.stringify({
+          winner_id:
+            winnerId,
+
+          score,
+        }),
+      ],
+    );
+
+
+    /*
+      ANTIFRAUDE:
+      si el resultado se cargó
+      demasiado pronto después
+      del horario de inicio,
+      queda marcado.
+    */
+    const minutesSinceStart =
+      Math.floor(
+        (
+          now -
+          scheduledTime
+        ) /
+          60000,
+      );
+
+
+    if (
+      minutesSinceStart >= 0 &&
+      minutesSinceStart <
+        TOO_FAST_RESULT_MINUTES
+    ) {
+      await client.query(
+        `
+        INSERT INTO match_audit_flags (
+          match_id,
+          flag_type,
+          severity,
+          message
+        )
+
+        VALUES (
+          $1,
+          'result_too_fast',
+          'warning',
+          $2
+        )
+        `,
+        [
+          match.id,
+
+          `El resultado fue cargado ${minutesSinceStart} minutos después del horario programado.`,
+        ],
+      );
+    }
+
+
+    await client.query(
+      "COMMIT",
+    );
+
+
+    res.json({
+      message:
+        "Resultado enviado. Esperando confirmación del rival.",
+
+      match:
+        updated.rows[0],
+    });
+  } catch (error) {
+    await client.query(
+      "ROLLBACK",
+    );
+
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+
+/*
+  RECHAZAR RESULTADO
+*/
+export const rejectMatchResult = async (
+  req,
+  res,
+  next,
+) => {
+  const client =
+    await pool.connect();
+
+  try {
+    await client.query(
+      "BEGIN",
+    );
+
+
+    const result =
+      await client.query(
+        `
+        UPDATE matches
+
+        SET
+          proposed_winner_id = NULL,
+
+          proposed_score = NULL,
+
+          result_submitted_by = NULL,
+
+          result_submitted_at = NULL,
+
+          result_rejection_count =
+            result_rejection_count + 1,
+
+          status = 'pending'
+
+        WHERE id = $1
+
+          AND status =
+            'awaiting_confirmation'
+
+          AND result_submitted_by <> $2
+
+          AND annulled_at IS NULL
+
+          AND (
+            player1_id = $2
+            OR player2_id = $2
+          )
+
         RETURNING *
         `,
         [
@@ -249,22 +548,124 @@ export const rejectMatchResult = async (
         ],
       );
 
-    if (!result.rowCount) {
-      return res.status(404).json({
-        message:
-          "Resultado para confirmar no encontrado",
-      });
+
+    if (
+      !result.rowCount
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+      return res
+        .status(404)
+        .json({
+          message:
+            "Resultado para confirmar no encontrado",
+
+          reason:
+            "result_not_found",
+        });
     }
+
+
+    const match =
+      result.rows[0];
+
+
+    await client.query(
+      `
+      INSERT INTO audit_events (
+        user_id,
+        match_id,
+        challenge_id,
+        event_type,
+        details
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'match_result_rejected',
+        $4
+      )
+      `,
+      [
+        req.userId,
+        match.id,
+        match.challenge_id,
+
+        JSON.stringify({
+          rejection_count:
+            match.result_rejection_count,
+        }),
+      ],
+    );
+
+
+    /*
+      Si ya hubo dos o más
+      rechazos del resultado,
+      queda marcado para admin.
+    */
+    if (
+      match
+        .result_rejection_count >=
+      2
+    ) {
+      await client.query(
+        `
+        INSERT INTO match_audit_flags (
+          match_id,
+          flag_type,
+          severity,
+          message
+        )
+
+        VALUES (
+          $1,
+          'repeated_result_rejection',
+          'warning',
+          $2
+        )
+        `,
+        [
+          match.id,
+
+          `El resultado de este partido ya fue rechazado ${match.result_rejection_count} veces.`,
+        ],
+      );
+    }
+
+
+    await client.query(
+      "COMMIT",
+    );
+
 
     res.json({
       message:
         "Resultado rechazado. Puede cargarse nuevamente.",
+
+      rejection_count:
+        match
+          .result_rejection_count,
     });
   } catch (error) {
+    await client.query(
+      "ROLLBACK",
+    );
+
     next(error);
+  } finally {
+    client.release();
   }
 };
 
+
+/*
+  CONFIRMAR RESULTADO
+*/
 export const confirmMatchResult = async (
   req,
   res,
@@ -274,7 +675,10 @@ export const confirmMatchResult = async (
     await pool.connect();
 
   try {
-    await client.query("BEGIN");
+    await client.query(
+      "BEGIN",
+    );
+
 
     const found =
       await client.query(
@@ -282,26 +686,38 @@ export const confirmMatchResult = async (
         SELECT
           m.*,
 
-          u1.rating AS p1_rating,
-          u1.matches_played
-            AS p1_matches_played,
+          u1.rating AS
+            p1_rating,
 
-          u2.rating AS p2_rating,
-          u2.matches_played
-            AS p2_matches_played
+          u1.matches_played AS
+            p1_matches_played,
+
+          u2.rating AS
+            p2_rating,
+
+          u2.matches_played AS
+            p2_matches_played
 
         FROM matches m
 
         JOIN users u1
-          ON u1.id = m.player1_id
+          ON u1.id =
+             m.player1_id
 
         JOIN users u2
-          ON u2.id = m.player2_id
+          ON u2.id =
+             m.player2_id
 
-        WHERE m.id = $1
+        WHERE
+          m.id = $1
+
           AND m.status =
             'awaiting_confirmation'
+
           AND m.result_submitted_by <> $2
+
+          AND m.annulled_at IS NULL
+
           AND (
             m.player1_id = $2
             OR m.player2_id = $2
@@ -315,22 +731,33 @@ export const confirmMatchResult = async (
         ],
       );
 
-    if (!found.rowCount) {
+
+    if (
+      !found.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
 
-      return res.status(404).json({
-        message:
-          "Resultado para confirmar no encontrado",
-      });
+      return res
+        .status(404)
+        .json({
+          message:
+            "Resultado para confirmar no encontrado",
+
+          reason:
+            "result_not_found",
+        });
     }
+
 
     const match =
       found.rows[0];
 
+
     const winnerId =
       match.proposed_winner_id;
+
 
     const loserId =
       winnerId ===
@@ -338,11 +765,13 @@ export const confirmMatchResult = async (
         ? match.player2_id
         : match.player1_id;
 
+
     const winnerRating =
       winnerId ===
       match.player1_id
         ? match.p1_rating
         : match.p2_rating;
+
 
     const loserRating =
       winnerId ===
@@ -350,11 +779,13 @@ export const confirmMatchResult = async (
         ? match.p2_rating
         : match.p1_rating;
 
+
     const winnerMatchesPlayed =
       winnerId ===
       match.player1_id
         ? match.p1_matches_played
         : match.p2_matches_played;
+
 
     const loserMatchesPlayed =
       winnerId ===
@@ -362,26 +793,18 @@ export const confirmMatchResult = async (
         ? match.p2_matches_played
         : match.p1_matches_played;
 
-    /*
-      Durante los primeros 5 partidos,
-      el Elo se mueve más rápido.
-
-      Partidos 1 a 5:
-      K = 64
-
-      Desde el partido 6:
-      K = 32
-    */
 
     const winnerK =
       getKFactor(
         winnerMatchesPlayed,
       );
 
+
     const loserK =
       getKFactor(
         loserMatchesPlayed,
       );
+
 
     const expectedWinner =
       1 /
@@ -389,20 +812,29 @@ export const confirmMatchResult = async (
         1 +
         10 **
           (
-            (loserRating -
-              winnerRating) /
+            (
+              loserRating -
+              winnerRating
+            ) /
             400
           )
       );
 
+
     const expectedLoser =
-      1 - expectedWinner;
+      1 -
+      expectedWinner;
+
 
     const winnerDelta =
       Math.round(
         winnerK *
-          (1 - expectedWinner),
+          (
+            1 -
+            expectedWinner
+          ),
       );
+
 
     const loserDelta =
       Math.round(
@@ -410,12 +842,34 @@ export const confirmMatchResult = async (
           expectedLoser,
       );
 
+
+    const winnerAfter =
+      winnerRating +
+      winnerDelta;
+
+
+    const loserAfter =
+      Math.max(
+        100,
+        loserRating -
+          loserDelta,
+      );
+
+
+    const realLoserDelta =
+      loserRating -
+      loserAfter;
+
+
+    /*
+      ACTUALIZAR GANADOR
+    */
     await client.query(
       `
       UPDATE users
+
       SET
-        rating =
-          rating + $1,
+        rating = $1,
 
         matches_played =
           matches_played + 1,
@@ -426,20 +880,21 @@ export const confirmMatchResult = async (
       WHERE id = $2
       `,
       [
-        winnerDelta,
+        winnerAfter,
         winnerId,
       ],
     );
 
+
+    /*
+      ACTUALIZAR PERDEDOR
+    */
     await client.query(
       `
       UPDATE users
+
       SET
-        rating =
-          GREATEST(
-            100,
-            rating - $1
-          ),
+        rating = $1,
 
         matches_played =
           matches_played + 1,
@@ -450,14 +905,19 @@ export const confirmMatchResult = async (
       WHERE id = $2
       `,
       [
-        loserDelta,
+        loserAfter,
         loserId,
       ],
     );
 
+
+    /*
+      CERRAR PARTIDO
+    */
     await client.query(
       `
       UPDATE matches
+
       SET
         winner_id =
           proposed_winner_id,
@@ -469,22 +929,273 @@ export const confirmMatchResult = async (
           'completed',
 
         completed_at =
-          CURRENT_TIMESTAMP
+          CURRENT_TIMESTAMP,
 
-      WHERE id = $1
+        result_confirmed_at =
+          CURRENT_TIMESTAMP,
+
+        result_confirmed_by =
+          $1
+
+      WHERE id = $2
       `,
-      [match.id],
+      [
+        req.userId,
+        match.id,
+      ],
     );
 
-    await client.query("COMMIT");
+
+    /*
+      CERRAR DESAFÍO.
+
+      Esto es lo que libera
+      el siguiente turno
+      de la rueda.
+    */
+    if (
+      match.challenge_id
+    ) {
+      await client.query(
+        `
+        UPDATE challenges
+
+        SET
+          status =
+            'completed',
+
+          resolved_at =
+            CURRENT_TIMESTAMP
+
+        WHERE id = $1
+        `,
+        [
+          match.challenge_id,
+        ],
+      );
+    }
+
+
+    /*
+      REGISTRO DE ELO
+      DEL GANADOR
+    */
+    await client.query(
+      `
+      INSERT INTO elo_events (
+        user_id,
+        match_id,
+        challenge_id,
+        event_type,
+        elo_before,
+        elo_change,
+        elo_after,
+        description
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'match_result',
+        $4,
+        $5,
+        $6,
+        $7
+      )
+      `,
+      [
+        winnerId,
+        match.id,
+        match.challenge_id,
+        winnerRating,
+        winnerDelta,
+        winnerAfter,
+        `Victoria en partido #${match.id}`,
+      ],
+    );
+
+
+    /*
+      REGISTRO DE ELO
+      DEL PERDEDOR
+    */
+    await client.query(
+      `
+      INSERT INTO elo_events (
+        user_id,
+        match_id,
+        challenge_id,
+        event_type,
+        elo_before,
+        elo_change,
+        elo_after,
+        description
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'match_result',
+        $4,
+        $5,
+        $6,
+        $7
+      )
+      `,
+      [
+        loserId,
+        match.id,
+        match.challenge_id,
+        loserRating,
+        -realLoserDelta,
+        loserAfter,
+        `Derrota en partido #${match.id}`,
+      ],
+    );
+
+
+    /*
+      AUDITORÍA
+    */
+    await client.query(
+      `
+      INSERT INTO audit_events (
+        user_id,
+        match_id,
+        challenge_id,
+        event_type,
+        details
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'match_result_confirmed',
+        $4
+      )
+      `,
+      [
+        req.userId,
+        match.id,
+        match.challenge_id,
+
+        JSON.stringify({
+          winner_id:
+            winnerId,
+
+          loser_id:
+            loserId,
+
+          winner_elo_change:
+            winnerDelta,
+
+          loser_elo_change:
+            -realLoserDelta,
+
+          score:
+            match.proposed_score,
+        }),
+      ],
+    );
+
+
+    /*
+      ANTIFRAUDE:
+      revisamos cuántas veces
+      jugaron entre sí recientemente.
+    */
+    const recentMeetings =
+      await client.query(
+        `
+        SELECT COUNT(*)::int AS total
+
+        FROM matches
+
+        WHERE status =
+          'completed'
+
+          AND annulled_at IS NULL
+
+          AND completed_at >=
+            CURRENT_TIMESTAMP -
+            INTERVAL '30 days'
+
+          AND (
+            (
+              player1_id = $1
+              AND player2_id = $2
+            )
+
+            OR
+
+            (
+              player1_id = $2
+              AND player2_id = $1
+            )
+          )
+        `,
+        [
+          match.player1_id,
+          match.player2_id,
+        ],
+      );
+
+
+    if (
+      recentMeetings.rows[0]
+        .total >= 4
+    ) {
+      await client.query(
+        `
+        INSERT INTO match_audit_flags (
+          match_id,
+          flag_type,
+          severity,
+          message
+        )
+
+        VALUES (
+          $1,
+          'frequent_opponents',
+          'warning',
+          $2
+        )
+        `,
+        [
+          match.id,
+
+          `Estos jugadores disputaron ${recentMeetings.rows[0].total} partidos entre sí durante los últimos 30 días.`,
+        ],
+      );
+    }
+
+
+    await client.query(
+      "COMMIT",
+    );
+
 
     res.json({
       message:
         "Resultado confirmado y ranking actualizado",
 
       elo_change: {
-        winner: winnerDelta,
-        loser: -loserDelta,
+        winner:
+          winnerDelta,
+
+        loser:
+          -realLoserDelta,
+      },
+
+      rating_after: {
+        winner:
+          winnerAfter,
+
+        loser:
+          loserAfter,
       },
 
       placement: {
@@ -496,6 +1207,9 @@ export const confirmMatchResult = async (
           loserMatchesPlayed <
           PLACEMENT_MATCHES,
       },
+
+      rotation_unlocked:
+        true,
     });
   } catch (error) {
     await client.query(

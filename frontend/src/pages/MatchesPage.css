@@ -1,0 +1,389 @@
+.match-list {
+  display: grid;
+  gap: 24px;
+}
+
+.match-card {
+  padding: 24px;
+  background: #0d1912;
+  border: 1px solid #2d3c31;
+  border-top: 2px solid #b65c3a;
+}
+
+.match-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.match-card-head h2 {
+  margin: 8px 0 0;
+  font-family: Georgia, serif;
+  font-size: 28px;
+  font-weight: 400;
+}
+
+.match-card-head h2 i {
+  margin: 0 10px;
+  color: #b65c3a;
+  font-size: 15px;
+  font-style: normal;
+}
+
+.match-kicker {
+  color: #d47a54;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.match-status {
+  padding: 7px 10px;
+  border: 1px solid #634333;
+  color: #decabb;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.match-status.awaiting_confirmation {
+  color: #e2c274;
+  border-color: #866e38;
+}
+
+.match-status.completed {
+  color: #a4c97b;
+  border-color: #587748;
+}
+
+.match-schedule {
+  display: grid;
+  gap: 6px;
+  margin-top: 20px;
+  padding: 17px;
+  border-left: 3px solid #b65c3a;
+  background: #251915;
+}
+
+.match-schedule span {
+  color: #d47a54;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.match-schedule strong {
+  color: #f2e6d5;
+  font-size: 18px;
+}
+
+.match-schedule p {
+  margin: 0;
+  color: #d2c4b6;
+}
+
+.match-contact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 15px;
+  background: #101711;
+  border: 1px solid #2d3c31;
+}
+
+.match-contact > div {
+  display: grid;
+  gap: 4px;
+}
+
+.match-contact small {
+  color: #8b968c;
+}
+
+.match-contact strong {
+  color: #fff;
+}
+
+.match-contact span {
+  color: #b8c0b9;
+}
+
+.match-contact a {
+  padding: 10px 14px;
+  border: 1px solid #557548;
+  color: #b9d48d;
+}
+
+.match-score-editor {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #2d3c31;
+}
+
+.match-score-editor .score-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.match-score-editor .score-title {
+  color: #9a8c80;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.match-score-editor input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 10px;
+  color: #f4eadf;
+  background: #17110e;
+  border: 1px solid #644738;
+}
+
+.match-score-editor input:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.match-action {
+  min-height: 44px;
+  padding: 0 17px;
+  border: 1px solid #8a5139;
+  background: transparent;
+  color: #e4a17d;
+  font-weight: 700;
+}
+
+.match-action.primary {
+  background: #b65c3a;
+  border-color: #b65c3a;
+  color: #fff4e8;
+}
+
+.match-action.danger {
+  border-color: #844540;
+  color: #e89b91;
+}
+
+.match-action:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.match-waiting {
+  margin-top: 18px;
+  padding: 14px 16px;
+  color: #d8cabc;
+  background: #211713;
+  border-left: 3px solid #c77b52;
+}
+
+.match-waiting strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.match-waiting p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.match-proposed,
+.match-completed {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #2d3c31;
+}
+
+.match-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.match-score-view {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.match-set-view {
+  padding: 15px;
+  background: #19120f;
+  border: 1px solid #5f4437;
+}
+
+.match-set-view > strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #d47a54;
+}
+
+.match-set-view > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 14px;
+}
+
+.match-set-view b {
+  color: #fff;
+}
+
+.match-completed h3 {
+  margin: 12px 0 0;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.match-completed small {
+  display: block;
+  margin-top: 16px;
+  color: #8e9990;
+}
+
+.match-empty {
+  padding: 24px;
+  color: #958b82;
+  border: 1px dashed #634738;
+}
+
+/* TOOLTIP */
+
+.match-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  margin-top: 15px;
+}
+
+.match-tooltip-wrap.disabled {
+  cursor: help;
+}
+
+.match-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 100;
+
+  width: 290px;
+  padding: 11px 13px;
+
+  transform:
+    translateX(-50%)
+    translateY(5px);
+
+  background: #281b16;
+  border: 1px solid #8d5a42;
+  color: #f3e7dc;
+
+  font-size: 12px;
+  line-height: 1.5;
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.match-tooltip::after {
+  content: "";
+
+  position: absolute;
+  left: 50%;
+  top: 100%;
+
+  transform:
+    translateX(-50%);
+
+  border: 6px solid transparent;
+  border-top-color: #8d5a42;
+}
+
+.match-tooltip-wrap.disabled:hover
+  .match-tooltip,
+.match-tooltip-wrap.disabled:focus
+  .match-tooltip,
+.match-tooltip-wrap.disabled:focus-within
+  .match-tooltip {
+  opacity: 1;
+  visibility: visible;
+
+  transform:
+    translateX(-50%)
+    translateY(0);
+}
+
+@media (max-width: 700px) {
+  .match-card {
+    padding: 18px;
+  }
+
+  .match-card-head {
+    flex-direction: column;
+  }
+
+  .match-contact {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .match-contact a {
+    text-align: center;
+  }
+
+  .match-score-editor .score-row {
+    grid-template-columns:
+      70px 1fr 1fr;
+  }
+
+  .match-buttons {
+    flex-direction: column;
+  }
+
+  .match-buttons
+    .match-action {
+    width: 100%;
+  }
+
+  .match-tooltip-wrap {
+    width: 100%;
+  }
+
+  .match-tooltip-wrap
+    .match-action {
+    width: 100%;
+  }
+
+  .match-tooltip {
+    left: 0;
+    width: min(
+      290px,
+      calc(100vw - 48px)
+    );
+
+    transform:
+      translateY(5px);
+  }
+
+  .match-tooltip-wrap.disabled:hover
+    .match-tooltip,
+  .match-tooltip-wrap.disabled:focus
+    .match-tooltip,
+  .match-tooltip-wrap.disabled:focus-within
+    .match-tooltip {
+    transform:
+      translateY(0);
+  }
+
+  .match-tooltip::after {
+    left: 22px;
+  }
+}

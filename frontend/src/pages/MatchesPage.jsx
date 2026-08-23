@@ -1,7 +1,12 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
+
+import "./MatchesPage.css";
 
 const emptyScore = () => [
   {
@@ -15,17 +20,38 @@ const emptyScore = () => [
 ];
 
 const statusLabels = {
-  pending: "Pendiente",
+  pending: "Programado",
   awaiting_confirmation:
     "Esperando confirmación",
   completed: "Finalizado",
 };
 
-const formatPhone = (phone) => {
+const formatDateTime = (
+  value,
+) => {
+  if (!value) return "";
+
+  return new Intl.DateTimeFormat(
+    "es-AR",
+    {
+      dateStyle: "full",
+      timeStyle: "short",
+      timeZone:
+        "America/Argentina/Buenos_Aires",
+    },
+  ).format(new Date(value));
+};
+
+const formatPhone = (
+  phone,
+) => {
   if (!phone) return "";
 
   let numbers =
-    phone.replace(/\D/g, "");
+    String(phone).replace(
+      /\D/g,
+      "",
+    );
 
   if (
     numbers.startsWith("0")
@@ -34,60 +60,143 @@ const formatPhone = (phone) => {
       numbers.slice(1);
   }
 
-  if (numbers.length === 10) {
-    const areaCode =
+  if (
+    numbers.length === 10
+  ) {
+    const area =
       numbers.slice(0, 4);
 
-    const localNumber =
+    const local =
       numbers.slice(4);
 
-    return `(${areaCode}) ${localNumber}`;
+    return `(${area}) ${local}`;
   }
 
   return numbers;
 };
 
+const normalizeWhatsapp = (
+  phone,
+) => {
+  if (!phone) return "";
+
+  let number =
+    String(phone).replace(
+      /\D/g,
+      "",
+    );
+
+  if (
+    number.startsWith("00")
+  ) {
+    number =
+      number.slice(2);
+  }
+
+  if (
+    number.startsWith("0")
+  ) {
+    number =
+      number.slice(1);
+  }
+
+  if (
+    number.startsWith("549")
+  ) {
+    return number;
+  }
+
+  if (
+    number.startsWith("54")
+  ) {
+    return `549${number.slice(
+      2,
+    )}`;
+  }
+
+  return `549${number}`;
+};
+
+function ActionWithTooltip({
+  disabled,
+  tooltip,
+  children,
+}) {
+  return (
+    <span
+      className={
+        disabled
+          ? "match-tooltip-wrap disabled"
+          : "match-tooltip-wrap"
+      }
+      tabIndex={
+        disabled ? 0 : undefined
+      }
+    >
+      {children}
+
+      {disabled &&
+        tooltip && (
+          <span className="match-tooltip">
+            {tooltip}
+          </span>
+        )}
+    </span>
+  );
+}
+
 export default function MatchesPage() {
-  const { user } = useAuth();
+  const { user } =
+    useAuth();
 
-  const [matches, setMatches] =
-    useState([]);
+  const [
+    matches,
+    setMatches,
+  ] = useState([]);
 
-  const [scores, setScores] =
-    useState({});
+  const [
+    scores,
+    setScores,
+  ] = useState({});
 
-  const [message, setMessage] =
-    useState("");
+  const [
+    message,
+    setMessage,
+  ] = useState("");
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
   const [
     actionLoading,
     setActionLoading,
   ] = useState(null);
 
-  const load = async () => {
-    try {
-      setLoading(true);
+  const load =
+    async () => {
+      try {
+        setLoading(true);
 
-      const { data } =
-        await api.get(
-          "/matches",
+        const { data } =
+          await api.get(
+            "/matches",
+          );
+
+        setMatches(
+          data.matches || [],
         );
-
-      setMatches(
-        data.matches || [],
-      );
-    } catch (error) {
-      setMessage(
-        error.response?.data?.message ||
-          "No se pudieron cargar los partidos",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+      } catch (error) {
+        setMessage(
+          error.response?.data
+            ?.message ||
+            "No se pudieron cargar los partidos",
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
   useEffect(() => {
     load();
@@ -99,183 +208,232 @@ export default function MatchesPage() {
     side,
     value,
   ) => {
-    setScores((prev) => {
-      const current =
-        prev[id] ||
-        emptyScore();
+    setScores(
+      (previous) => {
+        const current =
+          previous[id] ||
+          emptyScore();
 
-      const next =
-        current.map((set) => ({
-          ...set,
-        }));
+        const next =
+          current.map(
+            (set) => ({
+              ...set,
+            }),
+          );
 
-      next[setIndex][side] =
-        value;
-
-      if (
-        next.length === 2
-      ) {
-        const a =
-          Number(next[0].p1);
-
-        const b =
-          Number(next[0].p2);
-
-        const c =
-          Number(next[1].p1);
-
-        const d =
-          Number(next[1].p2);
+        next[setIndex][side] =
+          value;
 
         if (
-          next[0].p1 !== "" &&
-          next[0].p2 !== "" &&
-          next[1].p1 !== "" &&
-          next[1].p2 !== ""
+          next.length === 2
         ) {
-          const split =
-            (a > b &&
-              c < d) ||
-            (a < b &&
-              c > d);
+          const a =
+            Number(
+              next[0].p1,
+            );
 
-          if (split) {
-            next.push({
-              p1: "",
-              p2: "",
-            });
+          const b =
+            Number(
+              next[0].p2,
+            );
+
+          const c =
+            Number(
+              next[1].p1,
+            );
+
+          const d =
+            Number(
+              next[1].p2,
+            );
+
+          if (
+            next[0].p1 !== "" &&
+            next[0].p2 !== "" &&
+            next[1].p1 !== "" &&
+            next[1].p2 !== ""
+          ) {
+            const split =
+              (
+                a > b &&
+                c < d
+              ) ||
+              (
+                a < b &&
+                c > d
+              );
+
+            if (split) {
+              next.push({
+                p1: "",
+                p2: "",
+              });
+            }
           }
         }
-      }
 
-      return {
-        ...prev,
-        [id]: next,
-      };
-    });
+        return {
+          ...previous,
+          [id]: next,
+        };
+      },
+    );
   };
 
-  const submit = async (id) => {
-    if (actionLoading) return;
+  const submit =
+    async (id) => {
+      if (actionLoading) {
+        return;
+      }
 
-    const rawScore =
-      scores[id] ||
-      emptyScore();
+      const rawScore =
+        scores[id] ||
+        emptyScore();
 
-    const hasEmpty =
-      rawScore.some(
-        (set) =>
-          set.p1 === "" ||
-          set.p2 === "",
-      );
+      const hasEmpty =
+        rawScore.some(
+          (set) =>
+            set.p1 === "" ||
+            set.p2 === "",
+        );
 
-    if (hasEmpty) {
-      setMessage(
-        "Completá todos los sets antes de enviar el resultado.",
-      );
+      if (hasEmpty) {
+        setMessage(
+          "Completá todos los sets antes de enviar el resultado.",
+        );
 
-      return;
-    }
+        return;
+      }
 
-    const score =
-      rawScore.map((set) => ({
-        p1: Number(set.p1),
-        p2: Number(set.p2),
-      }));
+      const score =
+        rawScore.map(
+          (set) => ({
+            p1: Number(
+              set.p1,
+            ),
 
-    try {
-      setMessage("");
+            p2: Number(
+              set.p2,
+            ),
+          }),
+        );
 
-      setActionLoading(
-        `${id}-submit`,
-      );
+      try {
+        setMessage("");
 
-      const { data } =
-        await api.patch(
-          `/matches/${id}/result`,
-          {
-            score,
+        setActionLoading(
+          `${id}-submit`,
+        );
+
+        const { data } =
+          await api.patch(
+            `/matches/${id}/result`,
+            {
+              score,
+            },
+          );
+
+        setMessage(
+          data.message,
+        );
+
+        setScores(
+          (previous) => {
+            const next = {
+              ...previous,
+            };
+
+            delete next[id];
+
+            return next;
           },
         );
 
-      setMessage(data.message);
+        await load();
+      } catch (error) {
+        setMessage(
+          error.response?.data
+            ?.message ||
+            "No se pudo enviar el resultado",
+        );
+      } finally {
+        setActionLoading(
+          null,
+        );
+      }
+    };
 
-      setScores((prev) => {
-        const next = {
-          ...prev,
-        };
+  const confirm =
+    async (id) => {
+      if (actionLoading) {
+        return;
+      }
 
-        delete next[id];
+      try {
+        setMessage("");
 
-        return next;
-      });
-
-      await load();
-    } catch (error) {
-      setMessage(
-        error.response?.data?.message ||
-          "No se pudo enviar el resultado",
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const confirm = async (id) => {
-    if (actionLoading) return;
-
-    try {
-      setMessage("");
-
-      setActionLoading(
-        `${id}-confirm`,
-      );
-
-      const { data } =
-        await api.patch(
-          `/matches/${id}/confirm`,
+        setActionLoading(
+          `${id}-confirm`,
         );
 
-      setMessage(data.message);
+        const { data } =
+          await api.patch(
+            `/matches/${id}/confirm`,
+          );
 
-      await load();
-    } catch (error) {
-      setMessage(
-        error.response?.data?.message ||
-          "No se pudo confirmar el resultado",
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const reject = async (id) => {
-    if (actionLoading) return;
-
-    try {
-      setMessage("");
-
-      setActionLoading(
-        `${id}-reject`,
-      );
-
-      const { data } =
-        await api.patch(
-          `/matches/${id}/reject-result`,
+        setMessage(
+          data.message,
         );
 
-      setMessage(data.message);
+        await load();
+      } catch (error) {
+        setMessage(
+          error.response?.data
+            ?.message ||
+            "No se pudo confirmar el resultado",
+        );
+      } finally {
+        setActionLoading(
+          null,
+        );
+      }
+    };
 
-      await load();
-    } catch (error) {
-      setMessage(
-        error.response?.data?.message ||
-          "No se pudo rechazar el resultado",
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const reject =
+    async (id) => {
+      if (actionLoading) {
+        return;
+      }
+
+      try {
+        setMessage("");
+
+        setActionLoading(
+          `${id}-reject`,
+        );
+
+        const { data } =
+          await api.patch(
+            `/matches/${id}/reject-result`,
+          );
+
+        setMessage(
+          data.message,
+        );
+
+        await load();
+      } catch (error) {
+        setMessage(
+          error.response?.data
+            ?.message ||
+            "No se pudo rechazar el resultado",
+        );
+      } finally {
+        setActionLoading(
+          null,
+        );
+      }
+    };
 
   const renderScore = (
     matchScore,
@@ -291,67 +449,37 @@ export default function MatchesPage() {
     }
 
     return (
-      <div
-        style={{
-          display: "grid",
-          gap: "14px",
-          marginTop: "16px",
-        }}
-      >
+      <div className="match-score-view">
         {matchScore.map(
           (set, index) => (
             <div
+              className="match-set-view"
               key={index}
-              style={{
-                border:
-                  "1px solid #243529",
-
-                background:
-                  "#0f1a13",
-
-                padding: "16px",
-              }}
             >
-              <strong
-                style={{
-                  display: "block",
-                  color: "#9bbe61",
-                  marginBottom:
-                    "12px",
-                  fontSize: "14px",
-                }}
-              >
+              <strong>
                 Set {index + 1}
               </strong>
 
-              <div
-                style={{
-                  display: "grid",
-
-                  gridTemplateColumns:
-                    "1fr auto",
-
-                  gap: "10px",
-
-                  alignItems:
-                    "center",
-                }}
-              >
+              <div>
                 <span>
-                  {player1Name}
+                  {
+                    player1Name
+                  }
                 </span>
 
-                <strong>
+                <b>
                   {set.p1}
-                </strong>
+                </b>
 
                 <span>
-                  {player2Name}
+                  {
+                    player2Name
+                  }
                 </span>
 
-                <strong>
+                <b>
                   {set.p2}
-                </strong>
+                </b>
               </div>
             </div>
           ),
@@ -386,360 +514,410 @@ export default function MatchesPage() {
             Cargando partidos...
           </div>
         ) : (
-          <div className="cards-dark">
+          <div className="match-list">
             {matches.length ===
               0 && (
-              <div className="empty-dark">
+              <div className="match-empty">
                 Todavía no tenés
                 partidos.
               </div>
             )}
 
-            {matches.map((m) => {
-              const submittedByMe =
-                m.result_submitted_by ===
-                user?.id;
+            {matches.map(
+              (match) => {
+                const submittedByMe =
+                  match.result_submitted_by ===
+                  user?.id;
 
-              const score =
-                scores[m.id] ||
-                emptyScore();
+                const score =
+                  scores[
+                    match.id
+                  ] ||
+                  emptyScore();
 
-              const rivalPhone =
-                m.player1_id ===
-                user?.id
-                  ? m.player2_phone
-                  : m.player1_phone;
+                const rivalName =
+                  match.player1_id ===
+                  user?.id
+                    ? match.player2_name
+                    : match.player1_name;
 
-              let cleanPhone =
-                rivalPhone?.replace(
-                  /\D/g,
-                  "",
-                ) || "";
+                const rivalPhone =
+                  match.player1_id ===
+                  user?.id
+                    ? match.player2_phone
+                    : match.player1_phone;
 
-              if (
-                cleanPhone.startsWith(
-                  "0",
-                )
-              ) {
-                cleanPhone =
-                  cleanPhone.slice(
-                    1,
+                const whatsappNumber =
+                  normalizeWhatsapp(
+                    rivalPhone,
                   );
-              }
 
-              const formattedPhone =
-                formatPhone(
-                  rivalPhone,
-                );
+                const statusLabel =
+                  statusLabels[
+                    match.status
+                  ] ||
+                  match.status;
 
-              const statusLabel =
-                statusLabels[
-                  m.status
-                ] || m.status;
+                const scheduledTime =
+                  match.scheduled_at
+                    ? new Date(
+                        match.scheduled_at,
+                      ).getTime()
+                    : null;
 
-              const submitting =
-                actionLoading ===
-                `${m.id}-submit`;
+                const matchStarted =
+                  scheduledTime &&
+                  scheduledTime <=
+                    Date.now();
 
-              const confirming =
-                actionLoading ===
-                `${m.id}-confirm`;
+                const resultBlocked =
+                  match.status ===
+                    "pending" &&
+                  !matchStarted;
 
-              const rejecting =
-                actionLoading ===
-                `${m.id}-reject`;
+                const submitting =
+                  actionLoading ===
+                  `${match.id}-submit`;
 
-              return (
-                <article
-                  className="card-dark match-dark"
-                  key={m.id}
-                >
-                  <div className="match-head">
-                    <div>
-                      <span className="card-label">
-                        PARTIDO
-                      </span>
+                const confirming =
+                  actionLoading ===
+                  `${match.id}-confirm`;
 
-                      <h2>
-                        {
-                          m.player1_name
-                        }{" "}
-                        <i>vs</i>{" "}
-                        {
-                          m.player2_name
-                        }
-                      </h2>
-                    </div>
+                const rejecting =
+                  actionLoading ===
+                  `${match.id}-reject`;
 
-                    <span
-                      className={`status-dark ${m.status}`}
-                    >
-                      {statusLabel}
-                    </span>
-                  </div>
+                const resultTooltip =
+                  !match.scheduled_at
+                    ? "Este partido todavía no tiene un horario registrado."
+                    : `El resultado se habilita el ${formatDateTime(
+                        match.scheduled_at,
+                      )}.`;
 
-                  {rivalPhone && (
-                    <div
-                      style={{
-                        display:
-                          "flex",
-
-                        alignItems:
-                          "center",
-
-                        flexWrap:
-                          "wrap",
-
-                        gap: "16px",
-
-                        marginTop:
-                          "14px",
-                      }}
-                    >
-                      <a
-                        className="whatsapp"
-                        style={{
-                          marginTop: 0,
-                        }}
-                        target="_blank"
-                        rel="noreferrer"
-                        href={`https://wa.me/54${cleanPhone}`}
-                      >
-                        Coordinar por
-                        WhatsApp
-                      </a>
-
-                      <span
-                        style={{
-                          color:
-                            "#c0c7c0",
-
-                          fontSize:
-                            "13px",
-                        }}
-                      >
-                        {
-                          formattedPhone
-                        }
-                      </span>
-                    </div>
-                  )}
-
-                  {m.status ===
-                    "pending" && (
-                    <div className="score-editor">
-                      <div className="score-row score-title">
-                        <span>
-                          Set
+                return (
+                  <article
+                    className="match-card"
+                    key={
+                      match.id
+                    }
+                  >
+                    <div className="match-card-head">
+                      <div>
+                        <span className="match-kicker">
+                          PARTIDO
                         </span>
 
-                        <span>
+                        <h2>
                           {
-                            m.player1_name
+                            match.player1_name
                           }
-                        </span>
 
-                        <span>
+                          <i>
+                            vs
+                          </i>
+
                           {
-                            m.player2_name
+                            match.player2_name
                           }
-                        </span>
+                        </h2>
                       </div>
 
-                      {score.map(
-                        (
-                          set,
-                          index,
-                        ) => (
-                          <div
-                            className="score-row"
-                            key={
-                              index
-                            }
-                          >
-                            <span>
-                              Set{" "}
-                              {index +
-                                1}
-                            </span>
-
-                            <input
-                              type="number"
-                              min="0"
-                              value={
-                                set.p1
-                              }
-                              disabled={
-                                Boolean(
-                                  actionLoading,
-                                )
-                              }
-                              onChange={(
-                                e,
-                              ) =>
-                                change(
-                                  m.id,
-                                  index,
-                                  "p1",
-                                  e
-                                    .target
-                                    .value,
-                                )
-                              }
-                            />
-
-                            <input
-                              type="number"
-                              min="0"
-                              value={
-                                set.p2
-                              }
-                              disabled={
-                                Boolean(
-                                  actionLoading,
-                                )
-                              }
-                              onChange={(
-                                e,
-                              ) =>
-                                change(
-                                  m.id,
-                                  index,
-                                  "p2",
-                                  e
-                                    .target
-                                    .value,
-                                )
-                              }
-                            />
-                          </div>
-                        ),
-                      )}
-
-                      <button
-                        className="small-action"
-                        disabled={
-                          Boolean(
-                            actionLoading,
-                          )
-                        }
-                        onClick={() =>
-                          submit(m.id)
-                        }
+                      <span
+                        className={`match-status ${match.status}`}
                       >
-                        {submitting
-                          ? "ENVIANDO..."
-                          : "Enviar resultado"}
-                      </button>
+                        {
+                          statusLabel
+                        }
+                      </span>
                     </div>
-                  )}
 
-                  {m.status ===
-                    "awaiting_confirmation" && (
-                    <div className="proposed">
-                      <strong
-                        style={{
-                          fontSize:
-                            "16px",
-                        }}
-                      >
-                        Resultado
-                        propuesto
-                      </strong>
+                    {match.venue &&
+                      match.scheduled_at && (
+                        <div className="match-schedule">
+                          <span>
+                            PRÓXIMO PARTIDO
+                          </span>
 
-                      {renderScore(
-                        m.proposed_score,
-                        m.player1_name,
-                        m.player2_name,
-                      )}
+                          <strong>
+                            {
+                              match.venue
+                            }
+                          </strong>
 
-                      {submittedByMe ? (
-                        <p
-                          className="dim"
-                          style={{
-                            marginTop:
-                              "18px",
-                          }}
-                        >
-                          Esperando
-                          confirmación
-                          del rival.
-                        </p>
-                      ) : (
-                        <div className="card-actions">
-                          <button
-                            className="small-action"
-                            disabled={
-                              Boolean(
-                                actionLoading,
-                              )
-                            }
-                            onClick={() =>
-                              confirm(
-                                m.id,
-                              )
-                            }
-                          >
-                            {confirming
-                              ? "CONFIRMANDO..."
-                              : "Confirmar"}
-                          </button>
-
-                          <button
-                            className="small-action secondary"
-                            disabled={
-                              Boolean(
-                                actionLoading,
-                              )
-                            }
-                            onClick={() =>
-                              reject(
-                                m.id,
-                              )
-                            }
-                          >
-                            {rejecting
-                              ? "RECHAZANDO..."
-                              : "Rechazar"}
-                          </button>
+                          <p>
+                            {formatDateTime(
+                              match.scheduled_at,
+                            )}
+                          </p>
                         </div>
                       )}
-                    </div>
-                  )}
 
-                  {m.status ===
-                    "completed" && (
-                    <div className="completed-score">
-                      <p>
-                        Ganador:{" "}
-                        <strong>
-                          {
-                            m.winner_name
-                          }
-                        </strong>
-                      </p>
+                    {rivalPhone && (
+                      <div className="match-contact">
+                        <div>
+                          <small>
+                            Rival
+                          </small>
 
-                      <strong
-                        style={{
-                          display:
-                            "block",
-                          marginTop:
-                            "18px",
-                        }}
-                      >
-                        Resultado final
-                      </strong>
+                          <strong>
+                            {
+                              rivalName
+                            }
+                          </strong>
 
-                      {renderScore(
-                        m.score,
-                        m.player1_name,
-                        m.player2_name,
+                          <span>
+                            {formatPhone(
+                              rivalPhone,
+                            )}
+                          </span>
+                        </div>
+
+                        <a
+                          href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+                            `Hola ${rivalName}, te escribo por nuestro partido de la Liga de Tenis San Pedro.`,
+                          )}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          WhatsApp
+                        </a>
+                      </div>
+                    )}
+
+                    {match.status ===
+                      "pending" &&
+                      resultBlocked && (
+                        <div className="match-waiting">
+                          <strong>
+                            Resultado todavía bloqueado
+                          </strong>
+
+                          <p>
+                            {resultTooltip}
+                          </p>
+                        </div>
                       )}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
+
+                    {match.status ===
+                      "pending" && (
+                        <div className="match-score-editor">
+                          <div className="score-row score-title">
+                            <span>
+                              Set
+                            </span>
+
+                            <span>
+                              {
+                                match.player1_name
+                              }
+                            </span>
+
+                            <span>
+                              {
+                                match.player2_name
+                              }
+                            </span>
+                          </div>
+
+                          {score.map(
+                            (
+                              set,
+                              index,
+                            ) => (
+                              <div
+                                className="score-row"
+                                key={
+                                  index
+                                }
+                              >
+                                <span>
+                                  Set{" "}
+                                  {index +
+                                    1}
+                                </span>
+
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={
+                                    set.p1
+                                  }
+                                  disabled={
+                                    resultBlocked ||
+                                    Boolean(
+                                      actionLoading,
+                                    )
+                                  }
+                                  onChange={(
+                                    event,
+                                  ) =>
+                                    change(
+                                      match.id,
+                                      index,
+                                      "p1",
+                                      event
+                                        .target
+                                        .value,
+                                    )
+                                  }
+                                />
+
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={
+                                    set.p2
+                                  }
+                                  disabled={
+                                    resultBlocked ||
+                                    Boolean(
+                                      actionLoading,
+                                    )
+                                  }
+                                  onChange={(
+                                    event,
+                                  ) =>
+                                    change(
+                                      match.id,
+                                      index,
+                                      "p2",
+                                      event
+                                        .target
+                                        .value,
+                                    )
+                                  }
+                                />
+                              </div>
+                            ),
+                          )}
+
+                          <ActionWithTooltip
+                            disabled={
+                              resultBlocked
+                            }
+                            tooltip={
+                              resultTooltip
+                            }
+                          >
+                            <button
+                              className="match-action primary"
+                              disabled={
+                                resultBlocked ||
+                                Boolean(
+                                  actionLoading,
+                                )
+                              }
+                              onClick={() =>
+                                submit(
+                                  match.id,
+                                )
+                              }
+                            >
+                              {submitting
+                                ? "ENVIANDO..."
+                                : "Enviar resultado"}
+                            </button>
+                          </ActionWithTooltip>
+                        </div>
+                      )}
+
+                    {match.status ===
+                      "awaiting_confirmation" && (
+                        <div className="match-proposed">
+                          <span className="match-kicker">
+                            RESULTADO PROPUESTO
+                          </span>
+
+                          {renderScore(
+                            match.proposed_score,
+                            match.player1_name,
+                            match.player2_name,
+                          )}
+
+                          {submittedByMe ? (
+                            <div className="match-waiting">
+                              Esperando
+                              confirmación
+                              del rival.
+                            </div>
+                          ) : (
+                            <div className="match-buttons">
+                              <button
+                                className="match-action primary"
+                                disabled={
+                                  Boolean(
+                                    actionLoading,
+                                  )
+                                }
+                                onClick={() =>
+                                  confirm(
+                                    match.id,
+                                  )
+                                }
+                              >
+                                {confirming
+                                  ? "CONFIRMANDO..."
+                                  : "Confirmar resultado"}
+                              </button>
+
+                              <button
+                                className="match-action danger"
+                                disabled={
+                                  Boolean(
+                                    actionLoading,
+                                  )
+                                }
+                                onClick={() =>
+                                  reject(
+                                    match.id,
+                                  )
+                                }
+                              >
+                                {rejecting
+                                  ? "RECHAZANDO..."
+                                  : "El resultado es incorrecto"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                    {match.status ===
+                      "completed" && (
+                        <div className="match-completed">
+                          <span className="match-kicker">
+                            RESULTADO FINAL
+                          </span>
+
+                          <h3>
+                            Ganador:{" "}
+                            <strong>
+                              {
+                                match.winner_name
+                              }
+                            </strong>
+                          </h3>
+
+                          {renderScore(
+                            match.score,
+                            match.player1_name,
+                            match.player2_name,
+                          )}
+
+                          {match.completed_at && (
+                            <small>
+                              Confirmado{" "}
+                              {formatDateTime(
+                                match.completed_at,
+                              )}
+                            </small>
+                          )}
+                        </div>
+                      )}
+                  </article>
+                );
+              },
+            )}
           </div>
         )}
       </div>

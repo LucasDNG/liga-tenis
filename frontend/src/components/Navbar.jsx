@@ -3,16 +3,22 @@ import {
   useNavigate,
 } from "react-router-dom";
 
-import { useAuth } from "../context/AuthContext";
+import {
+  useAuth,
+} from "../context/AuthContext";
 
 export default function Navbar() {
-  const { user, signout } =
-    useAuth();
+  const {
+    user,
+    signout,
+  } = useAuth();
 
-  const navigate = useNavigate();
+  const navigate =
+    useNavigate();
 
   const out = async () => {
     await signout();
+
     navigate("/");
   };
 
@@ -30,7 +36,9 @@ export default function Navbar() {
             <span className="ball-seam seam-one" />
             <span className="ball-seam seam-two" />
 
-            <small>SP</small>
+            <small>
+              SP
+            </small>
           </span>
 
           <span className="brand-copy">
@@ -59,6 +67,13 @@ export default function Navbar() {
           </Link>
 
           <Link
+            to="/partidos"
+            className="nav-link"
+          >
+            Partidos
+          </Link>
+
+          <Link
             to="/elo"
             className="nav-link"
           >
@@ -78,7 +93,7 @@ export default function Navbar() {
                 to="/matches"
                 className="nav-link"
               >
-                Partidos
+                Mis partidos
               </Link>
 
               <Link

@@ -1,37 +1,124 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  Link,
+  useSearchParams,
+} from "react-router-dom";
 
 import { api } from "../api";
-import { useAuth } from "../context/AuthContext";
+
+import {
+  useAuth,
+} from "../context/AuthContext";
+
+import "./RankingPage.css";
+
+function ChallengeButton({
+  player,
+  availability,
+  sending,
+  anySending,
+  onChallenge,
+}) {
+  /*
+    Usuario no logueado:
+    no mostramos botón de desafío.
+  */
+  if (!availability) {
+    return "—";
+  }
+
+  const disabled =
+    !availability.can_challenge ||
+    anySending;
+
+  const tooltip =
+    availability.message;
+
+  return (
+    <span
+      className={
+        disabled
+          ? "ranking-action-wrap disabled"
+          : "ranking-action-wrap"
+      }
+      tabIndex={
+        disabled ? 0 : undefined
+      }
+    >
+      <button
+        className="small-action ranking-challenge-button"
+        disabled={disabled}
+        onClick={() =>
+          onChallenge(
+            player.id,
+          )
+        }
+      >
+        {sending
+          ? "ENVIANDO..."
+          : "Desafiar"}
+      </button>
+
+      {disabled &&
+        tooltip && (
+          <span className="ranking-tooltip">
+            {tooltip}
+          </span>
+        )}
+    </span>
+  );
+}
 
 export default function RankingPage() {
-  const { user } = useAuth();
+  const { user } =
+    useAuth();
 
-  const [params, setParams] =
-    useSearchParams();
+  const [
+    params,
+    setParams,
+  ] = useSearchParams();
 
   const initial =
     params.get("gender") ||
     user?.gender ||
     "male";
 
-  const [league, setLeague] =
-    useState(initial);
+  const [
+    league,
+    setLeague,
+  ] = useState(initial);
 
-  const [players, setPlayers] =
-    useState([]);
+  const [
+    players,
+    setPlayers,
+  ] = useState([]);
 
-  const [message, setMessage] =
-    useState("");
+  const [
+    availability,
+    setAvailability,
+  ] = useState({});
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    message,
+    setMessage,
+  ] = useState("");
 
-  const [challengingId, setChallengingId] =
-    useState(null);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  useEffect(() => {
-    const loadRanking = async () => {
+  const [
+    challengingId,
+    setChallengingId,
+  ] = useState(null);
+
+  const load =
+    async () => {
       try {
         setLoading(true);
         setMessage("");
@@ -40,15 +127,59 @@ export default function RankingPage() {
           gender: league,
         });
 
-        const { data } =
+        /*
+          Ranking siempre público.
+        */
+        const rankingResponse =
           await api.get(
             `/ranking?gender=${league}`,
           );
 
-        setPlayers(data.players);
+        setPlayers(
+          rankingResponse
+            .data
+            .players ||
+            [],
+        );
+
+        /*
+          Las reglas de desafío solo
+          las consultamos si hay sesión.
+
+          Además solamente tienen sentido
+          viendo la liga propia del usuario.
+        */
+        if (
+          user &&
+          user.gender === league &&
+          user.role !== "admin"
+        ) {
+          try {
+            const availabilityResponse =
+              await api.get(
+                "/challenge-availability",
+              );
+
+            setAvailability(
+              availabilityResponse
+                .data
+                .availability ||
+                {},
+            );
+          } catch {
+            setAvailability(
+              {},
+            );
+          }
+        } else {
+          setAvailability(
+            {},
+          );
+        }
       } catch (error) {
         setMessage(
-          error.response?.data?.message ||
+          error.response?.data
+            ?.message ||
             "No se pudo cargar el ranking",
         );
       } finally {
@@ -56,40 +187,68 @@ export default function RankingPage() {
       }
     };
 
-    loadRanking();
-  }, [league, setParams]);
+  useEffect(() => {
+    load();
+  }, [
+    league,
+    user?.id,
+    user?.gender,
+  ]);
 
-  const challenge = async (id) => {
-    if (challengingId) return;
+  const challenge =
+    async (id) => {
+      if (challengingId) {
+        return;
+      }
 
-    try {
-      setMessage("");
-      setChallengingId(id);
+      try {
+        setMessage("");
 
-      const { data } =
-        await api.post(
-          "/challenges",
-          {
-            challenged_id: id,
-          },
+        setChallengingId(
+          id,
         );
 
-      setMessage(data.message);
-    } catch (error) {
-      setMessage(
-        error.response?.data?.message ||
-          "No se pudo crear el desafío",
-      );
-    } finally {
-      setChallengingId(null);
-    }
-  };
+        const { data } =
+          await api.post(
+            "/challenges",
+            {
+              challenged_id:
+                id,
+            },
+          );
 
-  const myPosition =
-    players.find(
-      (player) =>
-        player.id === user?.id,
-    )?.rank_position;
+        setMessage(
+          data.message,
+        );
+
+        /*
+          Importantísimo:
+          volvemos a consultar
+          disponibilidad.
+
+          Así ese mismo botón queda
+          inmediatamente bloqueado
+          como "Ya existe un desafío".
+        */
+        await load();
+      } catch (error) {
+        setMessage(
+          error.response?.data
+            ?.message ||
+            "No se pudo crear el desafío",
+        );
+
+        /*
+          Si el backend descubrió alguna
+          regla nueva, refrescamos igualmente.
+        */
+        await load();
+      } finally {
+        setChallengingId(
+          null,
+        );
+      }
+    };
 
   const isVerified =
     user?.verification_status ===
@@ -104,18 +263,23 @@ export default function RankingPage() {
               CLASIFICACIÓN
             </span>
 
-            <h1>Ranking</h1>
+            <h1>
+              Ranking
+            </h1>
           </div>
 
           <div className="league-switch">
             <button
               className={
-                league === "male"
+                league ===
+                "male"
                   ? "active"
                   : ""
               }
               onClick={() =>
-                setLeague("male")
+                setLeague(
+                  "male",
+                )
               }
             >
               Masculina
@@ -123,12 +287,15 @@ export default function RankingPage() {
 
             <button
               className={
-                league === "female"
+                league ===
+                "female"
                   ? "active"
                   : ""
               }
               onClick={() =>
-                setLeague("female")
+                setLeague(
+                  "female",
+                )
               }
             >
               Femenina
@@ -136,13 +303,29 @@ export default function RankingPage() {
           </div>
         </div>
 
-        {!isVerified && user && (
+        {!user && (
           <div className="notice">
-            Tu cuenta todavía no está habilitada para competir.
-            Podés ver el ranking, pero para desafiar jugadores
-            primero tenés que tener la identidad verificada.
+            Podés consultar libremente
+            el ranking y los perfiles.
+            Iniciá sesión para desafiar
+            jugadores.
           </div>
         )}
+
+        {!isVerified &&
+          user &&
+          user.role !==
+            "admin" && (
+            <div className="notice">
+              Tu cuenta todavía no
+              está habilitada para
+              competir. Podés consultar
+              el ranking, pero los
+              desafíos permanecerán
+              bloqueados hasta que tu
+              identidad sea verificada.
+            </div>
+          )}
 
         {message && (
           <div className="notice">
@@ -157,35 +340,78 @@ export default function RankingPage() {
         ) : (
           <div className="ranking-box">
             <div className="ranking-head">
-              <span>#</span>
-              <span>Jugador</span>
-              <span>Elo</span>
-              <span>Partidos</span>
-              <span>Acción</span>
+              <span>
+                #
+              </span>
+
+              <span>
+                Jugador
+              </span>
+
+              <span>
+                Elo
+              </span>
+
+              <span>
+                Partidos
+              </span>
+
+              <span>
+                Acción
+              </span>
             </div>
 
             {players.map(
               (player) => {
-                const canChallenge =
-                  user &&
-                  isVerified &&
-                  user.gender === league &&
-                  player.id !== user.id &&
-                  myPosition &&
-                  player.rank_position <
-                    myPosition &&
-                  myPosition -
-                    player.rank_position <=
-                    3;
-
-                const isSending =
+                const sending =
                   challengingId ===
                   player.id;
+
+                /*
+                  Si el usuario está
+                  mirando otra liga,
+                  explicamos el bloqueo
+                  localmente.
+                */
+                let playerAvailability =
+                  availability[
+                    player.id
+                  ];
+
+                if (
+                  user &&
+                  user.gender !==
+                    league
+                ) {
+                  playerAvailability = {
+                    can_challenge:
+                      false,
+
+                    reason:
+                      "different_league",
+
+                    message:
+                      "Solo podés desafiar jugadores de tu propia liga.",
+                  };
+                }
+
+                /*
+                  El administrador no participa.
+                */
+                if (
+                  user?.role ===
+                  "admin"
+                ) {
+                  playerAvailability =
+                    null;
+                }
 
                 return (
                   <div
                     className="ranking-row"
-                    key={player.id}
+                    key={
+                      player.id
+                    }
                   >
                     <span className="rank-digit">
                       {String(
@@ -197,7 +423,14 @@ export default function RankingPage() {
                     </span>
 
                     <strong>
-                      {player.name}
+                      <Link
+                        className="ranking-player-link"
+                        to={`/jugadores/${player.id}`}
+                      >
+                        {
+                          player.name
+                        }
+                      </Link>
 
                       {player.id ===
                         user?.id && (
@@ -209,7 +442,9 @@ export default function RankingPage() {
                     </strong>
 
                     <span>
-                      {player.rating}
+                      {
+                        player.rating
+                      }
                     </span>
 
                     <span>
@@ -219,37 +454,27 @@ export default function RankingPage() {
                     </span>
 
                     <span>
-                      {canChallenge ? (
-                        <button
-                          className="small-action"
-                          onClick={() =>
-                            challenge(
-                              player.id,
-                            )
-                          }
-                          disabled={
-                            Boolean(
-                              challengingId,
-                            )
-                          }
-                          style={{
-                            opacity:
-                              challengingId
-                                ? 0.7
-                                : 1,
-                            cursor:
-                              challengingId
-                                ? "wait"
-                                : "pointer",
-                          }}
-                        >
-                          {isSending
-                            ? "ENVIANDO..."
-                            : "Desafiar"}
-                        </button>
-                      ) : (
-                        "—"
-                      )}
+                      <ChallengeButton
+                        player={
+                          player
+                        }
+                        availability={
+                          user
+                            ? playerAvailability
+                            : null
+                        }
+                        sending={
+                          sending
+                        }
+                        anySending={
+                          Boolean(
+                            challengingId,
+                          )
+                        }
+                        onChallenge={
+                          challenge
+                        }
+                      />
                     </span>
                   </div>
                 );

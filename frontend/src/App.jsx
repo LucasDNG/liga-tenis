@@ -7,11 +7,15 @@ import {
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-import { useAuth } from "./context/AuthContext";
+import {
+  useAuth,
+} from "./context/AuthContext";
 
 import HomePage from "./pages/HomePage";
 import RankingPage from "./pages/RankingPage";
 import EloPage from "./pages/EloPage";
+import PublicMatchesPage from "./pages/PublicMatchesPage";
+import PublicPlayerPage from "./pages/PublicPlayerPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -22,9 +26,13 @@ import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
 import NotFound from "./pages/NotFound";
 
-function AdminRoute({ children }) {
-  const { user, loadingAuth } =
-    useAuth();
+function AdminRoute({
+  children,
+}) {
+  const {
+    user,
+    loadingAuth,
+  } = useAuth();
 
   if (loadingAuth) {
     return null;
@@ -39,7 +47,9 @@ function AdminRoute({ children }) {
     );
   }
 
-  if (user.role !== "admin") {
+  if (
+    user.role !== "admin"
+  ) {
     return (
       <Navigate
         to="/"
@@ -59,27 +69,51 @@ export default function App() {
       <Routes>
         <Route
           path="/"
-          element={<HomePage />}
+          element={
+            <HomePage />
+          }
         />
 
         <Route
           path="/ranking"
-          element={<RankingPage />}
+          element={
+            <RankingPage />
+          }
+        />
+
+        <Route
+          path="/partidos"
+          element={
+            <PublicMatchesPage />
+          }
+        />
+
+        <Route
+          path="/jugadores/:id"
+          element={
+            <PublicPlayerPage />
+          }
         />
 
         <Route
           path="/elo"
-          element={<EloPage />}
+          element={
+            <EloPage />
+          }
         />
 
         <Route
           path="/login"
-          element={<LoginPage />}
+          element={
+            <LoginPage />
+          }
         />
 
         <Route
           path="/register"
-          element={<RegisterPage />}
+          element={
+            <RegisterPage />
+          }
         />
 
         <Route
@@ -134,7 +168,9 @@ export default function App() {
 
         <Route
           path="*"
-          element={<NotFound />}
+          element={
+            <NotFound />
+          }
         />
       </Routes>
     </div>

@@ -6,25 +6,39 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes.js";
 import rankingRoutes from "./routes/ranking.routes.js";
 import challengesRoutes from "./routes/challenges.routes.js";
+import challengeAvailabilityRoutes from "./routes/challengeAvailability.routes.js";
 import matchesRoutes from "./routes/matches.routes.js";
+import transparencyRoutes from "./routes/transparency.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 
-import { errorHandler } from "./middlewares/error.middleware.js";
+import {
+  errorHandler,
+} from "./middlewares/error.middleware.js";
 
-const app = express();
+const app =
+  express();
 
 app.use(
   cors({
     origin:
       process.env.FRONTEND_URL ||
       "http://localhost:5173",
+
     credentials: true,
   }),
 );
 
-app.use(morgan("dev"));
-app.use(express.json());
-app.use(cookieParser());
+app.use(
+  morgan("dev"),
+);
+
+app.use(
+  express.json(),
+);
+
+app.use(
+  cookieParser(),
+);
 
 app.get(
   "/api/health",
@@ -34,13 +48,46 @@ app.get(
     }),
 );
 
-app.use("/api", authRoutes);
-app.use("/api", rankingRoutes);
-app.use("/api", challengesRoutes);
-app.use("/api", matchesRoutes);
+/*
+  RUTAS GENERALES
+*/
+
+app.use(
+  "/api",
+  authRoutes,
+);
+
+app.use(
+  "/api",
+  rankingRoutes,
+);
+
+app.use(
+  "/api",
+  challengesRoutes,
+);
+
+app.use(
+  "/api",
+  challengeAvailabilityRoutes,
+);
+
+app.use(
+  "/api",
+  matchesRoutes,
+);
 
 /*
-  PANEL DE ADMINISTRACIÓN
+  TRANSPARENCIA PÚBLICA
+*/
+
+app.use(
+  "/api",
+  transparencyRoutes,
+);
+
+/*
+  ADMIN
 */
 
 app.use(
@@ -48,6 +95,8 @@ app.use(
   adminRoutes,
 );
 
-app.use(errorHandler);
+app.use(
+  errorHandler,
+);
 
 export default app;
