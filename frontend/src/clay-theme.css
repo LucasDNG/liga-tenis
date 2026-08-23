@@ -957,148 +957,23 @@ textarea:focus {
 }
 
 
-/* =========================================================
-   PARTIDOS PÚBLICOS
-   ========================================================= */
+/*
+  =========================================================
+  PARTIDOS PÚBLICOS
+  =========================================================
 
-.public-matches-page {
-  background:
-    linear-gradient(
-      180deg,
-      #faf6f0,
-      #f4e7dc
-    ) !important;
+  IMPORTANTE:
 
-  color:
-    var(--ink) !important;
-}
+  Esta página NO se estiliza acá.
 
-.public-matches-header {
-  border-bottom-color:
-    #dfbfa8 !important;
-}
+  PublicMatchesPage.css controla
+  completamente su apariencia.
 
-.public-matches-header h1,
-.public-section-title h2 {
-  color:
-    var(--ink) !important;
-}
-
-.public-matches-header p,
-.public-section-title p {
-  color:
-    var(--ink-soft) !important;
-}
-
-.public-matches-header > div > span,
-.public-section-title > span,
-.public-card-label {
-  color:
-    var(--clay) !important;
-}
-
-.public-league-switch button {
-  background:
-    #fff !important;
-
-  color:
-    #74594b !important;
-
-  border-color:
-    #d9b49b !important;
-}
-
-.public-league-switch button.active {
-  background:
-    var(--clay) !important;
-
-  color:
-    #fff !important;
-
-  border-color:
-    var(--clay) !important;
-}
-
-.upcoming-card {
-  background:
-    linear-gradient(
-      135deg,
-      #dc8354,
-      #cb7047
-    ) !important;
-
-  border-color:
-    #b9603c !important;
-
-  box-shadow:
-    0 12px 26px
-    rgba(118, 64, 38, 0.15) !important;
-}
-
-.public-versus strong,
-.match-public-data strong {
-  color:
-    #fff !important;
-}
-
-.public-versus span,
-.match-public-data small,
-.public-transparency-note {
-  color:
-    #fff1e7 !important;
-}
-
-.result-card {
-  background:
-    #fffdf9 !important;
-
-  border-color:
-    #dfbea7 !important;
-
-  border-left:
-    4px solid
-    var(--clay) !important;
-
-  box-shadow:
-    var(--shadow-clay);
-}
-
-.result-main h3 {
-  color:
-    var(--ink) !important;
-}
-
-.result-score {
-  color:
-    #bd643e !important;
-}
-
-.result-details > div,
-.result-elo > div {
-  background:
-    #f7eee7 !important;
-
-  border-color:
-    #e2c9b6 !important;
-}
-
-.result-details strong,
-.result-elo span {
-  color:
-    #60493d !important;
-}
-
-.public-empty,
-.public-message {
-  background:
-    #fffdf9 !important;
-
-  color:
-    #70594c !important;
-
-  border-color:
-    #dfbea7 !important;
-}
+  Esto evita que clay-theme.css
+  vuelva a pisar las cards,
+  colores femenina/masculina,
+  sombras y fondos específicos.
+*/
 
 
 /* =========================================================
@@ -1339,6 +1214,7 @@ textarea:focus {
    ========================================================= */
 
 @media (max-width: 760px) {
+
   .site-width {
     width:
       min(
@@ -1387,4 +1263,586 @@ textarea:focus {
     width: 54px;
     height: 54px;
   }
+}
+
+/* =========================================================
+   FONDO GLOBAL — CANCHA DE POLVO DE LADRILLO
+   Ranking / Elo / Desafíos / Mis partidos / Perfil
+   ========================================================= */
+
+/*
+  Fondo base de toda la aplicación.
+*/
+
+html,
+body,
+#root {
+  min-height: 100%;
+
+  background:
+    #d98a5d !important;
+}
+
+
+body {
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(244, 224, 209, 0.54),
+      rgba(191, 96, 52, 0.28)
+    ),
+    url("/clay-court-hero.png") !important;
+
+  background-size:
+    cover !important;
+
+  background-position:
+    center center !important;
+
+  background-repeat:
+    no-repeat !important;
+
+  background-attachment:
+    fixed !important;
+}
+
+
+/* =========================================================
+   CONTENEDORES PRINCIPALES
+   ========================================================= */
+
+/*
+  Sacamos los fondos sólidos que
+  anteriormente ocultaban la cancha.
+*/
+
+.app-shell,
+.page-dark,
+.page-shell,
+.admin-page,
+.public-player-page {
+  background:
+    transparent !important;
+}
+
+
+/* =========================================================
+   RANKING
+   ========================================================= */
+
+.page-dark {
+  min-height:
+    calc(100vh - 90px);
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(250, 242, 234, 0.89) 0%,
+      rgba(250, 242, 234, 0.72) 44%,
+      rgba(213, 127, 78, 0.34) 100%
+    ),
+    url("/clay-court-hero.png") !important;
+
+  background-size:
+    cover !important;
+
+  background-position:
+    center center !important;
+
+  background-repeat:
+    no-repeat !important;
+
+  background-attachment:
+    fixed !important;
+}
+
+
+/*
+  Las tablas siguen siendo legibles
+  porque están sobre paneles claros.
+*/
+
+.ranking-box {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.94
+    ) !important;
+
+  backdrop-filter:
+    blur(6px);
+
+  box-shadow:
+    0 14px 32px
+    rgba(
+      78,
+      43,
+      25,
+      0.16
+    ) !important;
+}
+
+
+.ranking-row {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.88
+    ) !important;
+}
+
+
+.ranking-head {
+  background:
+    rgba(
+      244,
+      229,
+      217,
+      0.92
+    ) !important;
+}
+
+
+/* =========================================================
+   SISTEMA ELO
+   ========================================================= */
+
+/*
+  Muchos bloques Elo comparten page-shell/page-dark.
+  Acá damos profundidad a sus paneles.
+*/
+
+.page-shell {
+  min-height:
+    calc(100vh - 90px);
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(250, 241, 233, 0.9) 0%,
+      rgba(247, 233, 220, 0.7) 42%,
+      rgba(207, 113, 66, 0.34) 100%
+    ),
+    url("/clay-court-hero.png") !important;
+
+  background-size:
+    cover !important;
+
+  background-position:
+    center center !important;
+
+  background-repeat:
+    no-repeat !important;
+
+  background-attachment:
+    fixed !important;
+}
+
+
+.panel,
+.form-shell {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.93
+    ) !important;
+
+  backdrop-filter:
+    blur(6px);
+
+  box-shadow:
+    0 12px 28px
+    rgba(
+      79,
+      45,
+      27,
+      0.14
+    ) !important;
+}
+
+
+/* =========================================================
+   DESAFÍOS
+   ========================================================= */
+
+.challenge-card {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.94
+    ) !important;
+
+  backdrop-filter:
+    blur(7px);
+
+  box-shadow:
+    0 12px 28px
+    rgba(
+      76,
+      43,
+      26,
+      0.15
+    ) !important;
+}
+
+
+.challenge-info-grid > div,
+.rotation-summary,
+.rotation-notice,
+.contact-box,
+.waiting-note,
+.completed-challenge,
+.rejected-challenge {
+  background:
+    rgba(
+      250,
+      240,
+      232,
+      0.91
+    ) !important;
+
+  backdrop-filter:
+    blur(4px);
+}
+
+
+/* =========================================================
+   MIS PARTIDOS
+   ========================================================= */
+
+.match-card {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.94
+    ) !important;
+
+  backdrop-filter:
+    blur(7px);
+
+  box-shadow:
+    0 12px 28px
+    rgba(
+      75,
+      42,
+      25,
+      0.15
+    ) !important;
+}
+
+
+.match-contact,
+.match-set-view {
+  background:
+    rgba(
+      249,
+      239,
+      231,
+      0.93
+    ) !important;
+}
+
+
+/* =========================================================
+   MI PERFIL
+   ========================================================= */
+
+.profile-dark {
+  position: relative;
+
+  overflow: hidden;
+
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.93
+    ) !important;
+
+  backdrop-filter:
+    blur(8px);
+
+  box-shadow:
+    0 14px 34px
+    rgba(
+      75,
+      43,
+      25,
+      0.16
+    ) !important;
+}
+
+
+/*
+  Un poco de cancha visible dentro
+  del encabezado del perfil.
+*/
+
+.profile-dark::before {
+  content: "";
+
+  position: absolute;
+
+  inset: 0;
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(255, 253, 249, 0.96),
+      rgba(255, 253, 249, 0.82) 46%,
+      rgba(255, 253, 249, 0.4)
+    ),
+    url("/clay-court-hero.png");
+
+  background-size:
+    cover;
+
+  background-position:
+    center;
+
+  opacity:
+    0.42;
+
+  pointer-events:
+    none;
+
+  z-index:
+    0;
+}
+
+
+.profile-dark > * {
+  position: relative;
+
+  z-index:
+    1;
+}
+
+
+/* =========================================================
+   PERFIL PÚBLICO DE JUGADOR
+   ========================================================= */
+
+.public-player-page {
+  min-height:
+    calc(100vh - 90px);
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(250, 241, 233, 0.88),
+      rgba(245, 226, 212, 0.66),
+      rgba(197, 101, 57, 0.34)
+    ),
+    url("/clay-court-hero.png") !important;
+
+  background-size:
+    cover !important;
+
+  background-position:
+    center !important;
+
+  background-repeat:
+    no-repeat !important;
+
+  background-attachment:
+    fixed !important;
+}
+
+
+.player-stats > div,
+.player-match-card,
+.elo-history-row {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.94
+    ) !important;
+
+  backdrop-filter:
+    blur(5px);
+}
+
+
+/* =========================================================
+   ADMIN
+   ========================================================= */
+
+.admin-page {
+  min-height:
+    calc(100vh - 90px);
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(250, 241, 233, 0.9),
+      rgba(246, 229, 216, 0.72),
+      rgba(202, 110, 65, 0.32)
+    ),
+    url("/clay-court-hero.png") !important;
+
+  background-size:
+    cover !important;
+
+  background-position:
+    center !important;
+
+  background-repeat:
+    no-repeat !important;
+
+  background-attachment:
+    fixed !important;
+}
+
+
+.admin-panel {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.94
+    ) !important;
+
+  backdrop-filter:
+    blur(7px);
+}
+
+
+/* =========================================================
+   ENCABEZADOS
+   ========================================================= */
+
+.page-heading {
+  padding:
+    30px 24px;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 249, 243, 0.91),
+      rgba(255, 247, 239, 0.64),
+      rgba(255, 247, 239, 0.14)
+    );
+
+  border-radius:
+    0 0 14px 14px;
+
+  backdrop-filter:
+    blur(3px);
+}
+
+
+/* =========================================================
+   CELULAR / APP
+   ========================================================= */
+
+@media (
+  max-width: 760px
+) {
+
+  body,
+  .page-dark,
+  .page-shell,
+  .public-player-page,
+  .admin-page {
+    background-attachment:
+      scroll !important;
+
+    background-position:
+      60% center !important;
+  }
+
+
+  .page-dark,
+  .page-shell,
+  .public-player-page,
+  .admin-page {
+    background-image:
+      linear-gradient(
+        180deg,
+        rgba(
+          250,
+          241,
+          233,
+          0.88
+        ),
+        rgba(
+          237,
+          194,
+          164,
+          0.66
+        )
+      ),
+      url("/clay-court-hero.png") !important;
+  }
+
+
+  .ranking-box,
+  .challenge-card,
+  .match-card,
+  .profile-dark,
+  .panel,
+  .admin-panel {
+    backdrop-filter:
+      blur(4px);
+  }
+
+}
+
+/* =========================================================
+   MI PERFIL — EVITAR CANCHA DUPLICADA
+   ========================================================= */
+
+.profile-dark {
+  position: relative;
+
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.88
+    ) !important;
+
+  backdrop-filter:
+    blur(7px);
+
+  box-shadow:
+    0 14px 34px
+    rgba(
+      75,
+      43,
+      25,
+      0.16
+    ) !important;
+}
+
+
+/*
+  Eliminamos la segunda imagen
+  de cancha que se estaba dibujando
+  dentro del panel del perfil.
+*/
+
+.profile-dark::before {
+  content: none !important;
+
+  display: none !important;
+
+  background-image:
+    none !important;
 }

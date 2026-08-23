@@ -1,28 +1,40 @@
 /* =========================================================
    HOME — LIGA DE TENIS SAN PEDRO
-   POLVO DE LADRILLO CÁLIDO
+   POLVO DE LADRILLO + CANCHA
    ========================================================= */
 
 
 /* =========================================================
-   FONDO
+   FONDO GENERAL CON CANCHA
    ========================================================= */
 
 .home-dark {
-  background:
-    radial-gradient(
-      circle at 78% 25%,
-      rgba(201, 104, 62, 0.07),
-      transparent 34%
-    ),
-    linear-gradient(
-      135deg,
-      #f8eee5 0%,
-      #f4e3d6 52%,
-      #faf3ec 100%
-    ) !important;
+  position: relative;
 
-  color: #3d291f !important;
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(248, 238, 229, 0.93) 0%,
+      rgba(244, 227, 214, 0.87) 38%,
+      rgba(222, 156, 116, 0.56) 68%,
+      rgba(177, 83, 44, 0.44) 100%
+    ),
+    url("/clay-court-hero.png") !important;
+
+  background-size:
+    cover !important;
+
+  background-position:
+    center center !important;
+
+  background-repeat:
+    no-repeat !important;
+
+  background-attachment:
+    fixed !important;
+
+  color:
+    #3d291f !important;
 }
 
 
@@ -85,12 +97,7 @@
 
 .site-nav .nav-link:hover {
   background:
-    rgba(
-      255,
-      255,
-      255,
-      0.14
-    ) !important;
+    rgba(255, 255, 255, 0.14) !important;
 
   color: #ffffff !important;
 
@@ -107,20 +114,10 @@
 
   border:
     1px solid
-    rgba(
-      255,
-      255,
-      255,
-      0.72
-    ) !important;
+    rgba(255, 255, 255, 0.72) !important;
 
   background:
-    rgba(
-      103,
-      42,
-      18,
-      0.12
-    ) !important;
+    rgba(103, 42, 18, 0.12) !important;
 
   color:
     #ffffff !important;
@@ -133,23 +130,13 @@
 
   box-shadow:
     0 4px 10px
-    rgba(
-      76,
-      35,
-      18,
-      0.09
-    );
+    rgba(76, 35, 18, 0.09);
 }
 
 
 .site-nav .nav-out:hover {
   background:
-    rgba(
-      255,
-      255,
-      255,
-      0.17
-    ) !important;
+    rgba(255, 255, 255, 0.17) !important;
 
   border-color:
     #ffffff !important;
@@ -163,16 +150,10 @@
     12px 22px !important;
 
   border:
-    1px solid
-    #fff4ec !important;
+    1px solid #fff4ec !important;
 
   background:
-    rgba(
-      111,
-      43,
-      17,
-      0.2
-    ) !important;
+    rgba(111, 43, 17, 0.2) !important;
 
   color:
     #ffffff !important;
@@ -185,23 +166,13 @@
 
   box-shadow:
     0 5px 13px
-    rgba(
-      72,
-      31,
-      14,
-      0.14
-    );
+    rgba(72, 31, 14, 0.14);
 }
 
 
 .site-nav .nav-cta:hover {
   background:
-    rgba(
-      83,
-      32,
-      13,
-      0.3
-    ) !important;
+    rgba(83, 32, 13, 0.3) !important;
 
   border-color:
     #ffffff !important;
@@ -229,31 +200,37 @@
 }
 
 
-/* LÍNEA VERTICAL */
+/* VELO SUAVE DETRÁS DEL TEXTO */
 
 .home-dark .hero-copy-dark::before {
   content: "";
 
   position: absolute;
 
-  left: -34px;
-  top: 50px;
+  left: -60px;
+  top: 25px;
+  bottom: 25px;
 
-  width: 4px;
-  height: 215px;
+  width: 760px;
 
-  border-radius: 20px;
+  border-radius:
+    0 28px 28px 0;
 
   background:
     linear-gradient(
-      180deg,
-      #c6683f,
-      #dfa07c
+      90deg,
+      rgba(255, 250, 245, 0.88) 0%,
+      rgba(255, 247, 239, 0.78) 62%,
+      rgba(255, 247, 239, 0.28) 86%,
+      rgba(255, 247, 239, 0) 100%
     );
+
+  z-index:
+    0;
 }
 
 
-/* LÍNEAS SUTILES DE CANCHA */
+/* DETALLE DE CANCHA */
 
 .home-dark .hero-copy-dark::after {
   content: "";
@@ -269,45 +246,28 @@
   height: 7px;
 
   background:
-    rgba(
-      174,
-      86,
-      47,
-      0.09
-    );
+    rgba(255, 255, 255, 0.18);
 
   transform:
     rotate(-37deg);
 
   box-shadow:
     0 58px 0
-    rgba(
-      174,
-      86,
-      47,
-      0.045
-    );
+    rgba(255, 255, 255, 0.1);
 }
 
 
 .home-dark .hero-copy-dark > * {
   position: relative;
-  z-index: 1;
+
+  z-index:
+    1;
 }
 
 
 /* =========================================================
    TÍTULO
    ========================================================= */
-
-/*
-   Esta regla tiene mayor especificidad
-   que las reglas anteriores del proyecto.
-
-   Además usamos -webkit-text-fill-color
-   para evitar que algún estilo viejo
-   vuelva a pintarlo verde.
-*/
 
 .home-dark
 .home-main
@@ -354,23 +314,12 @@ h1 span {
 
   text-shadow:
     0 2px 0
-    rgba(
-      255,
-      255,
-      255,
-      0.5
-    ) !important;
+    rgba(255, 255, 255, 0.5) !important;
 
   background:
     none !important;
 }
 
-
-/*
-   Si todavía existe un span dentro
-   del h1, se comporta exactamente
-   como el texto normal.
-*/
 
 .home-dark
 .home-main
@@ -399,7 +348,7 @@ h1 span {
 }
 
 
-/* LÍNEA DEBAJO DE TENIS LIBRE */
+/* LÍNEA DEBAJO DEL TÍTULO */
 
 .home-dark
 .hero-copy-dark
@@ -488,8 +437,7 @@ h1::after {
     ) !important;
 
   border:
-    1px solid
-    #ad4823 !important;
+    1px solid #ad4823 !important;
 
   color:
     #ffffff !important;
@@ -499,12 +447,7 @@ h1::after {
 
   box-shadow:
     0 8px 18px
-    rgba(
-      110,
-      50,
-      25,
-      0.2
-    ) !important;
+    rgba(110, 50, 25, 0.2) !important;
 
   transition:
     transform 0.16s ease,
@@ -522,12 +465,7 @@ h1::after {
 
   box-shadow:
     0 11px 23px
-    rgba(
-      110,
-      50,
-      25,
-      0.24
-    ) !important;
+    rgba(110, 50, 25, 0.24) !important;
 }
 
 
@@ -541,16 +479,10 @@ h1::after {
     0 30px !important;
 
   background:
-    rgba(
-      255,
-      253,
-      249,
-      0.88
-    ) !important;
+    rgba(255, 253, 249, 0.88) !important;
 
   border:
-    2px solid
-    #c6683f !important;
+    2px solid #c6683f !important;
 
   color:
     #a94c29 !important;
@@ -574,12 +506,7 @@ h1::after {
 
   box-shadow:
     0 7px 16px
-    rgba(
-      90,
-      50,
-      30,
-      0.1
-    );
+    rgba(90, 50, 30, 0.1);
 }
 
 
@@ -592,25 +519,17 @@ h1::after {
     44px !important;
 
   background:
-    rgba(
-      255,
-      253,
-      249,
-      0.92
-    ) !important;
+    rgba(255, 253, 249, 0.91) !important;
 
   border:
-    1px solid
-    #dbb69e !important;
+    1px solid #dbb69e !important;
 
   box-shadow:
     0 8px 20px
-    rgba(
-      94,
-      55,
-      35,
-      0.08
-    ) !important;
+    rgba(94, 55, 35, 0.12) !important;
+
+  backdrop-filter:
+    blur(5px);
 }
 
 
@@ -618,8 +537,7 @@ h1::after {
 .feature-line
 > div {
   border-right:
-    1px solid
-    #dfbea9 !important;
+    1px solid #dfbea9 !important;
 }
 
 
@@ -673,29 +591,20 @@ h1::after {
 
 .home-dark .top-panel {
   background:
-    rgba(
-      255,
-      253,
-      249,
-      0.95
-    ) !important;
+    rgba(255, 253, 249, 0.94) !important;
 
   border:
-    1px solid
-    #d9b49b !important;
+    1px solid #d9b49b !important;
 
   border-top:
-    5px solid
-    #c6683f !important;
+    5px solid #c6683f !important;
 
   box-shadow:
     0 13px 28px
-    rgba(
-      90,
-      50,
-      30,
-      0.11
-    ) !important;
+    rgba(90, 50, 30, 0.16) !important;
+
+  backdrop-filter:
+    blur(7px);
 }
 
 
@@ -744,8 +653,7 @@ h1::after {
     700 !important;
 
   border-bottom:
-    1px solid
-    #c6683f;
+    1px solid #c6683f;
 }
 
 
@@ -762,8 +670,7 @@ h1::after {
     #49342a !important;
 
   border:
-    1px solid
-    #cf9b7c !important;
+    1px solid #cf9b7c !important;
 
   font-weight:
     600 !important;
@@ -790,12 +697,7 @@ h1::after {
 
   box-shadow:
     0 4px 10px
-    rgba(
-      117,
-      54,
-      27,
-      0.14
-    );
+    rgba(117, 54, 27, 0.14);
 }
 
 
@@ -893,10 +795,33 @@ h1::after {
 
 
 /* =========================================================
-   RESPONSIVE
+   RESPONSIVE — CELULAR
    ========================================================= */
 
 @media (max-width: 760px) {
+
+  /*
+     En celular evitamos background-attachment fixed.
+     Suele funcionar peor y consumir más recursos.
+  */
+
+  .home-dark {
+    background-attachment:
+      scroll !important;
+
+    background-position:
+      60% center !important;
+
+    background-image:
+      linear-gradient(
+        90deg,
+        rgba(248, 238, 229, 0.94) 0%,
+        rgba(244, 227, 214, 0.84) 55%,
+        rgba(205, 112, 69, 0.52) 100%
+      ),
+      url("/clay-court-hero.png") !important;
+  }
+
 
   .home-dark
   .hero-copy-dark {
@@ -912,13 +837,33 @@ h1::after {
   .home-dark
   .hero-copy-dark::before {
     left:
-      -12px;
+      -20px;
+
+    right:
+      -20px;
+
+    top:
+      15px;
+
+    bottom:
+      15px;
 
     width:
-      3px;
+      auto;
 
     height:
-      170px;
+      auto;
+
+    border-radius:
+      0;
+
+    background:
+      linear-gradient(
+        90deg,
+        rgba(255, 250, 245, 0.88),
+        rgba(255, 250, 245, 0.67),
+        rgba(255, 250, 245, 0.35)
+      );
   }
 
 

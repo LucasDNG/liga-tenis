@@ -1,0 +1,479 @@
+/* =========================================================
+   SISTEMA ELO
+   MISMA IDENTIDAD VISUAL DEL RESTO DEL SITIO
+   ========================================================= */
+
+.elo-page {
+  min-height: calc(100vh - 90px);
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(250, 241, 233, 0.88) 0%,
+      rgba(245, 226, 212, 0.66) 48%,
+      rgba(197, 101, 57, 0.34) 100%
+    ),
+    url("/clay-court-hero.png") !important;
+
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+
+  color: #3d291f !important;
+}
+
+.elo-page-content {
+  max-width: 1050px;
+  padding-top: 34px;
+  padding-bottom: 72px;
+}
+
+/* =========================================================
+   ENCABEZADO
+   ========================================================= */
+
+.elo-heading {
+  margin-bottom: 34px;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 250, 245, 0.9),
+      rgba(255, 247, 239, 0.64),
+      rgba(255, 247, 239, 0.16)
+    );
+
+  border: 1px solid rgba(221, 191, 171, 0.75);
+  border-radius: 14px;
+
+  padding: 26px 28px;
+
+  backdrop-filter: blur(4px);
+
+  box-shadow:
+    0 12px 28px rgba(75, 42, 25, 0.1);
+}
+
+.elo-heading span {
+  color: #b95832 !important;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+}
+
+.elo-heading h1 {
+  margin: 8px 0 0;
+
+  color: #3a281f !important;
+
+  font-family: Georgia, serif;
+  font-size: clamp(38px, 5vw, 58px);
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* =========================================================
+   INTRO
+   ========================================================= */
+
+.elo-intro {
+  max-width: 800px;
+  margin-bottom: 34px;
+
+  padding: 26px 28px;
+
+  background: rgba(255, 253, 249, 0.9);
+
+  border: 1px solid #e0c7b5;
+  border-radius: 12px;
+
+  backdrop-filter: blur(6px);
+
+  box-shadow:
+    0 10px 24px rgba(76, 44, 27, 0.11);
+}
+
+.elo-intro p {
+  margin: 0 0 15px;
+
+  color: #5a4337;
+
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.elo-intro p:last-child {
+  margin-bottom: 0;
+}
+
+.elo-intro .elo-intro-lead {
+  color: #3e2b22;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.elo-intro strong,
+.elo-feature strong,
+.elo-example-card strong,
+.elo-emphasis strong {
+  color: #4f754b;
+}
+
+/* =========================================================
+   PRINCIPIOS
+   ========================================================= */
+
+.elo-principles-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+
+  gap: 18px;
+  margin-bottom: 34px;
+}
+
+.elo-card {
+  padding: 24px;
+
+  background: rgba(255, 253, 249, 0.93);
+
+  border: 1px solid #dfc5b3;
+  border-top: 4px solid #c96e43;
+  border-radius: 11px;
+
+  backdrop-filter: blur(6px);
+
+  box-shadow:
+    0 10px 24px rgba(75, 43, 26, 0.12);
+}
+
+.elo-card h2 {
+  margin: 9px 0 12px;
+
+  color: #3b291f;
+
+  font-family: Georgia, serif;
+  font-size: 25px;
+  font-weight: 500;
+}
+
+.elo-card p {
+  margin: 0;
+
+  color: #654d40;
+
+  line-height: 1.7;
+}
+
+/* =========================================================
+   LABELS
+   ========================================================= */
+
+.elo-label {
+  color: #b95a35 !important;
+
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+/* =========================================================
+   BLOQUES DESTACADOS
+   ========================================================= */
+
+.elo-feature {
+  margin-bottom: 34px;
+
+  padding: 30px;
+
+  background: rgba(255, 253, 249, 0.92);
+
+  border: 1px solid #ddc1ae;
+  border-left: 4px solid #c96e43;
+  border-radius: 11px;
+
+  backdrop-filter: blur(7px);
+
+  box-shadow:
+    0 12px 28px rgba(73, 42, 26, 0.13);
+}
+
+.elo-feature h2,
+.elo-section h2,
+.elo-summary h2 {
+  margin: 10px 0 18px;
+
+  color: #38271f;
+
+  font-family: Georgia, serif;
+  font-size: clamp(28px, 4vw, 36px);
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.elo-feature p,
+.elo-section p {
+  max-width: 820px;
+
+  color: #5e473b;
+
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.elo-feature .elo-feature-lead,
+.elo-feature .elo-feature-bottom,
+.elo-section .elo-emphasis {
+  color: #49352c;
+  font-size: 17px;
+}
+
+.elo-feature-bottom {
+  margin: 26px 0 0;
+}
+
+/* =========================================================
+   MINI CARDS
+   ========================================================= */
+
+.elo-mini-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.elo-mini-card {
+  padding: 22px;
+
+  background: rgba(248, 238, 230, 0.92);
+
+  border: 1px solid #dcc0ad;
+  border-radius: 9px;
+}
+
+.elo-mini-card > span,
+.elo-example-card > span {
+  color: #b95832;
+
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.elo-mini-card h3 {
+  margin: 12px 0 10px;
+
+  color: #3d2b22;
+
+  font-size: 18px;
+}
+
+.elo-mini-card p {
+  margin: 0;
+
+  color: #695144;
+
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* =========================================================
+   SECCIONES GENERALES
+   ========================================================= */
+
+.elo-section {
+  margin-bottom: 34px;
+
+  padding: 28px 30px;
+
+  background: rgba(255, 253, 249, 0.92);
+
+  border: 1px solid #dfc5b3;
+  border-radius: 11px;
+
+  backdrop-filter: blur(6px);
+
+  box-shadow:
+    0 10px 24px rgba(73, 42, 26, 0.11);
+}
+
+.elo-section > p:last-child {
+  margin-bottom: 0;
+}
+
+/* =========================================================
+   EJEMPLOS
+   ========================================================= */
+
+.elo-example-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.elo-example-card {
+  padding: 22px;
+
+  background: #faf0e8;
+
+  border: 1px solid #dfc5b3;
+  border-radius: 9px;
+}
+
+.elo-example-card.accent {
+  border-left: 3px solid #62815c;
+}
+
+.elo-example-card p {
+  margin: 16px 0 0;
+
+  color: #49372f;
+
+  font-size: 17px;
+}
+
+.elo-loss {
+  color: #a45b46 !important;
+}
+
+.elo-small-note {
+  margin-top: 20px;
+
+  color: #80695d !important;
+
+  font-size: 13px !important;
+}
+
+/* =========================================================
+   VARIANTES
+   ========================================================= */
+
+.elo-reverse {
+  border-left-color: #67805d;
+}
+
+.elo-philosophy {
+  border-left: 4px solid #67805d;
+}
+
+/* =========================================================
+   RESUMEN
+   ========================================================= */
+
+.elo-summary {
+  padding: 30px;
+
+  background: rgba(255, 253, 249, 0.94);
+
+  border: 1px solid #dfc5b3;
+  border-top: 4px solid #c96e43;
+  border-radius: 11px;
+
+  backdrop-filter: blur(7px);
+
+  box-shadow:
+    0 12px 28px rgba(73, 42, 26, 0.13);
+}
+
+.elo-summary h2 {
+  margin-top: 0;
+}
+
+.elo-summary-list {
+  display: grid;
+
+  gap: 12px;
+}
+
+.elo-summary-list > div {
+  display: grid;
+
+  grid-template-columns:
+    44px 1fr;
+
+  gap: 10px;
+
+  align-items: start;
+
+  padding: 12px 14px;
+
+  background: rgba(248, 238, 230, 0.86);
+
+  border: 1px solid #e2cbb9;
+  border-radius: 8px;
+}
+
+.elo-summary-list strong {
+  color: #4f754b;
+}
+
+.elo-summary-list span {
+  color: #513d33;
+
+  line-height: 1.55;
+}
+
+.elo-ranking-link {
+  margin-top: 28px;
+}
+
+/* =========================================================
+   CELULAR / APP
+   ========================================================= */
+
+@media (max-width: 760px) {
+
+  .elo-page {
+    background-attachment:
+      scroll !important;
+
+    background-position:
+      60% center !important;
+  }
+
+  .elo-page-content {
+    padding-top: 18px;
+    padding-bottom: 48px;
+  }
+
+  .elo-heading,
+  .elo-intro,
+  .elo-feature,
+  .elo-section,
+  .elo-summary {
+    padding: 20px;
+  }
+
+  .elo-principles-grid,
+  .elo-mini-grid,
+  .elo-example-grid {
+    grid-template-columns:
+      1fr;
+  }
+
+  .elo-heading h1 {
+    font-size: 40px;
+  }
+
+  .elo-card h2,
+  .elo-feature h2,
+  .elo-section h2,
+  .elo-summary h2 {
+    font-size: 25px;
+  }
+
+  .elo-summary-list > div {
+    grid-template-columns:
+      36px 1fr;
+  }
+}

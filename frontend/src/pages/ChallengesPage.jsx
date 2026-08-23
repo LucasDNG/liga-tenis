@@ -9,12 +9,14 @@ import { useAuth } from "../context/AuthContext";
 
 import "./ChallengesPage.css";
 
+
 const statusLabels = {
   pending: "Pendiente",
   accepted: "Partido confirmado",
   completed: "Finalizado",
   rejected: "Rechazado",
 };
+
 
 const formatDateTime = (value) => {
   if (!value) return "";
@@ -29,6 +31,7 @@ const formatDateTime = (value) => {
     },
   ).format(new Date(value));
 };
+
 
 const toDateTimeLocal = (value) => {
   if (!value) return "";
@@ -70,6 +73,7 @@ const toDateTimeLocal = (value) => {
   )}:${get("minute")}`;
 };
 
+
 const normalizeWhatsapp = (
   phone,
 ) => {
@@ -95,13 +99,6 @@ const normalizeWhatsapp = (
       number.slice(1);
   }
 
-  /*
-    Si ya viene con código
-    argentino, lo usamos.
-
-    Si no, agregamos:
-    54 + 9 + número.
-  */
   if (
     number.startsWith("549")
   ) {
@@ -119,6 +116,7 @@ const normalizeWhatsapp = (
   return `549${number}`;
 };
 
+
 const whatsappLink = (
   phone,
   rivalName,
@@ -135,6 +133,7 @@ const whatsappLink = (
 
   return `https://wa.me/${number}?text=${message}`;
 };
+
 
 function ActionWithTooltip({
   disabled,
@@ -160,6 +159,7 @@ function ActionWithTooltip({
     </span>
   );
 }
+
 
 export default function ChallengesPage() {
   const { user } =
@@ -195,6 +195,7 @@ export default function ChallengesPage() {
     setForms,
   ] = useState({});
 
+
   const loadChallenges =
     async () => {
       try {
@@ -213,18 +214,16 @@ export default function ChallengesPage() {
           data.rotation || null,
         );
 
-        /*
-          Precargamos en el formulario
-          los turnos que ya existan.
-        */
         setForms(
           (previous) => {
             const next = {
               ...previous,
             };
 
-            for (const challenge of data.challenges ||
-              []) {
+            for (
+              const challenge of
+              data.challenges || []
+            ) {
               if (
                 !next[
                   challenge.id
@@ -259,9 +258,11 @@ export default function ChallengesPage() {
       }
     };
 
+
   useEffect(() => {
     loadChallenges();
   }, []);
+
 
   const received =
     useMemo(
@@ -277,6 +278,7 @@ export default function ChallengesPage() {
       ],
     );
 
+
   const sent =
     useMemo(
       () =>
@@ -290,6 +292,7 @@ export default function ChallengesPage() {
         user?.id,
       ],
     );
+
 
   const changeForm = (
     id,
@@ -310,6 +313,7 @@ export default function ChallengesPage() {
       }),
     );
   };
+
 
   const saveSchedule =
     async (challenge) => {
@@ -379,6 +383,7 @@ export default function ChallengesPage() {
       }
     };
 
+
   const acceptChallenge =
     async (challenge) => {
       try {
@@ -410,6 +415,7 @@ export default function ChallengesPage() {
         );
       }
     };
+
 
   const rejectChallenge =
     async (challenge) => {
@@ -452,6 +458,7 @@ export default function ChallengesPage() {
       }
     };
 
+
   const renderChallenge = (
     challenge,
   ) => {
@@ -489,16 +496,19 @@ export default function ChallengesPage() {
       pending &&
       challenge.can_reject;
 
+
     let acceptTooltip =
       challenge.rotation_block_message;
+
 
     if (
       canAccept &&
       !hasSchedule
     ) {
       acceptTooltip =
-        "Antes de aceptar tienen que cargar el lugar, la fecha y la hora del partido.";
+        "Primero deben registrar el lugar, la fecha y la hora del partido.";
     }
+
 
     const acceptDisabled =
       !canAccept ||
@@ -513,6 +523,7 @@ export default function ChallengesPage() {
         actionLoading,
       );
 
+
     const scheduleLoading =
       actionLoading ===
       `schedule-${challenge.id}`;
@@ -525,11 +536,13 @@ export default function ChallengesPage() {
       actionLoading ===
       `reject-${challenge.id}`;
 
+
     return (
       <article
         className="challenge-card"
         key={challenge.id}
       >
+
         <div className="challenge-card-top">
           <div>
             <span className="challenge-kicker">
@@ -553,7 +566,9 @@ export default function ChallengesPage() {
           </span>
         </div>
 
+
         <div className="challenge-info-grid">
+
           <div>
             <small>
               Enfrentamientos anteriores
@@ -565,6 +580,7 @@ export default function ChallengesPage() {
               }
             </strong>
           </div>
+
 
           {incoming &&
             pending && (
@@ -580,7 +596,9 @@ export default function ChallengesPage() {
                 </strong>
               </div>
             )}
+
         </div>
+
 
         {challenge.rotation_block_message &&
           incoming &&
@@ -598,8 +616,12 @@ export default function ChallengesPage() {
             </div>
           )}
 
+
         {pending && (
           <>
+
+            {/* PASO 1 */}
+
             <section className="challenge-step">
               <div className="step-number">
                 1
@@ -617,6 +639,7 @@ export default function ChallengesPage() {
                 </p>
               </div>
             </section>
+
 
             <div className="contact-box">
               <div>
@@ -646,6 +669,9 @@ export default function ChallengesPage() {
               </a>
             </div>
 
+
+            {/* PASO 2 */}
+
             <section className="challenge-step">
               <div className="step-number">
                 2
@@ -653,17 +679,20 @@ export default function ChallengesPage() {
 
               <div>
                 <h3>
-                  Carguen el turno
+                  Registren el partido
                 </h3>
 
                 <p>
-                  Cualquiera de los
-                  dos puede cargar o
-                  actualizar el lugar,
-                  la fecha y la hora.
+                  Después de acordarlo
+                  por WhatsApp,
+                  cualquiera de los
+                  dos puede cargar
+                  el lugar, la fecha
+                  y la hora.
                 </p>
               </div>
             </section>
+
 
             {hasSchedule && (
               <div className="scheduled-summary">
@@ -693,7 +722,9 @@ export default function ChallengesPage() {
               </div>
             )}
 
+
             <div className="schedule-grid">
+
               <label>
                 <span>
                   Lugar / cancha
@@ -719,6 +750,7 @@ export default function ChallengesPage() {
                   }
                 />
               </label>
+
 
               <label>
                 <span>
@@ -747,6 +779,7 @@ export default function ChallengesPage() {
                 />
               </label>
 
+
               <button
                 className="challenge-action"
                 onClick={() =>
@@ -766,10 +799,15 @@ export default function ChallengesPage() {
                     ? "Actualizar turno"
                     : "Guardar turno"}
               </button>
+
             </div>
+
+
+            {/* PASO 3 */}
 
             {incoming && (
               <>
+
                 <section className="challenge-step">
                   <div className="step-number">
                     3
@@ -780,16 +818,49 @@ export default function ChallengesPage() {
                       Resolver desafío
                     </h3>
 
-                    <p>
-                      Aceptarlo confirma
-                      el partido.
-                      Rechazarlo descuenta
-                      8 puntos Elo.
-                    </p>
+                    {hasSchedule ? (
+                      <p>
+                        El lugar y el
+                        horario ya están
+                        registrados.
+                        Ahora podés aceptar
+                        el desafío para
+                        confirmar el partido,
+                        o rechazarlo con la
+                        penalización de
+                        8 puntos Elo.
+                      </p>
+                    ) : (
+                      <p>
+                        Primero deben
+                        registrar el lugar,
+                        la fecha y la hora
+                        del partido.
+                        Después se habilitará
+                        la aceptación.
+                      </p>
+                    )}
                   </div>
                 </section>
 
+
+                {!hasSchedule && (
+                  <div className="rotation-notice">
+                    <strong>
+                      Falta registrar el partido
+                    </strong>
+
+                    <p>
+                      Para aceptar este desafío
+                      primero carguen el lugar,
+                      la fecha y la hora.
+                    </p>
+                  </div>
+                )}
+
+
                 <div className="challenge-buttons">
+
                   <ActionWithTooltip
                     disabled={
                       acceptDisabled
@@ -812,9 +883,12 @@ export default function ChallengesPage() {
                     >
                       {accepting
                         ? "ACEPTANDO..."
-                        : "Aceptar desafío"}
+                        : hasSchedule
+                          ? "Aceptar desafío"
+                          : "Primero registrar partido"}
                     </button>
                   </ActionWithTooltip>
+
 
                   <ActionWithTooltip
                     disabled={
@@ -841,21 +915,40 @@ export default function ChallengesPage() {
                         : "Rechazar (-8 Elo)"}
                     </button>
                   </ActionWithTooltip>
+
                 </div>
+
               </>
             )}
 
+
             {!incoming && (
               <div className="waiting-note">
-                Tu rival podrá aceptar
-                cuando este desafío
-                corresponda en su rueda
-                y exista un turno
-                cargado.
+                {hasSchedule ? (
+                  <>
+                    El partido ya está
+                    registrado. Tu rival
+                    podrá aceptarlo cuando
+                    este desafío corresponda
+                    en su rueda.
+                  </>
+                ) : (
+                  <>
+                    Coordinen por WhatsApp
+                    y registren el lugar,
+                    la fecha y la hora.
+                    Después tu rival podrá
+                    aceptar el desafío
+                    cuando corresponda en
+                    su rueda.
+                  </>
+                )}
               </div>
             )}
+
           </>
         )}
+
 
         {challenge.status ===
           "accepted" && (
@@ -882,6 +975,7 @@ export default function ChallengesPage() {
           </div>
         )}
 
+
         {challenge.status ===
           "completed" && (
           <div className="completed-challenge">
@@ -891,9 +985,11 @@ export default function ChallengesPage() {
           </div>
         )}
 
+
         {challenge.status ===
           "rejected" && (
           <div className="rejected-challenge">
+
             <strong>
               Desafío rechazado
             </strong>
@@ -916,15 +1012,19 @@ export default function ChallengesPage() {
                 )}
               </small>
             )}
+
           </div>
         )}
+
       </article>
     );
   };
 
+
   return (
     <main className="page-dark">
       <div className="site-width page-content">
+
         <div className="page-heading">
           <div>
             <span>
@@ -937,8 +1037,10 @@ export default function ChallengesPage() {
           </div>
         </div>
 
+
         {rotation && (
           <div className="rotation-summary">
+
             <span>
               TU RUEDA
             </span>
@@ -974,8 +1076,10 @@ export default function ChallengesPage() {
                 pendientes en tu rueda.
               </p>
             )}
+
           </div>
         )}
+
 
         {message && (
           <div className="notice">
@@ -983,13 +1087,16 @@ export default function ChallengesPage() {
           </div>
         )}
 
+
         {loading ? (
           <div className="notice">
             Cargando desafíos...
           </div>
         ) : (
           <div className="challenge-sections">
+
             <section>
+
               <div className="challenge-section-heading">
                 <span>
                   RECIBIDOS
@@ -1008,7 +1115,9 @@ export default function ChallengesPage() {
                 </p>
               </div>
 
+
               <div className="challenge-list">
+
                 {received.length ? (
                   received.map(
                     renderChallenge,
@@ -1019,10 +1128,14 @@ export default function ChallengesPage() {
                     recibidos.
                   </div>
                 )}
+
               </div>
+
             </section>
 
+
             <section>
+
               <div className="challenge-section-heading">
                 <span>
                   ENVIADOS
@@ -1040,7 +1153,9 @@ export default function ChallengesPage() {
                 </p>
               </div>
 
+
               <div className="challenge-list">
+
                 {sent.length ? (
                   sent.map(
                     renderChallenge,
@@ -1051,10 +1166,14 @@ export default function ChallengesPage() {
                     desafíos.
                   </div>
                 )}
+
               </div>
+
             </section>
+
           </div>
         )}
+
       </div>
     </main>
   );

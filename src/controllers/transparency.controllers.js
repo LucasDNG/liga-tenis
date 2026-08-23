@@ -10,9 +10,33 @@ import { pool } from "../db.js";
 
   Muestra únicamente partidos:
   - programados
-  - todavía no jugados
+  - todavía pendientes
   - no anulados
-  - con fecha futura
+  - con fecha y hora cargadas
+
+  IMPORTANTE:
+
+  Ya NO exigimos que scheduled_at
+  sea posterior a la hora actual.
+
+  Esto permite que un partido siga
+  apareciendo públicamente aunque
+  ya haya comenzado, mientras todavía
+  no tenga resultado confirmado.
+
+  Ejemplo:
+
+  Partido programado 15:00
+
+  14:50 -> aparece
+  15:00 -> aparece
+  15:30 -> aparece
+  16:30 -> sigue apareciendo
+           si continúa pending
+
+  Cuando queda completed,
+  deja de aparecer acá y pasa
+  a Últimos resultados.
 
   No expone teléfonos ni datos privados.
 */
@@ -73,9 +97,6 @@ export const getUpcomingMatches = async (
           AND m.status = 'pending'
 
           AND m.scheduled_at IS NOT NULL
-
-          AND m.scheduled_at >
-            CURRENT_TIMESTAMP
 
           AND (
             $1::varchar IS NULL
