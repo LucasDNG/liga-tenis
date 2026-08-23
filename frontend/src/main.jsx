@@ -1,11 +1,17 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import {
+  BrowserRouter,
+} from "react-router-dom";
 
 import App from "./App";
-import { AuthProvider } from "./context/AuthContext";
+
+import {
+  AuthProvider,
+} from "./context/AuthContext";
 
 import "./index.css";
+import "./clay-theme.css";
 
 if (
   "serviceWorker" in navigator
@@ -26,7 +32,9 @@ if (
 }
 
 ReactDOM.createRoot(
-  document.getElementById("root"),
+  document.getElementById(
+    "root",
+  ),
 ).render(
   <React.StrictMode>
     <BrowserRouter>

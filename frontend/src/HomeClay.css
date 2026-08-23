@@ -1,0 +1,998 @@
+/* =========================================================
+   HOME — LIGA DE TENIS SAN PEDRO
+   POLVO DE LADRILLO CÁLIDO
+   ========================================================= */
+
+
+/* =========================================================
+   FONDO
+   ========================================================= */
+
+.home-dark {
+  background:
+    radial-gradient(
+      circle at 78% 25%,
+      rgba(201, 104, 62, 0.07),
+      transparent 34%
+    ),
+    linear-gradient(
+      135deg,
+      #f8eee5 0%,
+      #f4e3d6 52%,
+      #faf3ec 100%
+    ) !important;
+
+  color: #3d291f !important;
+}
+
+
+/* =========================================================
+   NAVBAR
+   ========================================================= */
+
+.site-nav {
+  background:
+    linear-gradient(
+      90deg,
+      #c6683f 0%,
+      #d47648 52%,
+      #c6683f 100%
+    ) !important;
+
+  border-bottom:
+    2px solid #a94f2c !important;
+
+  box-shadow:
+    0 5px 18px
+    rgba(83, 43, 25, 0.18) !important;
+}
+
+
+/* LOGO / MARCA */
+
+.site-nav .brand-copy strong {
+  color: #fffdf8 !important;
+}
+
+.site-nav .brand-copy small {
+  color: #fff0e5 !important;
+}
+
+
+/* =========================================================
+   LINKS DEL NAVBAR
+   ========================================================= */
+
+.site-nav .nav-link {
+  position: relative;
+
+  padding:
+    11px 15px !important;
+
+  color: #fffaf5 !important;
+
+  font-weight: 700 !important;
+
+  border-radius: 6px;
+
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease !important;
+}
+
+
+.site-nav .nav-link:hover {
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.14
+    ) !important;
+
+  color: #ffffff !important;
+
+  transform:
+    translateY(-1px);
+}
+
+
+/* INGRESAR */
+
+.site-nav .nav-out {
+  padding:
+    11px 20px !important;
+
+  border:
+    1px solid
+    rgba(
+      255,
+      255,
+      255,
+      0.72
+    ) !important;
+
+  background:
+    rgba(
+      103,
+      42,
+      18,
+      0.12
+    ) !important;
+
+  color:
+    #ffffff !important;
+
+  border-radius:
+    6px;
+
+  font-weight:
+    700 !important;
+
+  box-shadow:
+    0 4px 10px
+    rgba(
+      76,
+      35,
+      18,
+      0.09
+    );
+}
+
+
+.site-nav .nav-out:hover {
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.17
+    ) !important;
+
+  border-color:
+    #ffffff !important;
+}
+
+
+/* REGISTRARME */
+
+.site-nav .nav-cta {
+  padding:
+    12px 22px !important;
+
+  border:
+    1px solid
+    #fff4ec !important;
+
+  background:
+    rgba(
+      111,
+      43,
+      17,
+      0.2
+    ) !important;
+
+  color:
+    #ffffff !important;
+
+  border-radius:
+    6px;
+
+  font-weight:
+    800 !important;
+
+  box-shadow:
+    0 5px 13px
+    rgba(
+      72,
+      31,
+      14,
+      0.14
+    );
+}
+
+
+.site-nav .nav-cta:hover {
+  background:
+    rgba(
+      83,
+      32,
+      13,
+      0.3
+    ) !important;
+
+  border-color:
+    #ffffff !important;
+
+  transform:
+    translateY(-1px);
+}
+
+
+/* =========================================================
+   HERO
+   ========================================================= */
+
+.home-dark .hero-copy-dark {
+  position: relative;
+
+  min-height: 570px;
+
+  padding:
+    52px 38px
+    40px 0 !important;
+
+  background:
+    transparent !important;
+}
+
+
+/* LÍNEA VERTICAL */
+
+.home-dark .hero-copy-dark::before {
+  content: "";
+
+  position: absolute;
+
+  left: -34px;
+  top: 50px;
+
+  width: 4px;
+  height: 215px;
+
+  border-radius: 20px;
+
+  background:
+    linear-gradient(
+      180deg,
+      #c6683f,
+      #dfa07c
+    );
+}
+
+
+/* LÍNEAS SUTILES DE CANCHA */
+
+.home-dark .hero-copy-dark::after {
+  content: "";
+
+  position: absolute;
+
+  z-index: 0;
+
+  right: 2%;
+  bottom: 9%;
+
+  width: 330px;
+  height: 7px;
+
+  background:
+    rgba(
+      174,
+      86,
+      47,
+      0.09
+    );
+
+  transform:
+    rotate(-37deg);
+
+  box-shadow:
+    0 58px 0
+    rgba(
+      174,
+      86,
+      47,
+      0.045
+    );
+}
+
+
+.home-dark .hero-copy-dark > * {
+  position: relative;
+  z-index: 1;
+}
+
+
+/* =========================================================
+   TÍTULO
+   ========================================================= */
+
+/*
+   Esta regla tiene mayor especificidad
+   que las reglas anteriores del proyecto.
+
+   Además usamos -webkit-text-fill-color
+   para evitar que algún estilo viejo
+   vuelva a pintarlo verde.
+*/
+
+.home-dark
+.home-main
+.hero-copy-dark
+h1,
+.home-dark
+.home-main
+.hero-copy-dark
+h1 span {
+  max-width:
+    780px !important;
+
+  margin:
+    0 !important;
+
+  color:
+    #bd5731 !important;
+
+  -webkit-text-fill-color:
+    #bd5731 !important;
+
+  font-family:
+    "Oswald",
+    sans-serif !important;
+
+  font-size:
+    clamp(
+      88px,
+      7.3vw,
+      120px
+    ) !important;
+
+  font-weight:
+    700 !important;
+
+  line-height:
+    0.9 !important;
+
+  letter-spacing:
+    -0.035em !important;
+
+  text-transform:
+    none !important;
+
+  text-shadow:
+    0 2px 0
+    rgba(
+      255,
+      255,
+      255,
+      0.5
+    ) !important;
+
+  background:
+    none !important;
+}
+
+
+/*
+   Si todavía existe un span dentro
+   del h1, se comporta exactamente
+   como el texto normal.
+*/
+
+.home-dark
+.home-main
+.hero-copy-dark
+h1 span {
+  display:
+    inline !important;
+
+  margin:
+    0 !important;
+
+  padding:
+    0 !important;
+
+  font-size:
+    inherit !important;
+
+  font-weight:
+    inherit !important;
+
+  line-height:
+    inherit !important;
+
+  letter-spacing:
+    inherit !important;
+}
+
+
+/* LÍNEA DEBAJO DE TENIS LIBRE */
+
+.home-dark
+.hero-copy-dark
+h1::after {
+  content: "";
+
+  display: block;
+
+  width: 100px;
+  height: 5px;
+
+  margin-top:
+    27px;
+
+  background:
+    #c6683f;
+
+  border-radius:
+    999px;
+}
+
+
+/* =========================================================
+   DESCRIPCIÓN PRINCIPAL
+   ========================================================= */
+
+.home-dark
+.hero-copy-dark
+> p {
+  max-width:
+    610px !important;
+
+  margin:
+    29px 0 0 !important;
+
+  color:
+    #3b281f !important;
+
+  -webkit-text-fill-color:
+    #3b281f !important;
+
+  font-size:
+    19px !important;
+
+  font-weight:
+    600 !important;
+
+  line-height:
+    1.72 !important;
+
+  letter-spacing:
+    0.004em;
+}
+
+
+/* =========================================================
+   BOTONES DEL HERO
+   ========================================================= */
+
+.home-dark
+.hero-actions-dark {
+  display: flex;
+
+  gap:
+    18px !important;
+
+  margin-top:
+    32px !important;
+}
+
+
+/* VER RANKING */
+
+.home-dark .btn-solid {
+  min-height:
+    56px !important;
+
+  padding:
+    0 30px !important;
+
+  background:
+    linear-gradient(
+      135deg,
+      #cf693b,
+      #b95028
+    ) !important;
+
+  border:
+    1px solid
+    #ad4823 !important;
+
+  color:
+    #ffffff !important;
+
+  font-weight:
+    800 !important;
+
+  box-shadow:
+    0 8px 18px
+    rgba(
+      110,
+      50,
+      25,
+      0.2
+    ) !important;
+
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    filter 0.16s ease !important;
+}
+
+
+.home-dark .btn-solid:hover {
+  transform:
+    translateY(-2px);
+
+  filter:
+    brightness(1.05);
+
+  box-shadow:
+    0 11px 23px
+    rgba(
+      110,
+      50,
+      25,
+      0.24
+    ) !important;
+}
+
+
+/* QUIERO JUGAR */
+
+.home-dark .btn-line {
+  min-height:
+    56px !important;
+
+  padding:
+    0 30px !important;
+
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.88
+    ) !important;
+
+  border:
+    2px solid
+    #c6683f !important;
+
+  color:
+    #a94c29 !important;
+
+  font-weight:
+    800 !important;
+
+  transition:
+    transform 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease !important;
+}
+
+
+.home-dark .btn-line:hover {
+  background:
+    #fffdf9 !important;
+
+  transform:
+    translateY(-2px);
+
+  box-shadow:
+    0 7px 16px
+    rgba(
+      90,
+      50,
+      30,
+      0.1
+    );
+}
+
+
+/* =========================================================
+   BLOQUES INFERIORES DEL HERO
+   ========================================================= */
+
+.home-dark .feature-line {
+  margin-top:
+    44px !important;
+
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.92
+    ) !important;
+
+  border:
+    1px solid
+    #dbb69e !important;
+
+  box-shadow:
+    0 8px 20px
+    rgba(
+      94,
+      55,
+      35,
+      0.08
+    ) !important;
+}
+
+
+.home-dark
+.feature-line
+> div {
+  border-right:
+    1px solid
+    #dfbea9 !important;
+}
+
+
+.home-dark
+.feature-line
+> div:last-child {
+  border-right:
+    0 !important;
+}
+
+
+/* ICONOS */
+
+.home-dark
+.feature-line b {
+  color:
+    #c45e35 !important;
+
+  font-weight:
+    900 !important;
+}
+
+
+/* TÍTULOS */
+
+.home-dark
+.feature-line strong {
+  color:
+    #3b281f !important;
+
+  font-weight:
+    800 !important;
+}
+
+
+/* TEXTO */
+
+.home-dark
+.feature-line span {
+  color:
+    #594237 !important;
+
+  font-weight:
+    500 !important;
+}
+
+
+/* =========================================================
+   TOP 10
+   ========================================================= */
+
+.home-dark .top-panel {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.95
+    ) !important;
+
+  border:
+    1px solid
+    #d9b49b !important;
+
+  border-top:
+    5px solid
+    #c6683f !important;
+
+  box-shadow:
+    0 13px 28px
+    rgba(
+      90,
+      50,
+      30,
+      0.11
+    ) !important;
+}
+
+
+.home-dark
+.top-panel-head {
+  border-bottom-color:
+    #dfc4b2 !important;
+}
+
+
+/* CLASIFICACIÓN */
+
+.home-dark
+.top-panel-head span {
+  color:
+    #bd5731 !important;
+
+  font-weight:
+    800 !important;
+
+  letter-spacing:
+    0.13em;
+}
+
+
+/* TOP 10 */
+
+.home-dark
+.top-panel-head h2 {
+  color:
+    #38251d !important;
+
+  font-weight:
+    700 !important;
+}
+
+
+/* LINK */
+
+.home-dark
+.top-panel-head a {
+  color:
+    #ae4d28 !important;
+
+  font-weight:
+    700 !important;
+
+  border-bottom:
+    1px solid
+    #c6683f;
+}
+
+
+/* =========================================================
+   BOTONES LIGA
+   ========================================================= */
+
+.home-dark
+.league-switch button {
+  background:
+    #fffaf6 !important;
+
+  color:
+    #49342a !important;
+
+  border:
+    1px solid
+    #cf9b7c !important;
+
+  font-weight:
+    600 !important;
+}
+
+
+.home-dark
+.league-switch button.active {
+  background:
+    linear-gradient(
+      135deg,
+      #cf693b,
+      #bd572f
+    ) !important;
+
+  border-color:
+    #bd572f !important;
+
+  color:
+    #ffffff !important;
+
+  font-weight:
+    800 !important;
+
+  box-shadow:
+    0 4px 10px
+    rgba(
+      117,
+      54,
+      27,
+      0.14
+    );
+}
+
+
+/* =========================================================
+   TOP 10 — JUGADORES
+   ========================================================= */
+
+.home-dark .top-row {
+  border-bottom-color:
+    #e6d0c1 !important;
+}
+
+
+.home-dark
+.top-row > strong {
+  color:
+    #3d291f !important;
+
+  font-weight:
+    700 !important;
+}
+
+
+.home-dark
+.top-row > span,
+.home-dark
+.top-row > b {
+  color:
+    #b95a35 !important;
+}
+
+
+.home-dark
+.top-row small {
+  color:
+    #72594c !important;
+}
+
+
+/* =========================================================
+   MENSAJE SIN JUGADORES
+   ========================================================= */
+
+.home-dark
+.top-panel p,
+.home-dark
+.top-panel .dim {
+  color:
+    #453229 !important;
+
+  -webkit-text-fill-color:
+    #453229 !important;
+
+  font-size:
+    16px !important;
+
+  font-weight:
+    500 !important;
+
+  line-height:
+    1.55 !important;
+
+  opacity:
+    1 !important;
+}
+
+
+/* =========================================================
+   CÓMO FUNCIONA
+   ========================================================= */
+
+.home-dark
+.how-title p,
+.home-dark
+.how-step p {
+  color:
+    #584136 !important;
+
+  font-weight:
+    500 !important;
+
+  opacity:
+    1 !important;
+}
+
+
+.home-dark
+.how-step h3 {
+  color:
+    #38271f !important;
+
+  font-weight:
+    800 !important;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 760px) {
+
+  .home-dark
+  .hero-copy-dark {
+    min-height:
+      auto;
+
+    padding:
+      36px 0
+      30px !important;
+  }
+
+
+  .home-dark
+  .hero-copy-dark::before {
+    left:
+      -12px;
+
+    width:
+      3px;
+
+    height:
+      170px;
+  }
+
+
+  .home-dark
+  .hero-copy-dark::after {
+    width:
+      190px;
+
+    right:
+      -20px;
+  }
+
+
+  .home-dark
+  .home-main
+  .hero-copy-dark
+  h1,
+  .home-dark
+  .home-main
+  .hero-copy-dark
+  h1 span {
+    font-size:
+      clamp(
+        64px,
+        18vw,
+        88px
+      ) !important;
+  }
+
+
+  .home-dark
+  .hero-copy-dark
+  > p {
+    font-size:
+      17px !important;
+
+    line-height:
+      1.6 !important;
+  }
+
+
+  .home-dark
+  .hero-actions-dark {
+    flex-direction:
+      column;
+
+    align-items:
+      stretch;
+  }
+
+
+  .home-dark
+  .btn-solid,
+  .home-dark
+  .btn-line {
+    width:
+      100%;
+  }
+
+
+  .site-nav
+  .nav-links {
+    gap:
+      8px !important;
+  }
+
+
+  .site-nav
+  .nav-link,
+  .site-nav
+  .nav-out,
+  .site-nav
+  .nav-cta {
+    white-space:
+      nowrap;
+  }
+}

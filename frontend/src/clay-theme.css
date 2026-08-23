@@ -1,0 +1,1390 @@
+/* =========================================================
+   LIGA DE TENIS SAN PEDRO
+   TEMA POLVO DE LADRILLO
+   Cálido, luminoso y deportivo
+   ========================================================= */
+
+:root {
+  --clay: #d97a4a;
+  --clay-strong: #c9683d;
+  --clay-dark: #a95432;
+  --clay-light: #e8a078;
+  --clay-soft: #f4d8c5;
+
+  --cream: #faf6f0;
+  --cream-2: #f5e9df;
+  --white: #fffdf9;
+
+  --ink: #493329;
+  --ink-soft: #755a4d;
+
+  --green: #416a4b;
+  --green-dark: #31553b;
+  --green-light: #789579;
+
+  --line-clay: #dfbea7;
+
+  --shadow-clay:
+    0 12px 28px
+    rgba(116, 68, 42, 0.1);
+
+  /*
+    Compatibilidad con
+    el CSS anterior.
+  */
+
+  --bg: #faf6f0;
+  --bg2: #f5e9df;
+
+  --panel: #fffdf9;
+  --panel2: #f9f0e9;
+
+  --line: #e4c9b6;
+  --line2: #d5ad91;
+
+  --lime: #d97a4a;
+  --lime2: #416a4b;
+
+  --muted: #806b60;
+  --danger: #b85d55;
+}
+
+
+/* =========================================================
+   BASE
+   ========================================================= */
+
+html,
+body,
+#root,
+.app-shell {
+  background: var(--cream) !important;
+  color: var(--ink) !important;
+}
+
+body {
+  background:
+    radial-gradient(
+      circle at 15% 25%,
+      rgba(217, 122, 74, 0.06),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 85% 40%,
+      rgba(232, 160, 120, 0.08),
+      transparent 30%
+    ),
+    var(--cream) !important;
+}
+
+a {
+  color: inherit;
+}
+
+
+/* =========================================================
+   NAVBAR
+   ========================================================= */
+
+.site-nav {
+  background:
+    linear-gradient(
+      90deg,
+      #c96e43,
+      #d7794b
+    ) !important;
+
+  border-bottom:
+    2px solid
+    #b45e37 !important;
+
+  box-shadow:
+    0 5px 18px
+    rgba(110, 57, 31, 0.14);
+}
+
+.brand-copy strong {
+  color: #fffdf8 !important;
+}
+
+.brand-copy small {
+  color: #fcebdd !important;
+}
+
+.nav-link {
+  color: #fff8f2 !important;
+}
+
+.nav-link:hover {
+  color: #ffffff !important;
+
+  border-bottom-color:
+    #fff !important;
+}
+
+.nav-out,
+.nav-cta {
+  border:
+    1px solid
+    rgba(
+      255,
+      255,
+      255,
+      0.65
+    ) !important;
+
+  color: #fff !important;
+}
+
+.nav-out:hover,
+.nav-cta:hover {
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.12
+    ) !important;
+}
+
+
+/* Logo */
+
+.tennis-logo {
+  border-color:
+    #fff !important;
+
+  background:
+    radial-gradient(
+      circle at 35% 30%,
+      #dce983,
+      #a9c954 56%,
+      #62853b 100%
+    ) !important;
+
+  box-shadow:
+    inset 0 0 0 6px
+    var(--green-dark) !important;
+}
+
+
+/* =========================================================
+   HOME GENERAL
+   ========================================================= */
+
+.home-dark {
+  background:
+    linear-gradient(
+      135deg,
+      #f9eee5 0%,
+      #f6e6d9 52%,
+      #fbf4ed 100%
+    ) !important;
+
+  color: var(--ink) !important;
+}
+
+.league-strip {
+  background:
+    #f2e3d7 !important;
+
+  border-bottom:
+    1px solid
+    #dec1ad !important;
+}
+
+.strip-grid span {
+  color:
+    #705548 !important;
+
+  border-right-color:
+    #dec1ad !important;
+}
+
+
+/* =========================================================
+   BOTONES GENERALES
+   ========================================================= */
+
+.btn-solid {
+  background:
+    linear-gradient(
+      135deg,
+      #d97a4a,
+      #c8673d
+    ) !important;
+
+  color:
+    #fff !important;
+
+  border:
+    1px solid
+    #c8673d !important;
+
+  box-shadow:
+    0 7px 18px
+    rgba(165, 85, 45, 0.18);
+}
+
+.btn-line {
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.6
+    ) !important;
+
+  color:
+    #b85e38 !important;
+
+  border:
+    1px solid
+    #ca7047 !important;
+}
+
+.btn-solid:hover,
+.btn-line:hover {
+  filter:
+    brightness(1.04);
+}
+
+
+/* =========================================================
+   BLOQUES DE CARACTERÍSTICAS
+   ========================================================= */
+
+.feature-line {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.8
+    ) !important;
+
+  border:
+    1px solid
+    #dfbaa1 !important;
+
+  box-shadow:
+    var(--shadow-clay);
+}
+
+.feature-line > div {
+  border-right:
+    1px solid
+    #dfbaa1 !important;
+}
+
+.feature-line b {
+  color:
+    var(--clay) !important;
+}
+
+.feature-line strong {
+  color:
+    var(--ink) !important;
+}
+
+.feature-line span {
+  color:
+    var(--ink-soft) !important;
+}
+
+
+/* =========================================================
+   TOP 10
+   ========================================================= */
+
+.top-panel {
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.88
+    ) !important;
+
+  border:
+    1px solid
+    #dfb89e !important;
+
+  border-top:
+    4px solid
+    var(--clay) !important;
+
+  box-shadow:
+    var(--shadow-clay);
+}
+
+.top-panel-head {
+  border-bottom-color:
+    #e4c9b6 !important;
+}
+
+.top-panel-head span {
+  color:
+    var(--clay) !important;
+}
+
+.top-panel-head h2 {
+  color:
+    var(--ink) !important;
+}
+
+.top-panel-head a {
+  color:
+    #b75d38 !important;
+}
+
+.league-switch button {
+  background:
+    #fffaf6 !important;
+
+  color:
+    #76594b !important;
+
+  border:
+    1px solid
+    #d8b298 !important;
+}
+
+.league-switch button.active {
+  background:
+    var(--clay) !important;
+
+  border-color:
+    var(--clay) !important;
+
+  color:
+    #fff !important;
+}
+
+.top-row {
+  border-bottom-color:
+    #ead6c7 !important;
+}
+
+.top-row > span,
+.top-row > b {
+  color:
+    #bc653f !important;
+}
+
+.top-row > strong {
+  color:
+    var(--ink) !important;
+}
+
+.top-row small {
+  color:
+    #947d70 !important;
+}
+
+
+/* =========================================================
+   CÓMO FUNCIONA
+   ========================================================= */
+
+.how-section {
+  background:
+    linear-gradient(
+      90deg,
+      #f3e6db,
+      #faf3ec
+    ) !important;
+
+  border-color:
+    #e1c6b3 !important;
+}
+
+.how-title,
+.how-step {
+  border-right-color:
+    #dfc4b1 !important;
+}
+
+.how-title span {
+  color:
+    var(--clay) !important;
+}
+
+.how-title p,
+.how-step p {
+  color:
+    #74594c !important;
+}
+
+.how-step h3 {
+  color:
+    var(--ink) !important;
+}
+
+.how-step > b {
+  color:
+    #fff !important;
+
+  background:
+    var(--clay) !important;
+
+  border-color:
+    var(--clay) !important;
+}
+
+
+/* =========================================================
+   PÁGINAS GENERALES
+   ========================================================= */
+
+.page-dark,
+.page-shell {
+  background:
+    linear-gradient(
+      180deg,
+      #faf6f0,
+      #f5e8dc
+    ) !important;
+
+  color:
+    var(--ink) !important;
+}
+
+.page-heading {
+  border-bottom-color:
+    #dfbfa8 !important;
+}
+
+.page-heading span,
+.form-kicker,
+.card-label,
+.profile-dark > span {
+  color:
+    var(--clay) !important;
+}
+
+.page-heading h1,
+.form-shell h1,
+.profile-dark h1 {
+  color:
+    var(--ink) !important;
+}
+
+.notice {
+  background:
+    #fffdf9 !important;
+
+  color:
+    #60493d !important;
+
+  border-left:
+    4px solid
+    var(--clay) !important;
+
+  box-shadow:
+    0 6px 16px
+    rgba(110, 66, 42, 0.07);
+}
+
+
+/* =========================================================
+   RANKING
+   ========================================================= */
+
+.ranking-box {
+  background:
+    #fffdf9 !important;
+
+  border:
+    1px solid
+    #dfbea7 !important;
+
+  border-top:
+    4px solid
+    var(--clay) !important;
+
+  box-shadow:
+    var(--shadow-clay);
+}
+
+.ranking-head,
+.ranking-row {
+  border-bottom-color:
+    #ead7c9 !important;
+}
+
+.ranking-head {
+  background:
+    #f5e9df !important;
+
+  color:
+    #84695c !important;
+}
+
+.ranking-row {
+  background:
+    #fffdf9 !important;
+
+  color:
+    var(--ink) !important;
+}
+
+.ranking-row:hover {
+  background:
+    #faf0e8 !important;
+}
+
+.rank-digit,
+.ranking-row em {
+  color:
+    #c56840 !important;
+}
+
+.small-action,
+.ranking-challenge-button {
+  background:
+    var(--clay) !important;
+
+  border-color:
+    var(--clay) !important;
+
+  color:
+    #fff !important;
+}
+
+.small-action:hover,
+.ranking-challenge-button:hover {
+  background:
+    var(--clay-strong) !important;
+}
+
+.small-action:disabled,
+.ranking-challenge-button:disabled {
+  background:
+    #ead3c2 !important;
+
+  border-color:
+    #d8baa4 !important;
+
+  color:
+    #9c8172 !important;
+}
+
+
+/* Tooltips */
+
+.ranking-tooltip,
+.challenge-tooltip,
+.match-tooltip {
+  background:
+    #fffdf9 !important;
+
+  color:
+    #4f392e !important;
+
+  border-color:
+    var(--clay) !important;
+
+  box-shadow:
+    0 10px 24px
+    rgba(98, 55, 34, 0.16) !important;
+}
+
+.ranking-tooltip::after,
+.challenge-tooltip::after,
+.match-tooltip::after {
+  border-top-color:
+    var(--clay) !important;
+}
+
+
+/* =========================================================
+   FORMULARIOS
+   ========================================================= */
+
+.form-shell,
+.panel,
+.profile-dark {
+  background:
+    #fffdf9 !important;
+
+  border-color:
+    #dfbea7 !important;
+
+  box-shadow:
+    var(--shadow-clay);
+}
+
+input,
+select,
+textarea {
+  background:
+    #fffaf6 !important;
+
+  color:
+    var(--ink) !important;
+
+  border-color:
+    #dcb79d !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline:
+    2px solid
+    rgba(217, 122, 74, 0.16);
+
+  border-color:
+    var(--clay) !important;
+}
+
+.primary-button {
+  background:
+    var(--clay) !important;
+
+  border-color:
+    var(--clay) !important;
+
+  color:
+    #fff !important;
+}
+
+.secondary-button {
+  background:
+    #fff !important;
+
+  color:
+    #b65d39 !important;
+
+  border-color:
+    var(--clay) !important;
+}
+
+
+/* =========================================================
+   DESAFÍOS
+   ========================================================= */
+
+.challenge-card {
+  background:
+    #fffdf9 !important;
+
+  border-color:
+    #e0c1ab !important;
+
+  border-top:
+    4px solid
+    var(--clay) !important;
+
+  box-shadow:
+    var(--shadow-clay);
+}
+
+.challenge-card-top h2,
+.challenge-step h3,
+.challenge-info-grid strong {
+  color:
+    var(--ink) !important;
+}
+
+.challenge-kicker {
+  color:
+    var(--clay) !important;
+}
+
+.challenge-info-grid > div {
+  background:
+    #f7ece3 !important;
+
+  border-color:
+    #dfc1ac !important;
+}
+
+.challenge-info-grid small,
+.challenge-step p {
+  color:
+    var(--ink-soft) !important;
+}
+
+.rotation-summary,
+.rotation-notice {
+  background:
+    #f5e5d9 !important;
+
+  border-left-color:
+    var(--clay) !important;
+}
+
+.rotation-summary p,
+.rotation-notice p {
+  color:
+    #624a3e !important;
+}
+
+.rotation-notice strong {
+  color:
+    #b85f3a !important;
+}
+
+.step-number {
+  background:
+    var(--clay) !important;
+
+  border-color:
+    var(--clay) !important;
+
+  color:
+    #fff !important;
+}
+
+.contact-box,
+.waiting-note,
+.completed-challenge,
+.rejected-challenge {
+  background:
+    #faf1e9 !important;
+
+  border-color:
+    #e0c4b0 !important;
+
+  color:
+    #624b3e !important;
+}
+
+.contact-box strong {
+  color:
+    var(--ink) !important;
+}
+
+.whatsapp-button {
+  background:
+    var(--green) !important;
+
+  border-color:
+    var(--green) !important;
+
+  color:
+    #fff !important;
+}
+
+.schedule-grid input {
+  background:
+    #fff !important;
+
+  color:
+    var(--ink) !important;
+
+  border-color:
+    #dcb79e !important;
+}
+
+.challenge-action {
+  color:
+    #b85e39 !important;
+
+  border-color:
+    var(--clay) !important;
+}
+
+.challenge-action.primary {
+  background:
+    var(--clay) !important;
+
+  border-color:
+    var(--clay) !important;
+
+  color:
+    #fff !important;
+}
+
+.challenge-action.danger {
+  color:
+    #af5049 !important;
+
+  border-color:
+    #c76c64 !important;
+}
+
+.scheduled-summary,
+.confirmed-match {
+  background:
+    #f4e5d9 !important;
+
+  border-left-color:
+    var(--clay) !important;
+}
+
+.scheduled-summary strong,
+.confirmed-match strong {
+  color:
+    var(--ink) !important;
+}
+
+.scheduled-summary p,
+.confirmed-match p {
+  color:
+    #70574a !important;
+}
+
+
+/* =========================================================
+   MIS PARTIDOS
+   ========================================================= */
+
+.match-card {
+  background:
+    #fffdf9 !important;
+
+  border:
+    1px solid
+    #dfc0a9 !important;
+
+  border-top:
+    4px solid
+    var(--clay) !important;
+
+  box-shadow:
+    var(--shadow-clay);
+}
+
+.match-card-head h2 {
+  color:
+    var(--ink) !important;
+}
+
+.match-kicker {
+  color:
+    var(--clay) !important;
+}
+
+.match-status {
+  background:
+    #f5e7dc !important;
+
+  color:
+    #a95b38 !important;
+
+  border-color:
+    #d8b198 !important;
+}
+
+.match-schedule {
+  background:
+    linear-gradient(
+      135deg,
+      #d97a4a,
+      #c86940
+    ) !important;
+
+  border-left-color:
+    var(--green) !important;
+}
+
+.match-schedule span,
+.match-schedule strong,
+.match-schedule p {
+  color:
+    #fff !important;
+}
+
+.match-contact,
+.match-set-view {
+  background:
+    #f9efe7 !important;
+
+  border-color:
+    #e0c3ae !important;
+}
+
+.match-contact strong {
+  color:
+    var(--ink) !important;
+}
+
+.match-contact span {
+  color:
+    #755d50 !important;
+}
+
+.match-contact a {
+  background:
+    var(--green) !important;
+
+  border-color:
+    var(--green) !important;
+
+  color:
+    #fff !important;
+}
+
+.match-score-editor {
+  border-top-color:
+    #e0c4b1 !important;
+}
+
+.match-score-editor input {
+  background:
+    #fff !important;
+
+  border-color:
+    #dcb79d !important;
+
+  color:
+    var(--ink) !important;
+}
+
+.match-action.primary {
+  background:
+    var(--clay) !important;
+
+  border-color:
+    var(--clay) !important;
+
+  color:
+    #fff !important;
+}
+
+.match-waiting {
+  background:
+    #f5e6da !important;
+
+  color:
+    #60493e !important;
+
+  border-left-color:
+    var(--clay) !important;
+}
+
+
+/* =========================================================
+   PARTIDOS PÚBLICOS
+   ========================================================= */
+
+.public-matches-page {
+  background:
+    linear-gradient(
+      180deg,
+      #faf6f0,
+      #f4e7dc
+    ) !important;
+
+  color:
+    var(--ink) !important;
+}
+
+.public-matches-header {
+  border-bottom-color:
+    #dfbfa8 !important;
+}
+
+.public-matches-header h1,
+.public-section-title h2 {
+  color:
+    var(--ink) !important;
+}
+
+.public-matches-header p,
+.public-section-title p {
+  color:
+    var(--ink-soft) !important;
+}
+
+.public-matches-header > div > span,
+.public-section-title > span,
+.public-card-label {
+  color:
+    var(--clay) !important;
+}
+
+.public-league-switch button {
+  background:
+    #fff !important;
+
+  color:
+    #74594b !important;
+
+  border-color:
+    #d9b49b !important;
+}
+
+.public-league-switch button.active {
+  background:
+    var(--clay) !important;
+
+  color:
+    #fff !important;
+
+  border-color:
+    var(--clay) !important;
+}
+
+.upcoming-card {
+  background:
+    linear-gradient(
+      135deg,
+      #dc8354,
+      #cb7047
+    ) !important;
+
+  border-color:
+    #b9603c !important;
+
+  box-shadow:
+    0 12px 26px
+    rgba(118, 64, 38, 0.15) !important;
+}
+
+.public-versus strong,
+.match-public-data strong {
+  color:
+    #fff !important;
+}
+
+.public-versus span,
+.match-public-data small,
+.public-transparency-note {
+  color:
+    #fff1e7 !important;
+}
+
+.result-card {
+  background:
+    #fffdf9 !important;
+
+  border-color:
+    #dfbea7 !important;
+
+  border-left:
+    4px solid
+    var(--clay) !important;
+
+  box-shadow:
+    var(--shadow-clay);
+}
+
+.result-main h3 {
+  color:
+    var(--ink) !important;
+}
+
+.result-score {
+  color:
+    #bd643e !important;
+}
+
+.result-details > div,
+.result-elo > div {
+  background:
+    #f7eee7 !important;
+
+  border-color:
+    #e2c9b6 !important;
+}
+
+.result-details strong,
+.result-elo span {
+  color:
+    #60493d !important;
+}
+
+.public-empty,
+.public-message {
+  background:
+    #fffdf9 !important;
+
+  color:
+    #70594c !important;
+
+  border-color:
+    #dfbea7 !important;
+}
+
+
+/* =========================================================
+   PERFIL PÚBLICO
+   ========================================================= */
+
+.public-player-page {
+  background:
+    linear-gradient(
+      180deg,
+      #faf6f0,
+      #f5e8dd
+    ) !important;
+
+  color:
+    var(--ink) !important;
+}
+
+.player-hero {
+  border-bottom-color:
+    #dfbea7 !important;
+}
+
+.player-hero h1 {
+  color:
+    var(--ink) !important;
+}
+
+.player-hero p {
+  color:
+    var(--ink-soft) !important;
+}
+
+.player-rating {
+  background:
+    linear-gradient(
+      135deg,
+      #d97a4a,
+      #c96840
+    ) !important;
+
+  border-color:
+    #b85e39 !important;
+}
+
+.player-stats > div,
+.player-match-card,
+.elo-history-row {
+  background:
+    #fffdf9 !important;
+
+  border-color:
+    #dfc2ae !important;
+}
+
+.player-stats > div {
+  border-top:
+    4px solid
+    var(--clay) !important;
+}
+
+.player-stats span,
+.player-match-meta,
+.elo-history-row small {
+  color:
+    #80685b !important;
+}
+
+.player-stats strong,
+.player-match-result strong {
+  color:
+    var(--ink) !important;
+}
+
+.player-match-score {
+  background:
+    #f5e6da !important;
+
+  color:
+    #b95f3b !important;
+
+  border-color:
+    #dfbda5 !important;
+}
+
+
+/* =========================================================
+   ADMIN
+   ========================================================= */
+
+.admin-page {
+  background:
+    linear-gradient(
+      180deg,
+      #faf6f0,
+      #f4e7dc
+    ) !important;
+
+  color:
+    var(--ink) !important;
+}
+
+.admin-header h1,
+.admin-section-heading h2,
+.admin-section-heading h3 {
+  color:
+    var(--ink) !important;
+}
+
+.admin-header p,
+.admin-section-heading p {
+  color:
+    var(--ink-soft) !important;
+}
+
+.admin-tabs {
+  border-bottom-color:
+    #dfbea7 !important;
+}
+
+.admin-tabs button {
+  color:
+    #74594b !important;
+}
+
+.admin-tabs button.active {
+  color:
+    var(--clay) !important;
+
+  border-bottom-color:
+    var(--clay) !important;
+}
+
+.admin-panel {
+  background:
+    #fffdf9 !important;
+
+  border-color:
+    #dfbea7 !important;
+
+  border-top:
+    4px solid
+    var(--clay) !important;
+
+  box-shadow:
+    var(--shadow-clay);
+}
+
+.admin-profile-grid > div,
+.audit-match-summary > div,
+.admin-dni-card,
+.admin-list-card,
+.audit-match-card,
+.audit-flag,
+.audit-elo-row,
+.audit-timeline article {
+  background:
+    #f8eee6 !important;
+
+  border-color:
+    #dfc5b2 !important;
+}
+
+.admin-profile-grid strong,
+.audit-match-summary strong,
+.audit-elo-row strong {
+  color:
+    var(--ink) !important;
+}
+
+.admin-button.primary {
+  background:
+    var(--clay) !important;
+
+  border-color:
+    var(--clay) !important;
+
+  color:
+    #fff !important;
+}
+
+.admin-button.secondary {
+  background:
+    #fff !important;
+
+  color:
+    #b75f3b !important;
+
+  border-color:
+    var(--clay) !important;
+}
+
+.admin-danger-zone {
+  background:
+    #f9e8e4 !important;
+
+  border-color:
+    #c47b72 !important;
+}
+
+
+/* =========================================================
+   ELO
+   ========================================================= */
+
+.elo-positive,
+.audit-positive {
+  color:
+    #357149 !important;
+}
+
+.elo-negative,
+.audit-negative {
+  color:
+    #b54f47 !important;
+}
+
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.home-footer {
+  background:
+    #f2e3d7 !important;
+
+  color:
+    #80685b !important;
+
+  border-top:
+    1px solid
+    #dfbea7 !important;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 760px) {
+  .site-width {
+    width:
+      min(
+        100% - 28px,
+        1360px
+      ) !important;
+  }
+
+  .site-nav {
+    position: relative;
+  }
+
+  .nav-inner {
+    width:
+      calc(100% - 28px);
+
+    min-height: auto;
+
+    padding:
+      14px 0;
+
+    flex-wrap: wrap;
+  }
+
+  .nav-links {
+    width: 100%;
+
+    display: flex;
+
+    gap: 18px;
+
+    overflow-x: auto;
+
+    padding-bottom: 4px;
+  }
+
+  .nav-link {
+    white-space: nowrap;
+  }
+
+  .brand-copy strong {
+    font-size: 21px;
+  }
+
+  .tennis-logo {
+    width: 54px;
+    height: 54px;
+  }
+}

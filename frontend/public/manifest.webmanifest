@@ -3,20 +3,23 @@
   "short_name": "Liga Tenis",
   "description": "Liga de Tenis de San Pedro",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#07110c",
-  "theme_color": "#07110c",
+  "background_color": "#FFF7EF",
+  "theme_color": "#F26422",
   "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
