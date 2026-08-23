@@ -1,8 +1,11 @@
-import { Router } from "express";
+import {
+  Router,
+} from "express";
 
 import {
   createChallenge,
   getMyChallenges,
+  getChallengeAvailability,
   scheduleChallenge,
   acceptChallenge,
   rejectChallenge,
@@ -15,13 +18,27 @@ import {
 const router =
   Router();
 
-router.use(isAuth);
+router.use(
+  isAuth,
+);
+
+
+/*
+  Disponibilidad de botones
+  del ranking.
+*/
+
+router.get(
+  "/challenge-availability",
+  getChallengeAvailability,
+);
 
 
 /*
   Ver desafíos recibidos
   y enviados.
 */
+
 router.get(
   "/challenges",
   getMyChallenges,
@@ -31,6 +48,7 @@ router.get(
 /*
   Crear desafío.
 */
+
 router.post(
   "/challenges",
   createChallenge,
@@ -39,14 +57,11 @@ router.post(
 
 /*
   Cargar:
-
   - lugar
   - fecha
   - hora
-
-  Puede hacerlo cualquiera
-  de los dos jugadores.
 */
+
 router.patch(
   "/challenges/:id/schedule",
   scheduleChallenge,
@@ -54,15 +69,9 @@ router.patch(
 
 
 /*
-  Aceptar.
-
-  Solo funciona si:
-
-  - corresponde en la rueda
-  - tiene lugar
-  - tiene fecha
-  - tiene hora
+  Aceptar desafío.
 */
+
 router.patch(
   "/challenges/:id/accept",
   acceptChallenge,
@@ -70,11 +79,9 @@ router.patch(
 
 
 /*
-  Rechazar.
-
-  -8 Elo
-  y avanza la rueda.
+  Rechazar desafío.
 */
+
 router.patch(
   "/challenges/:id/reject",
   rejectChallenge,

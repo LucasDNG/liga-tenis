@@ -66,7 +66,7 @@ export default function HomePage() {
           <div className="hero-copy-dark">
 
             <h1>
-              Tenis Libre
+              SAN PEDRO teNNis
             </h1>
 
             <p>

@@ -5,6 +5,7 @@ import {
 
 import {
   Link,
+  useNavigate,
   useSearchParams,
 } from "react-router-dom";
 
@@ -15,6 +16,7 @@ import {
 } from "../context/AuthContext";
 
 import "./RankingPage.css";
+
 
 function ChallengeButton({
   player,
@@ -46,7 +48,9 @@ function ChallengeButton({
           : "ranking-action-wrap"
       }
       tabIndex={
-        disabled ? 0 : undefined
+        disabled
+          ? 0
+          : undefined
       }
     >
       <button
@@ -73,9 +77,13 @@ function ChallengeButton({
   );
 }
 
+
 export default function RankingPage() {
   const { user } =
     useAuth();
+
+  const navigate =
+    useNavigate();
 
   const [
     params,
@@ -117,6 +125,13 @@ export default function RankingPage() {
     setChallengingId,
   ] = useState(null);
 
+
+  /*
+    ==========================================================
+    CARGAR RANKING + DISPONIBILIDAD
+    ==========================================================
+  */
+
   const load =
     async () => {
       try {
@@ -124,12 +139,14 @@ export default function RankingPage() {
         setMessage("");
 
         setParams({
-          gender: league,
+          gender:
+            league,
         });
 
         /*
           Ranking siempre público.
         */
+
         const rankingResponse =
           await api.get(
             `/ranking?gender=${league}`,
@@ -142,17 +159,23 @@ export default function RankingPage() {
             [],
         );
 
-        /*
-          Las reglas de desafío solo
-          las consultamos si hay sesión.
 
-          Además solamente tienen sentido
-          viendo la liga propia del usuario.
+        /*
+          Las reglas de desafío
+          solamente las consultamos
+          si existe una sesión.
+
+          Además solamente tienen
+          sentido mirando la liga
+          propia del usuario.
         */
+
         if (
           user &&
-          user.gender === league &&
-          user.role !== "admin"
+          user.gender ===
+            league &&
+          user.role !==
+            "admin"
         ) {
           try {
             const availabilityResponse =
@@ -187,6 +210,7 @@ export default function RankingPage() {
       }
     };
 
+
   useEffect(() => {
     load();
   }, [
@@ -195,8 +219,20 @@ export default function RankingPage() {
     user?.gender,
   ]);
 
+
+  /*
+    ==========================================================
+    CREAR DESAFÍO
+    ==========================================================
+  */
+
   const challenge =
     async (id) => {
+      /*
+        Evitamos dos clics
+        simultáneos.
+      */
+
       if (challengingId) {
         return;
       }
@@ -208,6 +244,11 @@ export default function RankingPage() {
           id,
         );
 
+
+        /*
+          Creamos el desafío.
+        */
+
         const { data } =
           await api.post(
             "/challenges",
@@ -217,31 +258,66 @@ export default function RankingPage() {
             },
           );
 
-        setMessage(
-          data.message,
-        );
 
         /*
-          Importantísimo:
-          volvemos a consultar
-          disponibilidad.
+          IMPORTANTE:
 
-          Así ese mismo botón queda
-          inmediatamente bloqueado
-          como "Ya existe un desafío".
+          Antes refrescábamos el ranking
+          inmediatamente.
+
+          Eso hacía que el mensaje de éxito
+          desapareciera y daba la sensación
+          de que no había ocurrido nada.
+
+          Ahora, si el backend confirmó
+          que se creó correctamente,
+          vamos directamente a Desafíos.
+
+          Allí el jugador puede:
+
+          - ver al rival
+          - ver su WhatsApp
+          - coordinar la cancha
+          - cargar lugar
+          - cargar fecha
+          - cargar hora
         */
-        await load();
+
+        navigate(
+          "/challenges",
+          {
+            state: {
+              message:
+                data.message,
+            },
+          },
+        );
       } catch (error) {
+        /*
+          Si el backend rechazó
+          el desafío mostramos
+          el motivo real.
+        */
+
         setMessage(
           error.response?.data
             ?.message ||
             "No se pudo crear el desafío",
         );
 
+
         /*
-          Si el backend descubrió alguna
-          regla nueva, refrescamos igualmente.
+          Volvemos a consultar
+          disponibilidad.
+
+          Ejemplo:
+
+          - cooldown
+          - desafío existente
+          - cambio de ranking
+          - jugador no verificado
         */
+
         await load();
       } finally {
         setChallengingId(
@@ -250,13 +326,17 @@ export default function RankingPage() {
       }
     };
 
+
   const isVerified =
-    user?.verification_status ===
+    user
+      ?.verification_status ===
     "verified";
+
 
   return (
     <main className="page-dark">
       <div className="site-width page-content">
+
         <div className="page-heading">
           <div>
             <span>
@@ -268,7 +348,9 @@ export default function RankingPage() {
             </h1>
           </div>
 
+
           <div className="league-switch">
+
             <button
               className={
                 league ===
@@ -285,6 +367,7 @@ export default function RankingPage() {
               Masculina
             </button>
 
+
             <button
               className={
                 league ===
@@ -300,8 +383,12 @@ export default function RankingPage() {
             >
               Femenina
             </button>
+
           </div>
         </div>
+
+
+        {/* USUARIO NO LOGUEADO */}
 
         {!user && (
           <div className="notice">
@@ -311,6 +398,9 @@ export default function RankingPage() {
             jugadores.
           </div>
         )}
+
+
+        {/* USUARIO SIN VERIFICAR */}
 
         {!isVerified &&
           user &&
@@ -327,11 +417,17 @@ export default function RankingPage() {
             </div>
           )}
 
+
+        {/* MENSAJES */}
+
         {message && (
           <div className="notice">
             {message}
           </div>
         )}
+
+
+        {/* RANKING */}
 
         {loading ? (
           <div className="notice">
@@ -339,7 +435,9 @@ export default function RankingPage() {
           </div>
         ) : (
           <div className="ranking-box">
+
             <div className="ranking-head">
+
               <span>
                 #
               </span>
@@ -359,7 +457,9 @@ export default function RankingPage() {
               <span>
                 Acción
               </span>
+
             </div>
+
 
             {players.map(
               (player) => {
@@ -367,16 +467,23 @@ export default function RankingPage() {
                   challengingId ===
                   player.id;
 
+
                 /*
-                  Si el usuario está
-                  mirando otra liga,
-                  explicamos el bloqueo
-                  localmente.
+                  Disponibilidad enviada
+                  por el backend.
                 */
+
                 let playerAvailability =
                   availability[
                     player.id
                   ];
+
+
+                /*
+                  Si está mirando
+                  la otra liga,
+                  bloqueamos el desafío.
+                */
 
                 if (
                   user &&
@@ -395,9 +502,12 @@ export default function RankingPage() {
                   };
                 }
 
+
                 /*
-                  El administrador no participa.
+                  El administrador
+                  no participa.
                 */
+
                 if (
                   user?.role ===
                   "admin"
@@ -406,6 +516,7 @@ export default function RankingPage() {
                     null;
                 }
 
+
                 return (
                   <div
                     className="ranking-row"
@@ -413,16 +524,24 @@ export default function RankingPage() {
                       player.id
                     }
                   >
+
+                    {/* POSICIÓN */}
+
                     <span className="rank-digit">
                       {String(
-                        player.rank_position,
+                        player
+                          .rank_position,
                       ).padStart(
                         2,
                         "0",
                       )}
                     </span>
 
+
+                    {/* JUGADOR */}
+
                     <strong>
+
                       <Link
                         className="ranking-player-link"
                         to={`/jugadores/${player.id}`}
@@ -432,6 +551,7 @@ export default function RankingPage() {
                         }
                       </Link>
 
+
                       {player.id ===
                         user?.id && (
                         <em>
@@ -439,7 +559,11 @@ export default function RankingPage() {
                           VOS
                         </em>
                       )}
+
                     </strong>
+
+
+                    {/* ELO */}
 
                     <span>
                       {
@@ -447,13 +571,21 @@ export default function RankingPage() {
                       }
                     </span>
 
+
+                    {/* PARTIDOS */}
+
                     <span>
                       {
-                        player.matches_played
+                        player
+                          .matches_played
                       }
                     </span>
 
+
+                    {/* ACCIÓN */}
+
                     <span>
+
                       <ChallengeButton
                         player={
                           player
@@ -475,13 +607,17 @@ export default function RankingPage() {
                           challenge
                         }
                       />
+
                     </span>
+
                   </div>
                 );
               },
             )}
+
           </div>
         )}
+
       </div>
     </main>
   );

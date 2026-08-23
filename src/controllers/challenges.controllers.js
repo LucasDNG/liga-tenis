@@ -346,6 +346,351 @@ const getRejectionCooldown = async (
   };
 };
 
+/*
+  ============================================================
+  DISPONIBILIDAD DE DESAFÍOS
+  ============================================================
+
+  Devuelve para cada jugador del ranking
+  si el usuario actual puede desafiarlo
+  y, si no puede, explica el motivo.
+
+  Esta información se usa solamente
+  para mostrar/ocultar/deshabilitar
+  correctamente los botones del ranking.
+
+  La validación real sigue estando también
+  en createChallenge.
+*/
+
+export const getChallengeAvailability = async (
+  req,
+  res,
+  next,
+) => {
+  const client =
+    await pool.connect();
+
+  try {
+    const challengerId =
+      req.userId;
+
+    const challenger =
+      await getRankedPlayer(
+        client,
+        challengerId,
+      );
+
+    if (!challenger) {
+      return res
+        .status(404)
+        .json({
+          message:
+            "Jugador no encontrado",
+        });
+    }
+
+    const players =
+      await client.query(
+        `
+        WITH ranked AS (
+          SELECT
+            id,
+            name,
+            city,
+            gender,
+            rating,
+            matches_played,
+            verification_status,
+            role,
+
+            ROW_NUMBER() OVER (
+              PARTITION BY city, gender
+
+              ORDER BY
+                rating DESC,
+                matches_played DESC,
+                id ASC
+            )::int AS rank_position
+
+          FROM users
+
+          WHERE gender IS NOT NULL
+            AND role = 'player'
+        )
+
+        SELECT *
+        FROM ranked
+
+        WHERE city = $1
+          AND gender = $2
+
+        ORDER BY rank_position ASC
+        `,
+        [
+          challenger.city,
+          challenger.gender,
+        ],
+      );
+
+    const availability = {};
+
+    for (
+      const challenged of
+      players.rows
+    ) {
+      /*
+        No se desafía a sí mismo.
+      */
+      if (
+        challenged.id ===
+        challengerId
+      ) {
+        availability[
+          challenged.id
+        ] = {
+          can_challenge:
+            false,
+
+          reason:
+            "self",
+
+          message:
+            "No podés desafiarte a vos mismo.",
+        };
+
+        continue;
+      }
+
+
+      /*
+        El usuario debe estar
+        verificado.
+      */
+      if (
+        challenger
+          .verification_status !==
+        "verified"
+      ) {
+        availability[
+          challenged.id
+        ] = {
+          can_challenge:
+            false,
+
+          reason:
+            "challenger_not_verified",
+
+          message:
+            "Tu cuenta debe estar verificada para crear desafíos.",
+        };
+
+        continue;
+      }
+
+
+      /*
+        El rival también.
+      */
+      if (
+        challenged
+          .verification_status !==
+        "verified"
+      ) {
+        availability[
+          challenged.id
+        ] = {
+          can_challenge:
+            false,
+
+          reason:
+            "challenged_not_verified",
+
+          message:
+            "Este jugador todavía no está habilitado para competir.",
+        };
+
+        continue;
+      }
+
+
+      /*
+        Máximo tres posiciones
+        hacia arriba.
+      */
+      const difference =
+        challenger.rank_position -
+        challenged.rank_position;
+
+      if (
+        difference < 1 ||
+        difference > 3
+      ) {
+        availability[
+          challenged.id
+        ] = {
+          can_challenge:
+            false,
+
+          reason:
+            "ranking_distance",
+
+          message:
+            "Solo podés desafiar hasta 3 posiciones por encima.",
+        };
+
+        continue;
+      }
+
+
+      /*
+        Cooldown luego de rechazo.
+      */
+      const cooldown =
+        await getRejectionCooldown(
+          client,
+          challengerId,
+          challenged.id,
+        );
+
+      if (cooldown) {
+        availability[
+          challenged.id
+        ] = {
+          can_challenge:
+            false,
+
+          reason:
+            "rejection_cooldown",
+
+          message:
+            "Este jugador rechazó tu último desafío. Tenés que esperar 7 días para volver a desafiarlo.",
+
+          available_at:
+            cooldown.availableAt,
+        };
+
+        continue;
+      }
+
+
+      /*
+        Ya existe desafío o
+        partido activo.
+      */
+      const active =
+        await client.query(
+          `
+          SELECT id
+
+          FROM challenges
+
+          WHERE status IN (
+            'pending',
+            'accepted'
+          )
+
+          AND (
+            (
+              challenger_id = $1
+              AND challenged_id = $2
+            )
+
+            OR
+
+            (
+              challenger_id = $2
+              AND challenged_id = $1
+            )
+          )
+
+          LIMIT 1
+          `,
+          [
+            challengerId,
+            challenged.id,
+          ],
+        );
+
+      if (
+        active.rowCount
+      ) {
+        availability[
+          challenged.id
+        ] = {
+          can_challenge:
+            false,
+
+          reason:
+            "active_challenge",
+
+          message:
+            "Ya existe un desafío o partido activo entre ustedes.",
+        };
+
+        continue;
+      }
+
+
+      /*
+        Regla de rotación.
+      */
+      const mustWaitForOthers =
+        await hasOlderPendingRivals(
+          client,
+          challengerId,
+          challenged.id,
+        );
+
+      if (
+        mustWaitForOthers
+      ) {
+        availability[
+          challenged.id
+        ] = {
+          can_challenge:
+            false,
+
+          reason:
+            "rotation_wait",
+
+          message:
+            "Todavía hay otros desafíos anteriores que este jugador debe resolver.",
+        };
+
+        continue;
+      }
+
+
+      /*
+        Si llegó hasta acá,
+        puede desafiar.
+      */
+      availability[
+        challenged.id
+      ] = {
+        can_challenge:
+          true,
+
+        reason:
+          null,
+
+        message:
+          null,
+      };
+    }
+
+
+    res.json({
+      availability,
+    });
+  } catch (error) {
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
 
 export const createChallenge = async (
   req,

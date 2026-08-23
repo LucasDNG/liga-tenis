@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+
 import {
   BrowserRouter,
 } from "react-router-dom";
@@ -12,6 +13,7 @@ import {
 
 import "./index.css";
 import "./clay-theme.css";
+import "./HomeClay.css";
 
 if (
   "serviceWorker" in navigator
