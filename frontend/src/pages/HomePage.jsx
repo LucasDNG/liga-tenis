@@ -9,10 +9,37 @@ import {
 
 import { api } from "../api";
 
+
 const leagueName = {
   male: "Masculina",
   female: "Femenina",
 };
+
+
+function WhatsAppIcon() {
+  return (
+    <svg
+      className="whatsapp-home-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.4l1.3-4.7a8.5 8.5 0 1 1 16.2-4Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      <path
+        d="M8.2 7.6c.2-.4.4-.4.7-.4h.5c.2 0 .4.1.5.4l.8 1.8c.1.3.1.5-.1.7l-.7.8c-.2.2-.1.4 0 .6.8 1.4 1.9 2.5 3.4 3.2.2.1.4.1.6-.1l.8-1c.2-.2.4-.3.7-.2l1.9.9c.3.1.4.3.4.6 0 .4-.2 1.3-.8 1.8-.6.5-1.5.8-2.4.6-1.2-.2-2.8-.8-4.8-2.5-1.7-1.5-2.8-3.3-3.1-4.4-.3-1.1 0-2.1.4-2.8Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 
 export default function HomePage() {
   const [
@@ -29,6 +56,7 @@ export default function HomePage() {
     loading,
     setLoading,
   ] = useState(true);
+
 
   useEffect(() => {
     const load =
@@ -54,6 +82,7 @@ export default function HomePage() {
 
     load();
   }, [league]);
+
 
   return (
     <main className="home-dark">
@@ -99,7 +128,9 @@ export default function HomePage() {
             <div className="feature-line">
 
               <div>
-                <b>↥</b>
+                <b className="feature-icon">
+                  ↥
+                </b>
 
                 <span>
                   <strong>
@@ -112,7 +143,9 @@ export default function HomePage() {
               </div>
 
               <div>
-                <b>◉</b>
+                <b className="feature-icon whatsapp">
+                  <WhatsAppIcon />
+                </b>
 
                 <span>
                   <strong>
@@ -125,7 +158,9 @@ export default function HomePage() {
               </div>
 
               <div>
-                <b>✓</b>
+                <b className="feature-icon">
+                  ✓
+                </b>
 
                 <span>
                   <strong>
@@ -138,7 +173,9 @@ export default function HomePage() {
               </div>
 
               <div>
-                <b>▥</b>
+                <b className="feature-icon">
+                  ▥
+                </b>
 
                 <span>
                   <strong>
@@ -152,6 +189,7 @@ export default function HomePage() {
 
             </div>
           </div>
+
 
           <section className="top-panel">
 
@@ -274,6 +312,7 @@ export default function HomePage() {
         </div>
       </section>
 
+
       <section className="how-section">
 
         <div className="site-width how-grid">
@@ -290,6 +329,7 @@ export default function HomePage() {
             </p>
 
           </div>
+
 
           <div className="how-step">
 
@@ -312,6 +352,7 @@ export default function HomePage() {
 
           </div>
 
+
           <div className="how-step">
 
             <b>
@@ -332,6 +373,7 @@ export default function HomePage() {
             </div>
 
           </div>
+
 
           <div className="how-step">
 
@@ -356,6 +398,7 @@ export default function HomePage() {
 
         </div>
       </section>
+
 
       <footer className="home-footer">
         LIGA DE TENIS SAN PEDRO · 2026

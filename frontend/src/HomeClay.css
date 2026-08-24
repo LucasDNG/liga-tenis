@@ -1,186 +1,29 @@
 /* =========================================================
    HOME — LIGA DE TENIS SAN PEDRO
-   POLVO DE LADRILLO + CANCHA
-   ========================================================= */
-
-
-/* =========================================================
-   FONDO GENERAL CON CANCHA
+   MISMA IDENTIDAD VISUAL DEL RESTO DEL SITIO
    ========================================================= */
 
 .home-dark {
   position: relative;
 
+  min-height: calc(100vh - 104px);
+
   background-image:
     linear-gradient(
       90deg,
-      rgba(248, 238, 229, 0.93) 0%,
-      rgba(244, 227, 214, 0.87) 38%,
-      rgba(222, 156, 116, 0.56) 68%,
-      rgba(177, 83, 44, 0.44) 100%
+      rgba(250, 239, 230, 0.56) 0%,
+      rgba(244, 218, 199, 0.36) 46%,
+      rgba(190, 91, 48, 0.14) 100%
     ),
     url("/clay-court-hero.png") !important;
 
-  background-size:
-    cover !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
 
-  background-position:
-    center center !important;
-
-  background-repeat:
-    no-repeat !important;
-
-  background-attachment:
-    fixed !important;
-
-  color:
-    #3d291f !important;
+  color: #3d291f !important;
 }
-
-
-/* =========================================================
-   NAVBAR
-   ========================================================= */
-
-.site-nav {
-  background:
-    linear-gradient(
-      90deg,
-      #c6683f 0%,
-      #d47648 52%,
-      #c6683f 100%
-    ) !important;
-
-  border-bottom:
-    2px solid #a94f2c !important;
-
-  box-shadow:
-    0 5px 18px
-    rgba(83, 43, 25, 0.18) !important;
-}
-
-
-/* LOGO / MARCA */
-
-.site-nav .brand-copy strong {
-  color: #fffdf8 !important;
-}
-
-.site-nav .brand-copy small {
-  color: #fff0e5 !important;
-}
-
-
-/* =========================================================
-   LINKS DEL NAVBAR
-   ========================================================= */
-
-.site-nav .nav-link {
-  position: relative;
-
-  padding:
-    11px 15px !important;
-
-  color: #fffaf5 !important;
-
-  font-weight: 700 !important;
-
-  border-radius: 6px;
-
-  transition:
-    background 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease,
-    box-shadow 0.18s ease !important;
-}
-
-
-.site-nav .nav-link:hover {
-  background:
-    rgba(255, 255, 255, 0.14) !important;
-
-  color: #ffffff !important;
-
-  transform:
-    translateY(-1px);
-}
-
-
-/* INGRESAR */
-
-.site-nav .nav-out {
-  padding:
-    11px 20px !important;
-
-  border:
-    1px solid
-    rgba(255, 255, 255, 0.72) !important;
-
-  background:
-    rgba(103, 42, 18, 0.12) !important;
-
-  color:
-    #ffffff !important;
-
-  border-radius:
-    6px;
-
-  font-weight:
-    700 !important;
-
-  box-shadow:
-    0 4px 10px
-    rgba(76, 35, 18, 0.09);
-}
-
-
-.site-nav .nav-out:hover {
-  background:
-    rgba(255, 255, 255, 0.17) !important;
-
-  border-color:
-    #ffffff !important;
-}
-
-
-/* REGISTRARME */
-
-.site-nav .nav-cta {
-  padding:
-    12px 22px !important;
-
-  border:
-    1px solid #fff4ec !important;
-
-  background:
-    rgba(111, 43, 17, 0.2) !important;
-
-  color:
-    #ffffff !important;
-
-  border-radius:
-    6px;
-
-  font-weight:
-    800 !important;
-
-  box-shadow:
-    0 5px 13px
-    rgba(72, 31, 14, 0.14);
-}
-
-
-.site-nav .nav-cta:hover {
-  background:
-    rgba(83, 32, 13, 0.3) !important;
-
-  border-color:
-    #ffffff !important;
-
-  transform:
-    translateY(-1px);
-}
-
 
 /* =========================================================
    HERO
@@ -191,46 +34,37 @@
 
   min-height: 570px;
 
-  padding:
-    52px 38px
-    40px 0 !important;
+  padding: 52px 38px 40px 0 !important;
 
-  background:
-    transparent !important;
+  background: transparent !important;
 }
-
-
-/* VELO SUAVE DETRÁS DEL TEXTO */
 
 .home-dark .hero-copy-dark::before {
   content: "";
 
   position: absolute;
 
-  left: -60px;
-  top: 25px;
-  bottom: 25px;
+  left: -40px;
+  top: 26px;
+  bottom: 26px;
 
-  width: 760px;
+  width: 730px;
 
-  border-radius:
-    0 28px 28px 0;
+  border: 1px solid rgba(218, 181, 155, 0.58);
 
-  background:
-    linear-gradient(
-      90deg,
-      rgba(255, 250, 245, 0.88) 0%,
-      rgba(255, 247, 239, 0.78) 62%,
-      rgba(255, 247, 239, 0.28) 86%,
-      rgba(255, 247, 239, 0) 100%
-    );
+  border-radius: 0 24px 24px 0;
 
-  z-index:
-    0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 250, 245, 0.7) 0%,
+    rgba(255, 247, 239, 0.58) 64%,
+    rgba(255, 247, 239, 0.16) 100%
+  );
+
+  backdrop-filter: blur(4px);
+
+  z-index: 0;
 }
-
-
-/* DETALLE DE CANCHA */
 
 .home-dark .hero-copy-dark::after {
   content: "";
@@ -245,114 +79,56 @@
   width: 330px;
   height: 7px;
 
-  background:
-    rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.16);
 
-  transform:
-    rotate(-37deg);
+  transform: rotate(-37deg);
 
-  box-shadow:
-    0 58px 0
-    rgba(255, 255, 255, 0.1);
+  box-shadow: 0 58px 0 rgba(255, 255, 255, 0.08);
 }
-
 
 .home-dark .hero-copy-dark > * {
   position: relative;
 
-  z-index:
-    1;
+  z-index: 1;
 }
-
 
 /* =========================================================
    TÍTULO
    ========================================================= */
 
-.home-dark
-.home-main
-.hero-copy-dark
-h1,
-.home-dark
-.home-main
-.hero-copy-dark
-h1 span {
-  max-width:
-    780px !important;
+.home-dark .home-main .hero-copy-dark h1,
+.home-dark .home-main .hero-copy-dark h1 span {
+  max-width: 780px !important;
 
-  margin:
-    0 !important;
+  margin: 0 !important;
 
-  color:
-    #bd5731 !important;
+  color: #bd5731 !important;
 
-  -webkit-text-fill-color:
-    #bd5731 !important;
+  -webkit-text-fill-color: #bd5731 !important;
 
-  font-family:
-    "Oswald",
-    sans-serif !important;
+  font-family: "Oswald", sans-serif !important;
 
-  font-size:
-    clamp(
-      88px,
-      7.3vw,
-      120px
-    ) !important;
+  font-size: clamp(88px, 7.3vw, 120px) !important;
 
-  font-weight:
-    700 !important;
+  font-weight: 700 !important;
+  line-height: 0.9 !important;
+  letter-spacing: -0.035em !important;
 
-  line-height:
-    0.9 !important;
-
-  letter-spacing:
-    -0.035em !important;
-
-  text-transform:
-    none !important;
-
-  text-shadow:
-    0 2px 0
-    rgba(255, 255, 255, 0.5) !important;
-
-  background:
-    none !important;
+  background: none !important;
 }
 
+.home-dark .home-main .hero-copy-dark h1 span {
+  display: inline !important;
 
-.home-dark
-.home-main
-.hero-copy-dark
-h1 span {
-  display:
-    inline !important;
+  padding: 0 !important;
 
-  margin:
-    0 !important;
-
-  padding:
-    0 !important;
-
-  font-size:
-    inherit !important;
-
-  font-weight:
-    inherit !important;
-
-  line-height:
-    inherit !important;
-
-  letter-spacing:
-    inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
 }
 
-
-/* LÍNEA DEBAJO DEL TÍTULO */
-
-.home-dark
-.hero-copy-dark
-h1::after {
+.home-dark .hero-copy-dark h1::after {
   content: "";
 
   display: block;
@@ -360,584 +136,620 @@ h1::after {
   width: 100px;
   height: 5px;
 
-  margin-top:
-    27px;
+  margin-top: 27px;
 
-  background:
-    #c6683f;
+  background: linear-gradient(90deg, #c6683f, #e28d5d);
 
-  border-radius:
-    999px;
+  border-radius: 999px;
 }
 
-
 /* =========================================================
-   DESCRIPCIÓN PRINCIPAL
+   TEXTO Y BOTONES
    ========================================================= */
 
-.home-dark
-.hero-copy-dark
-> p {
-  max-width:
-    610px !important;
+.home-dark .hero-copy-dark > p {
+  max-width: 610px !important;
 
-  margin:
-    29px 0 0 !important;
+  margin: 29px 0 0 !important;
 
-  color:
-    #3b281f !important;
+  color: #3b281f !important;
 
-  -webkit-text-fill-color:
-    #3b281f !important;
+  -webkit-text-fill-color: #3b281f !important;
 
-  font-size:
-    19px !important;
-
-  font-weight:
-    600 !important;
-
-  line-height:
-    1.72 !important;
-
-  letter-spacing:
-    0.004em;
+  font-size: 19px !important;
+  font-weight: 600 !important;
+  line-height: 1.72 !important;
 }
 
-
-/* =========================================================
-   BOTONES DEL HERO
-   ========================================================= */
-
-.home-dark
-.hero-actions-dark {
+.home-dark .hero-actions-dark {
   display: flex;
 
-  gap:
-    18px !important;
+  gap: 18px !important;
 
-  margin-top:
-    32px !important;
+  margin-top: 32px !important;
 }
 
-
-/* VER RANKING */
-
-.home-dark .btn-solid {
-  min-height:
-    56px !important;
-
-  padding:
-    0 30px !important;
-
-  background:
-    linear-gradient(
-      135deg,
-      #cf693b,
-      #b95028
-    ) !important;
-
-  border:
-    1px solid #ad4823 !important;
-
-  color:
-    #ffffff !important;
-
-  font-weight:
-    800 !important;
-
-  box-shadow:
-    0 8px 18px
-    rgba(110, 50, 25, 0.2) !important;
-
-  transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease,
-    filter 0.16s ease !important;
-}
-
-
-.home-dark .btn-solid:hover {
-  transform:
-    translateY(-2px);
-
-  filter:
-    brightness(1.05);
-
-  box-shadow:
-    0 11px 23px
-    rgba(110, 50, 25, 0.24) !important;
-}
-
-
-/* QUIERO JUGAR */
-
+.home-dark .btn-solid,
 .home-dark .btn-line {
-  min-height:
-    56px !important;
+  min-height: 54px !important;
 
-  padding:
-    0 30px !important;
-
-  background:
-    rgba(255, 253, 249, 0.88) !important;
-
-  border:
-    2px solid #c6683f !important;
-
-  color:
-    #a94c29 !important;
-
-  font-weight:
-    800 !important;
-
-  transition:
-    transform 0.16s ease,
-    background 0.16s ease,
-    box-shadow 0.16s ease !important;
+  padding: 0 28px !important;
 }
-
-
-.home-dark .btn-line:hover {
-  background:
-    #fffdf9 !important;
-
-  transform:
-    translateY(-2px);
-
-  box-shadow:
-    0 7px 16px
-    rgba(90, 50, 30, 0.1);
-}
-
 
 /* =========================================================
-   BLOQUES INFERIORES DEL HERO
+   CARACTERÍSTICAS
+   4 CUADRADOS COMPACTOS EN UNA SOLA FILA
    ========================================================= */
 
 .home-dark .feature-line {
-  margin-top:
-    44px !important;
+  margin-top: 38px !important;
 
-  background:
-    rgba(255, 253, 249, 0.91) !important;
+  display: grid !important;
 
-  border:
-    1px solid #dbb69e !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 
-  box-shadow:
-    0 8px 20px
-    rgba(94, 55, 35, 0.12) !important;
+  gap: 12px;
 
-  backdrop-filter:
-    blur(5px);
+  background: transparent !important;
+
+  border: 0 !important;
+
+  border-radius: 0 !important;
+
+  box-shadow: none !important;
+
+  backdrop-filter: none !important;
+
+  overflow: visible !important;
 }
 
+.home-dark .feature-line > div {
+  position: relative;
 
-.home-dark
-.feature-line
-> div {
-  border-right:
-    1px solid #dfbea9 !important;
+  min-width: 0;
+  min-height: 0;
+
+  aspect-ratio: auto;
+  height: 134px;
+
+  padding: 15px 13px 20px !important;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: flex-start;
+
+  justify-content: flex-start;
+
+  gap: 9px;
+
+  background: rgba(255, 253, 249, 0.84) !important;
+
+  border: 1px solid rgba(218, 181, 155, 0.8) !important;
+
+  border-top: 4px solid #c6683f !important;
+
+  border-radius: 12px;
+
+  box-shadow: 0 8px 18px rgba(86, 48, 28, 0.11);
+
+  backdrop-filter: blur(6px);
+
+  overflow: hidden;
+
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
 }
 
+.home-dark .feature-line > div::after {
+  content: "";
 
-.home-dark
-.feature-line
-> div:last-child {
-  border-right:
-    0 !important;
+  position: absolute;
+
+  right: -30px;
+  bottom: -31px;
+
+  width: 68px;
+  height: 68px;
+
+  border: 1px solid rgba(198, 104, 63, 0.13);
+
+  border-radius: 50%;
+
+  pointer-events: none;
 }
 
+.home-dark .feature-line > div:hover {
+  transform: translateY(-3px);
 
-/* ICONOS */
+  background: rgba(255, 253, 249, 0.92) !important;
 
-.home-dark
-.feature-line b {
-  color:
-    #c45e35 !important;
-
-  font-weight:
-    900 !important;
+  box-shadow: 0 12px 24px rgba(86, 48, 28, 0.16);
 }
 
+/* =========================================================
+   ÍCONOS DE LOS CUADRADOS
+   ========================================================= */
 
-/* TÍTULOS */
+.home-dark .feature-line .feature-icon {
+  width: 40px;
+  height: 40px;
 
-.home-dark
-.feature-line strong {
-  color:
-    #3b281f !important;
+  flex: 0 0 40px;
 
-  font-weight:
-    800 !important;
+  display: grid;
+
+  place-items: center;
+
+  border: 2px solid rgba(255, 250, 245, 0.92);
+
+  outline: 1px solid rgba(185, 80, 43, 0.5);
+
+  border-radius: 50%;
+
+  background: linear-gradient(145deg, #df7a49 0%, #bd552f 100%);
+
+  color: #fff !important;
+
+  font-size: 19px !important;
+
+  line-height: 1;
+
+  box-shadow: 0 5px 12px rgba(105, 49, 24, 0.16);
+
+  transition: transform 0.18s ease;
 }
 
-
-/* TEXTO */
-
-.home-dark
-.feature-line span {
-  color:
-    #594237 !important;
-
-  font-weight:
-    500 !important;
+.home-dark .feature-line > div:hover .feature-icon {
+  transform: scale(1.05);
 }
 
+/* WhatsApp mantiene su verde característico */
+
+.home-dark .feature-line .feature-icon.whatsapp {
+  margin: 0 !important;
+
+  background: linear-gradient(145deg, #4f9361, #326b44);
+
+  border-color: rgba(247, 252, 247, 0.94);
+
+  outline-color: rgba(50, 107, 68, 0.45);
+
+  color: #ffffff !important;
+
+  text-decoration: none !important;
+
+  box-shadow: 0 5px 12px rgba(41, 91, 57, 0.18);
+}
+
+.whatsapp-home-icon {
+  width: 21px;
+  height: 21px;
+
+  display: block;
+}
+
+/* =========================================================
+   TEXTO DE LOS CUADRADOS
+   ========================================================= */
+
+.home-dark .feature-line strong {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #3a281f !important;
+
+  font-size: 10px;
+
+  font-weight: 900 !important;
+
+  line-height: 1.2;
+
+  letter-spacing: 0.055em;
+}
+
+.home-dark .feature-line span {
+  display: block;
+
+  min-width: 0;
+
+  color: #584238 !important;
+
+  font-size: 11.5px;
+
+  font-weight: 600;
+
+  line-height: 1.45;
+}
 
 /* =========================================================
    TOP 10
    ========================================================= */
 
 .home-dark .top-panel {
-  background:
-    rgba(255, 253, 249, 0.94) !important;
+  padding: 28px 30px 26px !important;
 
-  border:
-    1px solid #d9b49b !important;
+  background: rgba(255, 253, 249, 0.8) !important;
 
-  border-top:
-    5px solid #c6683f !important;
+  border: 1px solid rgba(218, 181, 155, 0.76) !important;
 
-  box-shadow:
-    0 13px 28px
-    rgba(90, 50, 30, 0.16) !important;
+  border-top: 4px solid #c6683f !important;
 
-  backdrop-filter:
-    blur(7px);
+  border-radius: 14px;
+
+  box-shadow: 0 13px 28px rgba(90, 50, 30, 0.14) !important;
+
+  backdrop-filter: blur(7px);
 }
 
-
-.home-dark
-.top-panel-head {
-  border-bottom-color:
-    #dfc4b2 !important;
+.home-dark .top-panel-head {
+  border-bottom-color: rgba(218, 181, 155, 0.68) !important;
 }
 
-
-/* CLASIFICACIÓN */
-
-.home-dark
-.top-panel-head span {
-  color:
-    #bd5731 !important;
-
-  font-weight:
-    800 !important;
-
-  letter-spacing:
-    0.13em;
+.home-dark .top-panel-head span {
+  color: #bd5731 !important;
 }
 
-
-/* TOP 10 */
-
-.home-dark
-.top-panel-head h2 {
-  color:
-    #38251d !important;
-
-  font-weight:
-    700 !important;
+.home-dark .top-panel-head h2,
+.home-dark .top-row > strong {
+  color: #38251d !important;
 }
 
+.home-dark .top-panel-head a {
+  color: #ae4d28 !important;
 
-/* LINK */
-
-.home-dark
-.top-panel-head a {
-  color:
-    #ae4d28 !important;
-
-  font-weight:
-    700 !important;
-
-  border-bottom:
-    1px solid #c6683f;
+  font-weight: 700;
 }
 
+.home-dark .league-switch button {
+  background: rgba(255, 250, 246, 0.66) !important;
 
-/* =========================================================
-   BOTONES LIGA
-   ========================================================= */
+  color: #49342a !important;
 
-.home-dark
-.league-switch button {
-  background:
-    #fffaf6 !important;
+  border: 1px solid #cf9b7c !important;
 
-  color:
-    #49342a !important;
+  border-radius: 7px;
 
-  border:
-    1px solid #cf9b7c !important;
-
-  font-weight:
-    600 !important;
+  transition:
+    transform 0.16s ease,
+    background 0.16s ease;
 }
 
-
-.home-dark
-.league-switch button.active {
-  background:
-    linear-gradient(
-      135deg,
-      #cf693b,
-      #bd572f
-    ) !important;
-
-  border-color:
-    #bd572f !important;
-
-  color:
-    #ffffff !important;
-
-  font-weight:
-    800 !important;
-
-  box-shadow:
-    0 4px 10px
-    rgba(117, 54, 27, 0.14);
+.home-dark .league-switch button:hover {
+  transform: translateY(-1px);
 }
 
+.home-dark .league-switch button.active {
+  background: linear-gradient(135deg, #cf693b, #bd572f) !important;
 
-/* =========================================================
-   TOP 10 — JUGADORES
-   ========================================================= */
+  border-color: #bd572f !important;
+
+  color: #fff !important;
+
+  box-shadow: 0 5px 12px rgba(109, 48, 22, 0.15);
+}
 
 .home-dark .top-row {
-  border-bottom-color:
-    #e6d0c1 !important;
+  border-bottom-color: rgba(218, 181, 155, 0.62) !important;
+
+  transition: background 0.16s ease;
 }
 
-
-.home-dark
-.top-row > strong {
-  color:
-    #3d291f !important;
-
-  font-weight:
-    700 !important;
+.home-dark .top-row:hover {
+  background: rgba(255, 247, 239, 0.4);
 }
 
+.home-dark .top-row > strong,
+.home-dark .top-row > b {
+  color: #3d291f !important;
 
-.home-dark
-.top-row > span,
-.home-dark
-.top-row > b {
-  color:
-    #b95a35 !important;
+  font-weight: 700 !important;
 }
 
+.home-dark .top-row > span {
+  color: #a95735 !important;
 
-.home-dark
-.top-row small {
-  color:
-    #72594c !important;
+  font-weight: 800;
 }
 
+.home-dark .top-row small {
+  color: #665044 !important;
 
-/* =========================================================
-   MENSAJE SIN JUGADORES
-   ========================================================= */
-
-.home-dark
-.top-panel p,
-.home-dark
-.top-panel .dim {
-  color:
-    #453229 !important;
-
-  -webkit-text-fill-color:
-    #453229 !important;
-
-  font-size:
-    16px !important;
-
-  font-weight:
-    500 !important;
-
-  line-height:
-    1.55 !important;
-
-  opacity:
-    1 !important;
+  font-weight: 600;
 }
 
+.home-dark .top-panel p,
+.home-dark .top-panel .dim {
+  color: #453229 !important;
+
+  -webkit-text-fill-color: #453229 !important;
+
+  opacity: 1 !important;
+}
 
 /* =========================================================
    CÓMO FUNCIONA
    ========================================================= */
 
-.home-dark
-.how-title p,
-.home-dark
-.how-step p {
-  color:
-    #584136 !important;
+.home-dark .how-section {
+  background: rgba(248, 238, 230, 0.78) !important;
 
-  font-weight:
-    500 !important;
+  border-top: 1px solid rgba(218, 181, 155, 0.68) !important;
 
-  opacity:
-    1 !important;
+  border-bottom: 1px solid rgba(218, 181, 155, 0.68) !important;
+
+  backdrop-filter: blur(6px);
+
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
 }
 
+.home-dark .how-grid {
+  padding-top: 34px;
 
-.home-dark
-.how-step h3 {
-  color:
-    #38271f !important;
-
-  font-weight:
-    800 !important;
+  padding-bottom: 34px;
 }
 
+.home-dark .how-title,
+.home-dark .how-step {
+  border-right-color: rgba(218, 181, 155, 0.62) !important;
+}
+
+.home-dark .how-title {
+  padding-top: 12px;
+
+  padding-bottom: 12px;
+}
+
+.home-dark .how-title span {
+  color: #a95735 !important;
+
+  font-weight: 900 !important;
+
+  font-size: 15px !important;
+}
+
+.home-dark .how-title p {
+  margin-top: 6px;
+
+  color: #49352c !important;
+
+  font-weight: 600 !important;
+}
+
+.home-dark .how-step {
+  position: relative;
+
+  min-height: 132px;
+
+  padding: 12px 26px !important;
+
+  align-items: start;
+
+  transition: transform 0.18s ease;
+}
+
+.home-dark .how-step:hover {
+  transform: translateY(-2px);
+}
+
+.home-dark .how-step h3 {
+  margin-top: 4px;
+
+  color: #38271f !important;
+
+  font-size: 16px;
+
+  font-weight: 800 !important;
+}
+
+.home-dark .how-step p {
+  color: #49352c !important;
+
+  font-weight: 600 !important;
+
+  opacity: 1 !important;
+
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+/* =========================================================
+   CÓMO FUNCIONA — NÚMEROS
+   ========================================================= */
+
+.home-dark .how-step > b {
+  position: relative;
+
+  width: 42px !important;
+
+  height: 42px !important;
+
+  display: grid !important;
+
+  place-items: center !important;
+
+  flex-shrink: 0;
+
+  background: linear-gradient(145deg, #df7a49 0%, #bd552f 100%) !important;
+
+  border: 2px solid rgba(255, 249, 243, 0.9) !important;
+
+  outline: 1px solid #b9502b;
+
+  border-radius: 50% !important;
+
+  color: #fffaf5 !important;
+
+  font-size: 17px !important;
+
+  font-weight: 900 !important;
+
+  line-height: 1;
+
+  text-shadow: 0 1px 1px rgba(87, 37, 17, 0.2);
+
+  box-shadow:
+    0 5px 13px rgba(103, 47, 23, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.home-dark .how-step:hover > b {
+  transform: translateY(-2px) scale(1.04);
+
+  box-shadow:
+    0 8px 16px rgba(103, 47, 23, 0.23),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28) !important;
+}
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.home-dark .home-footer {
+  background: rgba(242, 227, 215, 0.7) !important;
+
+  color: #6c5649 !important;
+
+  border-top: 1px solid rgba(218, 181, 155, 0.68) !important;
+
+  backdrop-filter: blur(5px);
+}
+
+/* =========================================================
+   RESPONSIVE — TABLET
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .home-dark .feature-line {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-dark .feature-line > div {
+    aspect-ratio: auto;
+
+    min-height: 120px;
+  }
+}
 
 /* =========================================================
    RESPONSIVE — CELULAR
    ========================================================= */
 
 @media (max-width: 760px) {
-
-  /*
-     En celular evitamos background-attachment fixed.
-     Suele funcionar peor y consumir más recursos.
-  */
-
   .home-dark {
-    background-attachment:
-      scroll !important;
+    background-attachment: scroll !important;
 
-    background-position:
-      60% center !important;
-
-    background-image:
-      linear-gradient(
-        90deg,
-        rgba(248, 238, 229, 0.94) 0%,
-        rgba(244, 227, 214, 0.84) 55%,
-        rgba(205, 112, 69, 0.52) 100%
-      ),
-      url("/clay-court-hero.png") !important;
+    background-position: 60% center !important;
   }
 
+  .home-dark .hero-copy-dark {
+    min-height: auto;
 
-  .home-dark
-  .hero-copy-dark {
-    min-height:
-      auto;
-
-    padding:
-      36px 0
-      30px !important;
+    padding: 36px 0 30px !important;
   }
 
+  .home-dark .hero-copy-dark::before {
+    left: -14px;
+    right: -14px;
 
-  .home-dark
-  .hero-copy-dark::before {
-    left:
-      -20px;
+    top: 15px;
+    bottom: 15px;
 
-    right:
-      -20px;
+    width: auto;
 
-    top:
-      15px;
+    border-radius: 12px;
 
-    bottom:
-      15px;
-
-    width:
-      auto;
-
-    height:
-      auto;
-
-    border-radius:
-      0;
-
-    background:
-      linear-gradient(
-        90deg,
-        rgba(255, 250, 245, 0.88),
-        rgba(255, 250, 245, 0.67),
-        rgba(255, 250, 245, 0.35)
-      );
+    background: rgba(255, 250, 245, 0.62);
   }
 
-
-  .home-dark
-  .hero-copy-dark::after {
-    width:
-      190px;
-
-    right:
-      -20px;
+  .home-dark .hero-copy-dark::after {
+    display: none;
   }
 
-
-  .home-dark
-  .home-main
-  .hero-copy-dark
-  h1,
-  .home-dark
-  .home-main
-  .hero-copy-dark
-  h1 span {
-    font-size:
-      clamp(
-        64px,
-        18vw,
-        88px
-      ) !important;
+  .home-dark .home-main .hero-copy-dark h1,
+  .home-dark .home-main .hero-copy-dark h1 span {
+    font-size: clamp(64px, 18vw, 88px) !important;
   }
 
+  .home-dark .hero-copy-dark > p {
+    font-size: 17px !important;
 
-  .home-dark
-  .hero-copy-dark
-  > p {
-    font-size:
-      17px !important;
-
-    line-height:
-      1.6 !important;
+    line-height: 1.6 !important;
   }
 
+  .home-dark .hero-actions-dark {
+    flex-direction: column;
 
-  .home-dark
-  .hero-actions-dark {
-    flex-direction:
-      column;
-
-    align-items:
-      stretch;
+    align-items: stretch;
   }
 
-
-  .home-dark
-  .btn-solid,
-  .home-dark
-  .btn-line {
-    width:
-      100%;
+  .home-dark .btn-solid,
+  .home-dark .btn-line {
+    width: 100%;
   }
 
-
-  .site-nav
-  .nav-links {
-    gap:
-      8px !important;
+  .home-dark .top-panel {
+    padding: 20px 18px !important;
   }
 
+  .home-dark .how-grid {
+    padding-top: 20px;
 
-  .site-nav
-  .nav-link,
-  .site-nav
-  .nav-out,
-  .site-nav
-  .nav-cta {
-    white-space:
-      nowrap;
+    padding-bottom: 20px;
+  }
+
+  .home-dark .how-step {
+    min-height: auto;
+
+    padding: 18px 0 !important;
+  }
+
+  .home-dark .how-step > b {
+    width: 38px !important;
+
+    height: 38px !important;
+
+    font-size: 15px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .home-dark .feature-line {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    gap: 10px;
+  }
+
+  .home-dark .feature-line > div {
+    aspect-ratio: 1 / 1;
+
+    min-height: 0;
+
+    padding: 13px 11px !important;
+  }
+
+  .home-dark .feature-line .feature-icon {
+    width: 38px;
+
+    height: 38px;
+
+    flex-basis: 38px;
+
+    font-size: 18px !important;
+  }
+
+  .home-dark .feature-line strong {
+    font-size: 9px;
+  }
+
+  .home-dark .feature-line span {
+    font-size: 11px;
   }
 }

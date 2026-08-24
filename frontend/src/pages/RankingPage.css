@@ -1,23 +1,173 @@
 .ranking-player-link {
   color: inherit;
+
   text-decoration: none;
+
+  transition:
+    color 0.18s ease;
 }
 
+
 .ranking-player-link:hover {
-  color: #d9855f;
+  color: #c6683f;
 }
+
+
+/* =========================================================
+   SELECTOR DE LIGA — RANKING
+   ========================================================= */
+
+.page-heading .league-switch {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 4px;
+
+  padding: 5px;
+
+  background:
+    rgba(255, 253, 249, 0.78);
+
+  border:
+    1px solid
+    rgba(218, 181, 155, 0.78);
+
+  border-radius: 12px;
+
+  backdrop-filter:
+    blur(6px);
+
+  box-shadow:
+    0 8px 18px
+    rgba(75, 43, 26, 0.11);
+}
+
+
+.page-heading
+.league-switch
+button {
+  min-width: 98px;
+  min-height: 40px;
+
+  padding:
+    0 18px;
+
+  border:
+    0;
+
+  border-radius:
+    8px;
+
+  background:
+    transparent;
+
+  color:
+    #60483c;
+
+  font-size:
+    12px;
+
+  font-weight:
+    800;
+
+  cursor:
+    pointer;
+
+  opacity:
+    1;
+
+  box-shadow:
+    none;
+
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+
+.page-heading
+.league-switch
+button:hover {
+  background:
+    rgba(244, 225, 211, 0.72);
+
+  color:
+    #3f2d24;
+
+  transform:
+    translateY(-1px);
+}
+
+
+.page-heading
+.league-switch
+button.active {
+  background:
+    linear-gradient(
+      135deg,
+      #d97a4a 0%,
+      #c8673d 100%
+    );
+
+  color:
+    #ffffff;
+
+  box-shadow:
+    0 5px 12px
+    rgba(112, 52, 25, 0.16);
+
+  transform:
+    translateY(-1px);
+}
+
+
+.page-heading
+.league-switch
+button.active:hover {
+  background:
+    linear-gradient(
+      135deg,
+      #df8050 0%,
+      #ca673d 100%
+    );
+
+  color:
+    #ffffff;
+}
+
+
+.page-heading
+.league-switch
+button:focus-visible {
+  outline:
+    2px solid
+    rgba(201, 104, 67, 0.38);
+
+  outline-offset:
+    2px;
+}
+
+
+/* =========================================================
+   BOTÓN DESAFIAR
+   ========================================================= */
 
 .ranking-action-wrap {
   position: relative;
+
   display: inline-flex;
 }
+
 
 .ranking-action-wrap.disabled {
   cursor: help;
 }
 
+
 /*
-  No usamos pointer-events:none en
+  No usamos pointer-events: none en
   el wrapper porque necesitamos que
   reciba hover/touch para mostrar
   la explicación.
@@ -27,10 +177,17 @@
   min-width: 92px;
 }
 
+
 .ranking-challenge-button:disabled {
   opacity: 0.38;
+
   cursor: not-allowed;
 }
+
+
+/* =========================================================
+   TOOLTIP
+   ========================================================= */
 
 .ranking-tooltip {
   position: absolute;
@@ -42,35 +199,47 @@
 
   width: 275px;
 
-  padding: 11px 13px;
+  padding:
+    11px 13px;
 
   transform:
     translateX(-50%)
     translateY(5px);
 
-  background: #281a15;
+  background:
+    rgba(255, 253, 249, 0.97);
 
   border:
-    1px solid #8f5941;
+    1px solid
+    #c6683f;
 
-  color: #f2e5da;
+  border-radius:
+    8px;
 
-  font-size: 12px;
-  line-height: 1.5;
+  color:
+    #4f392e;
+
+  font-size:
+    12px;
+
+  line-height:
+    1.5;
 
   opacity: 0;
+
   visibility: hidden;
 
   pointer-events: none;
 
   box-shadow:
-    0 12px 30px
-      rgba(0, 0, 0, 0.35);
+    0 12px 28px
+    rgba(75, 43, 26, 0.18);
 
   transition:
     opacity 0.15s ease,
     transform 0.15s ease;
 }
+
 
 .ranking-tooltip::after {
   content: "";
@@ -84,19 +253,22 @@
     translateX(-50%);
 
   border:
-    6px solid transparent;
+    6px solid
+    transparent;
 
   border-top-color:
-    #8f5941;
+    #c6683f;
 }
 
+
 .ranking-action-wrap.disabled:hover
-  .ranking-tooltip,
+.ranking-tooltip,
 .ranking-action-wrap.disabled:focus
-  .ranking-tooltip,
+.ranking-tooltip,
 .ranking-action-wrap.disabled:focus-within
-  .ranking-tooltip {
+.ranking-tooltip {
   opacity: 1;
+
   visibility: visible;
 
   transform:
@@ -104,29 +276,55 @@
     translateY(0);
 }
 
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
 @media (max-width: 700px) {
+
+  .page-heading .league-switch {
+    width: 100%;
+  }
+
+
+  .page-heading
+  .league-switch
+  button {
+    flex: 1;
+
+    min-width: 0;
+
+    padding:
+      0 12px;
+  }
+
+
   .ranking-tooltip {
     left: auto;
     right: 0;
 
-    width: min(
-      260px,
-      calc(100vw - 40px)
-    );
+    width:
+      min(
+        260px,
+        calc(100vw - 40px)
+      );
 
     transform:
       translateY(5px);
   }
 
+
   .ranking-action-wrap.disabled:hover
-    .ranking-tooltip,
+  .ranking-tooltip,
   .ranking-action-wrap.disabled:focus
-    .ranking-tooltip,
+  .ranking-tooltip,
   .ranking-action-wrap.disabled:focus-within
-    .ranking-tooltip {
+  .ranking-tooltip {
     transform:
       translateY(0);
   }
+
 
   .ranking-tooltip::after {
     left: auto;
