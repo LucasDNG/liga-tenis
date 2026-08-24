@@ -867,3 +867,475 @@
     justify-content: center;
   }
 }
+
+/* =========================================================
+   PARTIDOS — MISMO ORDEN VISUAL QUE EL RESTO DEL SITIO
+   ========================================================= */
+
+/*
+  La página de Partidos antes usaba un hero a todo lo ancho.
+  Ahora la cabecera ocupa el mismo ancho, margen y estilo que
+  Ranking / Elo / Perfil.
+*/
+
+.public-matches-page {
+  background:
+    transparent !important;
+}
+
+
+/* La sección exterior ya no es una franja distinta */
+
+.matches-hero {
+  padding:
+    44px 0 0;
+
+  background:
+    transparent !important;
+
+  border:
+    0 !important;
+
+  backdrop-filter:
+    none !important;
+}
+
+
+/* La caja interna pasa a ser la cabecera estándar */
+
+.matches-hero-inner {
+  min-height:
+    0 !important;
+
+  padding:
+    26px 28px !important;
+
+  display:
+    flex;
+
+  align-items:
+    flex-end;
+
+  justify-content:
+    space-between;
+
+  gap:
+    24px;
+
+  background:
+    var(--page-header-bg) !important;
+
+  border:
+    1px solid
+    var(--page-border) !important;
+
+  border-top:
+    4px solid
+    var(--clay) !important;
+
+  border-radius:
+    var(--page-radius) !important;
+
+  box-shadow:
+    var(--page-shadow) !important;
+
+  backdrop-filter:
+    blur(7px);
+}
+
+
+/* Ya no hace falta una tarjeta dentro de otra tarjeta */
+
+.matches-hero-copy {
+  max-width:
+    660px !important;
+
+  padding:
+    0 !important;
+
+  background:
+    transparent !important;
+
+  border:
+    0 !important;
+
+  border-radius:
+    0 !important;
+
+  box-shadow:
+    none !important;
+
+  backdrop-filter:
+    none !important;
+}
+
+
+.matches-eyebrow {
+  display:
+    block;
+
+  margin-bottom:
+    9px !important;
+
+  color:
+    var(--clay-strong) !important;
+
+  font-size:
+    10px !important;
+
+  font-weight:
+    900 !important;
+
+  letter-spacing:
+    0.14em !important;
+
+  text-transform:
+    uppercase;
+}
+
+
+.matches-hero h1 {
+  margin:
+    0 0 12px !important;
+
+  color:
+    #3b291f !important;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif !important;
+
+  font-size:
+    clamp(
+      42px,
+      4.2vw,
+      58px
+    ) !important;
+
+  font-weight:
+    500 !important;
+
+  line-height:
+    1 !important;
+
+  letter-spacing:
+    -0.025em;
+}
+
+
+.matches-hero p {
+  max-width:
+    620px;
+
+  color:
+    #60483c !important;
+
+  font-size:
+    15px !important;
+
+  line-height:
+    1.65 !important;
+}
+
+
+/* Selector integrado con la cabecera */
+
+.public-league-switch {
+  flex:
+    0 0 auto;
+
+  margin:
+    0 !important;
+
+  padding:
+    5px !important;
+
+  background:
+    rgba(255, 253, 249, 0.74) !important;
+
+  border:
+    1px solid
+    rgba(218, 181, 155, 0.78) !important;
+
+  border-radius:
+    12px !important;
+
+  box-shadow:
+    0 8px 18px
+    rgba(75, 43, 26, 0.11) !important;
+}
+
+
+.public-league-switch button {
+  min-height:
+    40px !important;
+
+  padding:
+    0 16px !important;
+
+  border:
+    0 !important;
+
+  border-radius:
+    8px !important;
+
+  color:
+    #60483c !important;
+
+  background:
+    transparent !important;
+
+  font-size:
+    12px !important;
+
+  font-weight:
+    800 !important;
+}
+
+
+.public-league-switch button:hover {
+  background:
+    rgba(244, 225, 211, 0.72) !important;
+}
+
+
+.public-league-switch button.active {
+  background:
+    linear-gradient(
+      135deg,
+      #d97a4a,
+      #c8673d
+    ) !important;
+
+  color:
+    #fff !important;
+
+  box-shadow:
+    0 5px 12px
+    rgba(112, 52, 25, 0.16) !important;
+}
+
+
+/* Contenido alineado con el mismo ritmo vertical */
+
+.public-matches-content {
+  padding-top:
+    28px !important;
+
+  padding-bottom:
+    72px !important;
+}
+
+
+.matches-panel {
+  margin-bottom:
+    24px !important;
+
+  padding:
+    24px !important;
+
+  background:
+    var(--page-panel-bg) !important;
+
+  border:
+    1px solid
+    var(--page-border) !important;
+
+  border-radius:
+    var(--page-radius) !important;
+
+  box-shadow:
+    var(--page-shadow) !important;
+
+  backdrop-filter:
+    blur(7px);
+}
+
+
+/* =========================================================
+   RESPONSIVE PARTIDOS
+   ========================================================= */
+
+@media (max-width: 760px) {
+  .matches-hero {
+    padding-top:
+      22px;
+  }
+
+  .matches-hero-inner {
+    padding:
+      20px 18px !important;
+
+    align-items:
+      stretch;
+
+    flex-direction:
+      column;
+
+    gap:
+      16px;
+
+    border-top-width:
+      3px !important;
+
+    border-radius:
+      13px !important;
+  }
+
+  .matches-hero h1 {
+    margin-bottom:
+      10px !important;
+
+    font-size:
+      clamp(
+        34px,
+        10vw,
+        44px
+      ) !important;
+  }
+
+  .matches-hero p {
+    font-size:
+      14px !important;
+  }
+
+  .public-league-switch {
+    width:
+      100%;
+
+    display:
+      grid !important;
+
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+
+  .public-league-switch button {
+    min-width:
+      0;
+
+    padding:
+      0 8px !important;
+
+    font-size:
+      11px !important;
+  }
+
+  .public-matches-content {
+    padding-top:
+      18px !important;
+
+    padding-bottom:
+      44px !important;
+  }
+
+  .matches-panel {
+    padding:
+      18px !important;
+
+    border-radius:
+      13px !important;
+  }
+}
+
+
+@media (max-width: 390px) {
+  .public-league-switch {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .public-league-switch button {
+    font-size:
+      10px !important;
+  }
+}
+
+/* =========================================================
+   CORRECCIÓN FINAL — FONDO + ALTURA DE CARDS
+   ========================================================= */
+
+/* Recupera la cancha de fondo en Partidos */
+.public-matches-page {
+  min-height: 100vh !important;
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(250, 241, 233, 0.58) 0%,
+      rgba(245, 226, 212, 0.40) 48%,
+      rgba(197, 101, 57, 0.14) 100%
+    ),
+    url("/clay-court-hero.png") !important;
+
+  background-size:
+    cover !important;
+
+  background-position:
+    center center !important;
+
+  background-repeat:
+    no-repeat !important;
+
+  background-attachment:
+    fixed !important;
+}
+
+
+/* Las dos tarjetas de próximos partidos mantienen la misma altura */
+.upcoming-grid {
+  align-items: stretch;
+}
+
+.upcoming-card {
+  height: 100%;
+
+  display: flex;
+  flex-direction: column;
+}
+
+
+/*
+  Reserva exactamente la misma altura para el bloque de jugadores.
+  Así un apellido que pasa a dos líneas (Franco Rodriguez) no
+  desplaza fecha/hora/lugar hacia abajo respecto de la otra card.
+*/
+.match-versus {
+  height: 112px;
+
+  flex: 0 0 112px;
+}
+
+
+/* La zona de datos ocupa el resto de la tarjeta de manera pareja */
+.match-details {
+  margin-top: auto;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 760px) {
+  .public-matches-page {
+    background-attachment:
+      scroll !important;
+
+    background-position:
+      60% center !important;
+  }
+
+  .match-versus {
+    height: auto;
+
+    min-height: 0;
+
+    flex: initial;
+  }
+
+  .upcoming-card {
+    height: auto;
+  }
+}

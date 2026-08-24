@@ -94,8 +94,14 @@ export default function HomePage() {
 
           <div className="hero-copy-dark">
 
-            <h1>
-              SAN PEDRO teNNis
+            <h1 className="home-title">
+              <span className="home-title-main">
+                Liga de Tenis
+              </span>
+
+              <span className="home-title-city">
+                San Pedro
+              </span>
             </h1>
 
             <p>

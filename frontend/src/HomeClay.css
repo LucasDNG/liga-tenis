@@ -93,54 +93,117 @@
 }
 
 /* =========================================================
-   TÍTULO
+   TÍTULO — IDENTIDAD INSTITUCIONAL
    ========================================================= */
 
-.home-dark .home-main .hero-copy-dark h1,
-.home-dark .home-main .hero-copy-dark h1 span {
-  max-width: 780px !important;
+.home-dark .home-title {
+  max-width: 690px !important;
 
   margin: 0 !important;
 
-  color: #bd5731 !important;
+  display: flex !important;
+  flex-direction: column;
 
-  -webkit-text-fill-color: #bd5731 !important;
-
-  font-family: "Oswald", sans-serif !important;
-
-  font-size: clamp(88px, 7.3vw, 120px) !important;
-
-  font-weight: 700 !important;
-  line-height: 0.9 !important;
-  letter-spacing: -0.035em !important;
+  gap: 7px;
 
   background: none !important;
 }
 
-.home-dark .home-main .hero-copy-dark h1 span {
-  display: inline !important;
+.home-dark .home-title-main {
+  display: block !important;
 
+  margin: 0 !important;
   padding: 0 !important;
 
-  font-size: inherit !important;
-  font-weight: inherit !important;
-  line-height: inherit !important;
-  letter-spacing: inherit !important;
+  color: #3d291f !important;
+
+  -webkit-text-fill-color:
+    #3d291f !important;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif !important;
+
+  font-size:
+    clamp(
+      58px,
+      5.2vw,
+      78px
+    ) !important;
+
+  font-weight:
+    500 !important;
+
+  line-height:
+    0.98 !important;
+
+  letter-spacing:
+    -0.035em !important;
+
+  background:
+    none !important;
 }
 
-.home-dark .hero-copy-dark h1::after {
+.home-dark .home-title-city {
+  display: block !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  color:
+    #bd5731 !important;
+
+  -webkit-text-fill-color:
+    #bd5731 !important;
+
+  font-family:
+    "Oswald",
+    sans-serif !important;
+
+  font-size:
+    clamp(
+      30px,
+      2.8vw,
+      43px
+    ) !important;
+
+  font-weight:
+    600 !important;
+
+  line-height:
+    1 !important;
+
+  letter-spacing:
+    0.02em !important;
+
+  text-transform:
+    uppercase;
+
+  background:
+    none !important;
+}
+
+.home-dark .home-title::after {
   content: "";
 
   display: block;
 
-  width: 100px;
-  height: 5px;
+  width: 94px;
+  height: 4px;
 
-  margin-top: 27px;
+  margin-top:
+    20px;
 
-  background: linear-gradient(90deg, #c6683f, #e28d5d);
+  background:
+    linear-gradient(
+      90deg,
+      #c6683f,
+      #e28d5d
+    );
 
-  border-radius: 999px;
+  border-radius:
+    999px;
 }
 
 /* =========================================================
@@ -894,26 +957,40 @@
       22px !important;
   }
 
-  .home-dark
-  .home-main
-  .hero-copy-dark
-  h1,
-  .home-dark
-  .home-main
-  .hero-copy-dark
-  h1 span {
+  .home-dark .home-title {
+    gap: 5px;
+  }
+
+  .home-dark .home-title-main {
     font-size:
       clamp(
-        48px,
-        15vw,
-        64px
+        42px,
+        12.5vw,
+        56px
       ) !important;
 
     line-height:
-      0.94 !important;
+      1 !important;
+  }
 
-    overflow-wrap:
-      anywhere;
+  .home-dark .home-title-city {
+    font-size:
+      clamp(
+        24px,
+        7.2vw,
+        32px
+      ) !important;
+
+    line-height:
+      1 !important;
+  }
+
+  .home-dark .home-title::after {
+    width: 78px;
+    height: 4px;
+
+    margin-top:
+      16px;
   }
 
   .home-dark
