@@ -1,11 +1,18 @@
 import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
   Link,
+  useLocation,
   useNavigate,
 } from "react-router-dom";
 
 import {
   useAuth,
 } from "../context/AuthContext";
+
 
 export default function Navbar() {
   const {
@@ -16,18 +23,42 @@ export default function Navbar() {
   const navigate =
     useNavigate();
 
+  const location =
+    useLocation();
+
+  const [
+    menuOpen,
+    setMenuOpen,
+  ] = useState(false);
+
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+
   const out = async () => {
+    setMenuOpen(false);
+
     await signout();
 
     navigate("/");
   };
 
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+  };
+
+
   return (
     <nav className="site-nav">
       <div className="nav-inner">
+
         <Link
           className="brand"
           to="/"
+          onClick={closeMenu}
         >
           <span
             className="tennis-logo"
@@ -58,10 +89,46 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <div className="nav-links">
+
+        <button
+          type="button"
+          className={
+            menuOpen
+              ? "menu-toggle open"
+              : "menu-toggle"
+          }
+          aria-label={
+            menuOpen
+              ? "Cerrar menú"
+              : "Abrir menú"
+          }
+          aria-expanded={menuOpen}
+          aria-controls="main-navigation"
+          onClick={() =>
+            setMenuOpen(
+              (current) =>
+                !current,
+            )
+          }
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+
+
+        <div
+          id="main-navigation"
+          className={
+            menuOpen
+              ? "nav-links open"
+              : "nav-links"
+          }
+        >
           <Link
             to="/ranking"
             className="nav-link"
+            onClick={closeMenu}
           >
             Ranking
           </Link>
@@ -69,6 +136,7 @@ export default function Navbar() {
           <Link
             to="/partidos"
             className="nav-link"
+            onClick={closeMenu}
           >
             Partidos
           </Link>
@@ -76,6 +144,7 @@ export default function Navbar() {
           <Link
             to="/elo"
             className="nav-link"
+            onClick={closeMenu}
           >
             Sistema Elo
           </Link>
@@ -85,6 +154,7 @@ export default function Navbar() {
               <Link
                 to="/challenges"
                 className="nav-link"
+                onClick={closeMenu}
               >
                 Desafíos
               </Link>
@@ -92,6 +162,7 @@ export default function Navbar() {
               <Link
                 to="/matches"
                 className="nav-link"
+                onClick={closeMenu}
               >
                 Mis partidos
               </Link>
@@ -99,6 +170,7 @@ export default function Navbar() {
               <Link
                 to="/profile"
                 className="nav-link"
+                onClick={closeMenu}
               >
                 Mi perfil
               </Link>
@@ -108,6 +180,7 @@ export default function Navbar() {
                 <Link
                   to="/admin"
                   className="nav-link"
+                  onClick={closeMenu}
                 >
                   Administración
                 </Link>
@@ -125,6 +198,7 @@ export default function Navbar() {
               <Link
                 to="/login"
                 className="nav-link"
+                onClick={closeMenu}
               >
                 Ingresar
               </Link>
@@ -132,6 +206,7 @@ export default function Navbar() {
               <Link
                 to="/register"
                 className="nav-link nav-cta"
+                onClick={closeMenu}
               >
                 Registrarme
               </Link>
