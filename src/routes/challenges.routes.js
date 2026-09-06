@@ -5,7 +5,6 @@ import {
 import {
   createChallenge,
   getMyChallenges,
-  getChallengeAvailability,
   scheduleChallenge,
   acceptChallenge,
   rejectChallenge,
@@ -20,17 +19,6 @@ const router =
 
 router.use(
   isAuth,
-);
-
-
-/*
-  Disponibilidad de botones
-  del ranking.
-*/
-
-router.get(
-  "/challenge-availability",
-  getChallengeAvailability,
 );
 
 
