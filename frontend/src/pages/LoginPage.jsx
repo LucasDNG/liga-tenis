@@ -1,5 +1,4 @@
 import { useState } from "react";
-
 import {
   useNavigate,
   Link,
@@ -9,18 +8,13 @@ import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const { signin } = useAuth();
-
   const navigate = useNavigate();
 
-  const [dni, setDni] =
-    useState("");
-
+  const [dni, setDni] = useState("");
   const [password, setPassword] =
     useState("");
-
   const [error, setError] =
     useState("");
-
   const [loading, setLoading] =
     useState(false);
 
@@ -50,7 +44,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="page-dark">
+    <main className="page-dark auth-page">
       <div className="form-shell">
         <span className="form-kicker">
           ACCESO DE JUGADORES
@@ -88,27 +82,14 @@ export default function LoginPage() {
             />
           </label>
 
-          <div
-            style={{
-              marginTop: "-4px",
-            }}
-          >
+          <div className="auth-help">
             <Link
               to="/forgot-password"
-              style={{
-                color: "#9bbe61",
-                fontSize: "13px",
-                textDecoration:
-                  "underline",
-                textUnderlineOffset:
-                  "4px",
-                pointerEvents: loading
-                  ? "none"
-                  : "auto",
-                opacity: loading
-                  ? 0.5
-                  : 1,
-              }}
+              className={
+                loading
+                  ? "auth-help-link disabled"
+                  : "auth-help-link"
+              }
             >
               ¿Olvidaste tu contraseña?
             </Link>
@@ -127,17 +108,13 @@ export default function LoginPage() {
           )}
 
           <button
-            className="btn-solid"
+            className={
+              loading
+                ? "btn-solid auth-submit loading"
+                : "btn-solid auth-submit"
+            }
             type="submit"
             disabled={loading}
-            style={{
-              opacity: loading
-                ? 0.7
-                : 1,
-              cursor: loading
-                ? "wait"
-                : "pointer",
-            }}
           >
             {loading
               ? "INGRESANDO..."

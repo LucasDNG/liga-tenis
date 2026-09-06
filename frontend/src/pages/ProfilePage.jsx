@@ -3,27 +3,20 @@ import { useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 
+import "./ProfilePage.css";
+
 export default function ProfilePage() {
   const { user, setUser } = useAuth();
-
-  const [message, setMessage] =
-    useState("");
+  const [message, setMessage] = useState("");
 
   const choose = async (gender) => {
     try {
-      const { data } =
-        await api.patch(
-          "/profile/league",
-          {
-            gender,
-          },
-        );
+      const { data } = await api.patch("/profile/league", {
+        gender,
+      });
 
       setUser(data);
-
-      setMessage(
-        "Liga actualizada.",
-      );
+      setMessage("Liga actualizada.");
     } catch (error) {
       setMessage(
         error.response?.data?.message ||
@@ -32,158 +25,141 @@ export default function ProfilePage() {
     }
   };
 
-  const verificationStatus =
-    user?.verification_status;
+  const verificationStatus = user?.verification_status;
 
-  const isVerified =
-    verificationStatus === "verified";
-
-  const isRejected =
-    verificationStatus === "rejected";
-
+  const isVerified = verificationStatus === "verified";
+  const isRejected = verificationStatus === "rejected";
   const isPending =
-    verificationStatus ===
-    "pending_verification";
+    verificationStatus === "pending_verification";
 
-  const verificationLabel =
-    isVerified
-      ? "Verificado"
-      : isRejected
-        ? "Rechazado"
-        : "Pendiente";
+  const verificationLabel = isVerified
+    ? "Verificado"
+    : isRejected
+      ? "Rechazado"
+      : "Pendiente";
+
+  const leagueLabel =
+    user?.gender === "female"
+      ? "Liga Femenina"
+      : user?.gender === "male"
+        ? "Liga Masculina"
+        : "Todavía no elegiste liga";
 
   return (
-    <main className="page-dark">
+    <main className="page-dark profile-page">
       <div className="site-width page-content">
-        <div className="profile-dark">
-          <span>JUGADOR</span>
-
-          <h1>{user?.name}</h1>
-
+        <header className="page-heading profile-page-heading">
+          <span>MI PERFIL</span>
+          <h1>Perfil de jugador</h1>
           <p>
-            {user?.gender === "female"
-              ? "Liga Femenina"
-              : user?.gender === "male"
-                ? "Liga Masculina"
-                : "Todavía no elegiste liga"}
+            Tu información, estado de cuenta y estadísticas
+            dentro de la Liga de Tenis San Pedro.
           </p>
+        </header>
+
+        <section className="profile-overview">
+          <div className="profile-player">
+            <span className="profile-eyebrow">JUGADOR</span>
+
+            <h2>{user?.name}</h2>
+
+            <p className="profile-league">{leagueLabel}</p>
+          </div>
 
           <div className="profile-stats">
-            <div>
+            <div className="profile-stat">
               <small>ELO</small>
-              <strong>
-                {user?.rating}
-              </strong>
+              <strong>{user?.rating ?? "—"}</strong>
             </div>
 
-            <div>
+            <div className="profile-stat">
               <small>PARTIDOS</small>
-              <strong>
-                {user?.matches_played}
-              </strong>
+              <strong>{user?.matches_played ?? 0}</strong>
             </div>
 
-            <div>
+            <div className="profile-stat">
               <small>IDENTIDAD</small>
-              <strong>
-                {verificationLabel}
-              </strong>
+              <strong>{verificationLabel}</strong>
             </div>
           </div>
 
           {isPending && (
-            <div className="notice">
-              <strong>
-                Verificación pendiente
-              </strong>
+            <div className="profile-notice">
+              <strong>Verificación pendiente</strong>
 
               <p>
-                Recibimos las fotos de tu
-                DNI. Tu identidad todavía
-                está siendo revisada.
+                Recibimos las fotos de tu DNI. Tu identidad
+                todavía está siendo revisada.
               </p>
 
               <p>
-                Mientras tanto podés
-                iniciar sesión, ver el
-                ranking y consultar tu
-                perfil, pero todavía no
-                podés crear ni aceptar
-                desafíos.
+                Mientras tanto podés iniciar sesión, ver el
+                ranking y consultar tu perfil, pero todavía no
+                podés crear ni aceptar desafíos.
               </p>
             </div>
           )}
 
           {isVerified && (
-            <div className="notice">
-              <strong>
-                Cuenta verificada
-              </strong>
+            <div className="profile-notice">
+              <strong>Cuenta verificada</strong>
 
               <p>
-                Tu identidad fue aprobada.
-                Ya estás habilitado para
-                competir, crear desafíos y
-                aceptar desafíos de otros
-                jugadores.
+                Tu identidad fue aprobada. Ya estás habilitado
+                para competir, crear desafíos y aceptar desafíos
+                de otros jugadores.
               </p>
             </div>
           )}
 
           {isRejected && (
-            <div className="notice">
-              <strong>
-                Documentación rechazada
-              </strong>
+            <div className="profile-notice profile-notice-danger">
+              <strong>Documentación rechazada</strong>
 
               <p>
-                Las imágenes enviadas no
-                pudieron ser aprobadas.
+                Las imágenes enviadas no pudieron ser aprobadas.
               </p>
 
               <p>
-                Por el momento no podés
-                crear ni aceptar desafíos.
+                Por el momento no podés crear ni aceptar
+                desafíos.
               </p>
             </div>
           )}
 
           {!user?.gender && (
-            <div className="choose-league">
-              <h2>Elegí tu liga</h2>
+            <div className="profile-choose-league">
+              <span className="profile-eyebrow">COMPETENCIA</span>
+
+              <h3>Elegí tu liga</h3>
 
               <p>
-                Esto es necesario para
-                aparecer en el ranking
-                correcto y poder desafiar.
+                Esto es necesario para aparecer en el ranking
+                correcto y poder desafiar a otros jugadores.
               </p>
 
-              <button
-                className="small-action"
-                onClick={() =>
-                  choose("male")
-                }
-              >
-                Liga Masculina
-              </button>
+              <div className="profile-league-actions">
+                <button
+                  className="small-action"
+                  onClick={() => choose("male")}
+                >
+                  Liga Masculina
+                </button>
 
-              <button
-                className="small-action secondary"
-                onClick={() =>
-                  choose("female")
-                }
-              >
-                Liga Femenina
-              </button>
+                <button
+                  className="small-action secondary"
+                  onClick={() => choose("female")}
+                >
+                  Liga Femenina
+                </button>
+              </div>
             </div>
           )}
 
           {message && (
-            <div className="notice">
-              {message}
-            </div>
+            <div className="profile-message">{message}</div>
           )}
-        </div>
+        </section>
       </div>
     </main>
   );
