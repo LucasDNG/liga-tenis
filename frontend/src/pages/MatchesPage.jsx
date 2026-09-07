@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext";
 
 import "./MatchesPage.css";
 
+
 const emptyScore = () => [
   {
     p1: "",
@@ -19,33 +20,50 @@ const emptyScore = () => [
   },
 ];
 
+
 const statusLabels = {
-  pending: "Programado",
+  pending:
+    "Programado",
+
   awaiting_confirmation:
     "Esperando confirmación",
-  completed: "Finalizado",
+
+  completed:
+    "Finalizado",
 };
+
 
 const formatDateTime = (
   value,
 ) => {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   return new Intl.DateTimeFormat(
     "es-AR",
     {
-      dateStyle: "full",
-      timeStyle: "short",
+      dateStyle:
+        "full",
+
+      timeStyle:
+        "short",
+
       timeZone:
         "America/Argentina/Buenos_Aires",
     },
-  ).format(new Date(value));
+  ).format(
+    new Date(value),
+  );
 };
+
 
 const formatPhone = (
   phone,
 ) => {
-  if (!phone) return "";
+  if (!phone) {
+    return "";
+  }
 
   let numbers =
     String(phone).replace(
@@ -54,7 +72,9 @@ const formatPhone = (
     );
 
   if (
-    numbers.startsWith("0")
+    numbers.startsWith(
+      "0",
+    )
   ) {
     numbers =
       numbers.slice(1);
@@ -64,7 +84,10 @@ const formatPhone = (
     numbers.length === 10
   ) {
     const area =
-      numbers.slice(0, 4);
+      numbers.slice(
+        0,
+        4,
+      );
 
     const local =
       numbers.slice(4);
@@ -75,10 +98,13 @@ const formatPhone = (
   return numbers;
 };
 
+
 const normalizeWhatsapp = (
   phone,
 ) => {
-  if (!phone) return "";
+  if (!phone) {
+    return "";
+  }
 
   let number =
     String(phone).replace(
@@ -87,27 +113,35 @@ const normalizeWhatsapp = (
     );
 
   if (
-    number.startsWith("00")
+    number.startsWith(
+      "00",
+    )
   ) {
     number =
       number.slice(2);
   }
 
   if (
-    number.startsWith("0")
+    number.startsWith(
+      "0",
+    )
   ) {
     number =
       number.slice(1);
   }
 
   if (
-    number.startsWith("549")
+    number.startsWith(
+      "549",
+    )
   ) {
     return number;
   }
 
   if (
-    number.startsWith("54")
+    number.startsWith(
+      "54",
+    )
   ) {
     return `549${number.slice(
       2,
@@ -116,6 +150,96 @@ const normalizeWhatsapp = (
 
   return `549${number}`;
 };
+
+
+const setWinner = (
+  set,
+) => {
+  if (
+    set.p1 === "" ||
+    set.p2 === ""
+  ) {
+    return null;
+  }
+
+  const p1 =
+    Number(set.p1);
+
+  const p2 =
+    Number(set.p2);
+
+  if (
+    !Number.isInteger(p1) ||
+    !Number.isInteger(p2)
+  ) {
+    return null;
+  }
+
+  if (p1 > p2) {
+    return 1;
+  }
+
+  if (p2 > p1) {
+    return 2;
+  }
+
+  return null;
+};
+
+
+const normalizeScoreSets = (
+  score,
+) => {
+  const firstTwo =
+    score.slice(
+      0,
+      2,
+    );
+
+  if (
+    firstTwo.length < 2
+  ) {
+    return firstTwo;
+  }
+
+  const winner1 =
+    setWinner(
+      firstTwo[0],
+    );
+
+  const winner2 =
+    setWinner(
+      firstTwo[1],
+    );
+
+  const firstTwoComplete =
+    winner1 !== null &&
+    winner2 !== null;
+
+  const needsThird =
+    firstTwoComplete &&
+    winner1 !== winner2;
+
+  if (needsThird) {
+    if (score[2]) {
+      return [
+        ...firstTwo,
+        score[2],
+      ];
+    }
+
+    return [
+      ...firstTwo,
+      {
+        p1: "",
+        p2: "",
+      },
+    ];
+  }
+
+  return firstTwo;
+};
+
 
 function ActionWithTooltip({
   disabled,
@@ -130,7 +254,9 @@ function ActionWithTooltip({
           : "match-tooltip-wrap"
       }
       tabIndex={
-        disabled ? 0 : undefined
+        disabled
+          ? 0
+          : undefined
       }
     >
       {children}
@@ -144,6 +270,7 @@ function ActionWithTooltip({
     </span>
   );
 }
+
 
 export default function MatchesPage() {
   const { user } =
@@ -174,6 +301,7 @@ export default function MatchesPage() {
     setActionLoading,
   ] = useState(null);
 
+
   const load =
     async () => {
       try {
@@ -198,9 +326,11 @@ export default function MatchesPage() {
       }
     };
 
+
   useEffect(() => {
     load();
   }, []);
+
 
   const change = (
     id,
@@ -208,81 +338,79 @@ export default function MatchesPage() {
     side,
     value,
   ) => {
+    /*
+      Permitimos solamente:
+      vacío o entero entre 0 y 7.
+
+      La validación definitiva
+      sigue estando en backend.
+    */
+    if (
+      value !== ""
+    ) {
+      const number =
+        Number(value);
+
+      if (
+        !Number.isInteger(
+          number,
+        ) ||
+        number < 0 ||
+        number > 7
+      ) {
+        return;
+      }
+    }
+
     setScores(
       (previous) => {
         const current =
-          previous[id] ||
-          emptyScore();
+          previous[id]
+            ? previous[id].map(
+                (set) => ({
+                  ...set,
+                }),
+              )
+            : emptyScore();
 
-        const next =
-          current.map(
-            (set) => ({
-              ...set,
-            }),
-          );
+        while (
+          current.length <=
+          setIndex
+        ) {
+          current.push({
+            p1: "",
+            p2: "",
+          });
+        }
 
-        next[setIndex][side] =
+        current[
+          setIndex
+        ][side] =
           value;
 
-        if (
-          next.length === 2
-        ) {
-          const a =
-            Number(
-              next[0].p1,
-            );
-
-          const b =
-            Number(
-              next[0].p2,
-            );
-
-          const c =
-            Number(
-              next[1].p1,
-            );
-
-          const d =
-            Number(
-              next[1].p2,
-            );
-
-          if (
-            next[0].p1 !== "" &&
-            next[0].p2 !== "" &&
-            next[1].p1 !== "" &&
-            next[1].p2 !== ""
-          ) {
-            const split =
-              (
-                a > b &&
-                c < d
-              ) ||
-              (
-                a < b &&
-                c > d
-              );
-
-            if (split) {
-              next.push({
-                p1: "",
-                p2: "",
-              });
-            }
-          }
-        }
+        const normalized =
+          normalizeScoreSets(
+            current,
+          );
 
         return {
           ...previous,
-          [id]: next,
+
+          [id]:
+            normalized,
         };
       },
     );
   };
 
+
   const submit =
-    async (id) => {
-      if (actionLoading) {
+    async (
+      id,
+    ) => {
+      if (
+        actionLoading
+      ) {
         return;
       }
 
@@ -290,8 +418,13 @@ export default function MatchesPage() {
         scores[id] ||
         emptyScore();
 
+      const normalized =
+        normalizeScoreSets(
+          rawScore,
+        );
+
       const hasEmpty =
-        rawScore.some(
+        normalized.some(
           (set) =>
             set.p1 === "" ||
             set.p2 === "",
@@ -306,15 +439,17 @@ export default function MatchesPage() {
       }
 
       const score =
-        rawScore.map(
+        normalized.map(
           (set) => ({
-            p1: Number(
-              set.p1,
-            ),
+            p1:
+              Number(
+                set.p1,
+              ),
 
-            p2: Number(
-              set.p2,
-            ),
+            p2:
+              Number(
+                set.p2,
+              ),
           }),
         );
 
@@ -363,9 +498,14 @@ export default function MatchesPage() {
       }
     };
 
+
   const confirm =
-    async (id) => {
-      if (actionLoading) {
+    async (
+      id,
+    ) => {
+      if (
+        actionLoading
+      ) {
         return;
       }
 
@@ -399,9 +539,23 @@ export default function MatchesPage() {
       }
     };
 
+
   const reject =
-    async (id) => {
-      if (actionLoading) {
+    async (
+      id,
+    ) => {
+      if (
+        actionLoading
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          "¿El resultado cargado es incorrecto? El partido volverá a quedar disponible para cargar un nuevo resultado.",
+        );
+
+      if (!confirmed) {
         return;
       }
 
@@ -435,6 +589,7 @@ export default function MatchesPage() {
       }
     };
 
+
   const renderScore = (
     matchScore,
     player1Name,
@@ -451,7 +606,10 @@ export default function MatchesPage() {
     return (
       <div className="match-score-view">
         {matchScore.map(
-          (set, index) => (
+          (
+            set,
+            index,
+          ) => (
             <div
               className="match-set-view"
               key={index}
@@ -462,9 +620,7 @@ export default function MatchesPage() {
 
               <div>
                 <span>
-                  {
-                    player1Name
-                  }
+                  {player1Name}
                 </span>
 
                 <b>
@@ -472,9 +628,7 @@ export default function MatchesPage() {
                 </b>
 
                 <span>
-                  {
-                    player2Name
-                  }
+                  {player2Name}
                 </span>
 
                 <b>
@@ -488,9 +642,11 @@ export default function MatchesPage() {
     );
   };
 
+
   return (
     <main className="page-dark">
       <div className="site-width page-content">
+
         <div className="page-heading">
           <div>
             <span>
@@ -503,11 +659,13 @@ export default function MatchesPage() {
           </div>
         </div>
 
+
         {message && (
           <div className="notice">
             {message}
           </div>
         )}
+
 
         {loading ? (
           <div className="notice">
@@ -515,6 +673,7 @@ export default function MatchesPage() {
           </div>
         ) : (
           <div className="match-list">
+
             {matches.length ===
               0 && (
               <div className="match-empty">
@@ -523,11 +682,16 @@ export default function MatchesPage() {
               </div>
             )}
 
+
             {matches.map(
               (match) => {
                 const submittedByMe =
-                  match.result_submitted_by ===
-                  user?.id;
+                  Number(
+                    match.result_submitted_by,
+                  ) ===
+                  Number(
+                    user?.id,
+                  );
 
                 const score =
                   scores[
@@ -536,14 +700,22 @@ export default function MatchesPage() {
                   emptyScore();
 
                 const rivalName =
-                  match.player1_id ===
-                  user?.id
+                  Number(
+                    match.player1_id,
+                  ) ===
+                  Number(
+                    user?.id,
+                  )
                     ? match.player2_name
                     : match.player1_name;
 
                 const rivalPhone =
-                  match.player1_id ===
-                  user?.id
+                  Number(
+                    match.player1_id,
+                  ) ===
+                  Number(
+                    user?.id,
+                  )
                     ? match.player2_phone
                     : match.player1_phone;
 
@@ -565,8 +737,13 @@ export default function MatchesPage() {
                       ).getTime()
                     : null;
 
+                const validScheduledTime =
+                  Number.isFinite(
+                    scheduledTime,
+                  );
+
                 const matchStarted =
-                  scheduledTime &&
+                  validScheduledTime &&
                   scheduledTime <=
                     Date.now();
 
@@ -588,7 +765,7 @@ export default function MatchesPage() {
                   `${match.id}-reject`;
 
                 const resultTooltip =
-                  !match.scheduled_at
+                  !validScheduledTime
                     ? "Este partido todavía no tiene un horario registrado."
                     : `El resultado se habilita el ${formatDateTime(
                         match.scheduled_at,
@@ -601,6 +778,7 @@ export default function MatchesPage() {
                       match.id
                     }
                   >
+
                     <div className="match-card-head">
                       <div>
                         <span className="match-kicker">
@@ -631,11 +809,17 @@ export default function MatchesPage() {
                       </span>
                     </div>
 
+
                     {match.venue &&
                       match.scheduled_at && (
                         <div className="match-schedule">
                           <span>
-                            PRÓXIMO PARTIDO
+                            {match.status ===
+                            "completed"
+                              ? "PARTIDO JUGADO"
+                              : matchStarted
+                                ? "PARTIDO EN CURSO / PENDIENTE"
+                                : "PRÓXIMO PARTIDO"}
                           </span>
 
                           <strong>
@@ -652,37 +836,40 @@ export default function MatchesPage() {
                         </div>
                       )}
 
-                    {rivalPhone && (
-                      <div className="match-contact">
-                        <div>
-                          <small>
-                            Rival
-                          </small>
 
-                          <strong>
-                            {
-                              rivalName
-                            }
-                          </strong>
+                    {rivalPhone &&
+                      whatsappNumber && (
+                        <div className="match-contact">
+                          <div>
+                            <small>
+                              Rival
+                            </small>
 
-                          <span>
-                            {formatPhone(
-                              rivalPhone,
-                            )}
-                          </span>
+                            <strong>
+                              {
+                                rivalName
+                              }
+                            </strong>
+
+                            <span>
+                              {formatPhone(
+                                rivalPhone,
+                              )}
+                            </span>
+                          </div>
+
+                          <a
+                            href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+                              `Hola ${rivalName}, te escribo por nuestro partido de la Liga de Tenis San Pedro.`,
+                            )}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            WhatsApp
+                          </a>
                         </div>
+                      )}
 
-                        <a
-                          href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
-                            `Hola ${rivalName}, te escribo por nuestro partido de la Liga de Tenis San Pedro.`,
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          WhatsApp
-                        </a>
-                      </div>
-                    )}
 
                     {match.status ===
                       "pending" &&
@@ -693,14 +880,18 @@ export default function MatchesPage() {
                           </strong>
 
                           <p>
-                            {resultTooltip}
+                            {
+                              resultTooltip
+                            }
                           </p>
                         </div>
                       )}
 
+
                     {match.status ===
                       "pending" && (
                         <div className="match-score-editor">
+
                           <div className="score-row score-title">
                             <span>
                               Set
@@ -718,6 +909,7 @@ export default function MatchesPage() {
                               }
                             </span>
                           </div>
+
 
                           {score.map(
                             (
@@ -739,6 +931,9 @@ export default function MatchesPage() {
                                 <input
                                   type="number"
                                   min="0"
+                                  max="7"
+                                  step="1"
+                                  inputMode="numeric"
                                   value={
                                     set.p1
                                   }
@@ -765,6 +960,9 @@ export default function MatchesPage() {
                                 <input
                                   type="number"
                                   min="0"
+                                  max="7"
+                                  step="1"
+                                  inputMode="numeric"
                                   value={
                                     set.p2
                                   }
@@ -791,12 +989,30 @@ export default function MatchesPage() {
                             ),
                           )}
 
+
+                          {score.length ===
+                            3 && (
+                            <div className="match-waiting">
+                              Los primeros dos sets
+                              están 1–1. Se habilitó
+                              automáticamente el tercer set.
+                            </div>
+                          )}
+
+
                           <ActionWithTooltip
                             disabled={
-                              resultBlocked
+                              resultBlocked ||
+                              Boolean(
+                                actionLoading,
+                              )
                             }
                             tooltip={
-                              resultTooltip
+                              resultBlocked
+                                ? resultTooltip
+                                : actionLoading
+                                  ? "Hay otra acción en curso."
+                                  : null
                             }
                           >
                             <button
@@ -818,8 +1034,10 @@ export default function MatchesPage() {
                                 : "Enviar resultado"}
                             </button>
                           </ActionWithTooltip>
+
                         </div>
                       )}
+
 
                     {match.status ===
                       "awaiting_confirmation" && (
@@ -836,12 +1054,19 @@ export default function MatchesPage() {
 
                           {submittedByMe ? (
                             <div className="match-waiting">
-                              Esperando
-                              confirmación
-                              del rival.
+                              <strong>
+                                Esperando confirmación
+                              </strong>
+
+                              <p>
+                                El resultado ya fue enviado.
+                                Tu rival debe confirmarlo
+                                o rechazarlo.
+                              </p>
                             </div>
                           ) : (
                             <div className="match-buttons">
+
                               <button
                                 className="match-action primary"
                                 disabled={
@@ -877,10 +1102,12 @@ export default function MatchesPage() {
                                   ? "RECHAZANDO..."
                                   : "El resultado es incorrecto"}
                               </button>
+
                             </div>
                           )}
                         </div>
                       )}
+
 
                     {match.status ===
                       "completed" && (
@@ -914,12 +1141,15 @@ export default function MatchesPage() {
                           )}
                         </div>
                       )}
+
                   </article>
                 );
               },
             )}
+
           </div>
         )}
+
       </div>
     </main>
   );
