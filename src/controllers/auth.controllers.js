@@ -22,18 +22,23 @@ import {
   uploadDniImages,
 } from "../services/cloudinary.service.js";
 
+
 /*
-  CONFIGURACIÓN DE LA COOKIE
+  ============================================================
+  COOKIE DE SESIÓN
+  ============================================================
 */
 
 const cookieOptions = {
   httpOnly: true,
 
   secure:
-    process.env.NODE_ENV === "production",
+    process.env.NODE_ENV ===
+    "production",
 
   sameSite:
-    process.env.NODE_ENV === "production"
+    process.env.NODE_ENV ===
+    "production"
       ? "none"
       : "lax",
 
@@ -41,8 +46,11 @@ const cookieOptions = {
     1000 * 60 * 60 * 24,
 };
 
+
 /*
+  ============================================================
   REGISTRO
+  ============================================================
 */
 
 export const signUp = async (
@@ -61,6 +69,7 @@ export const signUp = async (
       gender,
     } = req.body;
 
+
     if (
       !first_name ||
       !last_name ||
@@ -69,54 +78,94 @@ export const signUp = async (
       !email ||
       !password
     ) {
-      return res.status(400).json({
-        message:
-          "Completá todos los campos",
-      });
+      return res
+        .status(400)
+        .json({
+          message:
+            "Completá todos los campos",
+        });
     }
 
+
+    /*
+      La liga se elige durante
+      el registro.
+
+      No puede modificarse después
+      desde chooseLeague.
+    */
+
     if (
-      !LEAGUES.includes(gender)
+      !LEAGUES.includes(
+        gender,
+      )
     ) {
-      return res.status(400).json({
-        message:
-          "Elegí Liga Masculina o Liga Femenina",
-      });
+      return res
+        .status(400)
+        .json({
+          message:
+            "Elegí Liga Masculina o Liga Femenina",
+        });
     }
+
 
     if (
       !req.files?.dni_front?.[0] ||
       !req.files?.dni_back?.[0]
     ) {
-      return res.status(400).json({
-        message:
-          "Debés subir frente y dorso del DNI",
-      });
+      return res
+        .status(400)
+        .json({
+          message:
+            "Debés subir frente y dorso del DNI",
+        });
     }
 
+
     const first =
-      titleCase(first_name);
+      titleCase(
+        first_name,
+      );
 
     const last =
-      titleCase(last_name);
+      titleCase(
+        last_name,
+      );
 
     const name =
       `${first} ${last}`;
 
     const normalizedDni =
-      dni.trim();
+      String(dni)
+        .trim();
+
+    const normalizedPhone =
+      String(phone)
+        .trim();
 
     const normalizedEmail =
-      email
+      String(email)
         .trim()
         .toLowerCase();
 
-    /*
-      Primero comprobamos que DNI
-      y email no estén registrados.
 
-      Esto evita subir imágenes a
-      Cloudinary innecesariamente.
+    if (
+      !normalizedDni ||
+      !normalizedPhone ||
+      !normalizedEmail
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Completá todos los campos",
+        });
+    }
+
+
+    /*
+      Comprobamos DNI/email antes
+      de subir las imágenes.
     */
 
     const existing =
@@ -125,9 +174,13 @@ export const signUp = async (
         SELECT
           dni,
           email
+
         FROM users
+
         WHERE dni = $1
            OR email = $2
+
+        LIMIT 1
         `,
         [
           normalizedDni,
@@ -135,13 +188,17 @@ export const signUp = async (
         ],
       );
 
-    if (existing.rowCount) {
+
+    if (
+      existing.rowCount
+    ) {
       const dniExists =
         existing.rows.some(
           (user) =>
             user.dni ===
             normalizedDni,
         );
+
 
       return res
         .status(400)
@@ -153,12 +210,9 @@ export const signUp = async (
         });
     }
 
-    /*
-      Subimos frente y dorso del DNI
-      a Cloudinary.
 
-      Se almacenan como archivos
-      authenticated, no públicos.
+    /*
+      DNI privado en Cloudinary.
     */
 
     const uploadedDni =
@@ -177,24 +231,33 @@ export const signUp = async (
           normalizedDni,
       });
 
-    /*
-      Guardamos los public_id.
-
-      No guardamos una URL pública
-      porque las imágenes son privadas.
-    */
 
     const dniFrontPath =
-      uploadedDni.front.public_id;
+      uploadedDni.front
+        .public_id;
 
     const dniBackPath =
-      uploadedDni.back.public_id;
+      uploadedDni.back
+        .public_id;
+
 
     const hashedPassword =
       await bcrypt.hash(
         password,
         10,
       );
+
+
+    /*
+      rank_position queda como
+      dato legado.
+
+      El ranking competitivo real
+      se calcula dinámicamente por:
+      rating DESC,
+      matches_played DESC,
+      id ASC.
+    */
 
     const result =
       await pool.query(
@@ -216,6 +279,7 @@ export const signUp = async (
           dni_back_path,
           verification_status
         )
+
         VALUES (
           $1,
           $2,
@@ -229,10 +293,18 @@ export const signUp = async (
 
           COALESCE(
             (
-              SELECT MAX(rank_position)
+              SELECT
+                MAX(
+                  rank_position
+                )
+
               FROM users
-              WHERE city = $8::varchar
-                AND gender = $9::varchar
+
+              WHERE city =
+                $8::varchar
+
+                AND gender =
+                  $9::varchar
             ),
             0
           ) + 1,
@@ -243,6 +315,7 @@ export const signUp = async (
           $11,
           'pending_verification'
         )
+
         RETURNING *
         `,
         [
@@ -250,7 +323,7 @@ export const signUp = async (
           first,
           last,
           normalizedDni,
-          phone.trim(),
+          normalizedPhone,
           normalizedEmail,
           hashedPassword,
           LEAGUE_CITY,
@@ -260,15 +333,19 @@ export const signUp = async (
         ],
       );
 
+
     const user =
       toPublicUser(
         result.rows[0],
       );
 
+
     const token =
       await createAccessToken({
-        id: user.id,
+        id:
+          user.id,
       });
+
 
     res.cookie(
       "token",
@@ -276,19 +353,39 @@ export const signUp = async (
       cookieOptions,
     );
 
+
     res
       .status(201)
       .json(user);
   } catch (error) {
+    /*
+      La base debe seguir siendo
+      la última defensa frente a
+      registros simultáneos.
+    */
+
     if (
-      error.code === "23505"
+      error.code ===
+      "23505"
     ) {
+      const constraint =
+        String(
+          error.constraint ||
+          "",
+        ).toLowerCase();
+
+
       const message =
-        error.constraint?.includes(
+        constraint.includes(
           "dni",
         )
           ? "Ese DNI ya está registrado"
-          : "Ese email ya está registrado";
+          : constraint.includes(
+                "email",
+              )
+            ? "Ese email ya está registrado"
+            : "Ya existe una cuenta con esos datos";
+
 
       return res
         .status(400)
@@ -297,12 +394,23 @@ export const signUp = async (
         });
     }
 
+
     next(error);
   }
 };
 
+
 /*
+  ============================================================
   LOGIN
+  ============================================================
+
+  No distinguimos públicamente entre:
+  - DNI inexistente
+  - contraseña incorrecta
+
+  Así evitamos que el endpoint sirva
+  para enumerar DNIs registrados.
 */
 
 export const signIn = async (
@@ -316,6 +424,7 @@ export const signIn = async (
       password,
     } = req.body;
 
+
     if (
       !dni ||
       !password
@@ -328,17 +437,33 @@ export const signIn = async (
         });
     }
 
+
+    const normalizedDni =
+      String(dni)
+        .trim();
+
+
     const result =
       await pool.query(
         `
         SELECT *
+
         FROM users
+
         WHERE dni = $1
+
+        LIMIT 1
         `,
         [
-          dni.trim(),
+          normalizedDni,
         ],
       );
+
+
+    /*
+      Mismo mensaje para usuario
+      inexistente y contraseña errónea.
+    */
 
     if (
       !result.rowCount
@@ -347,9 +472,10 @@ export const signIn = async (
         .status(400)
         .json({
           message:
-            "El DNI no está registrado",
+            "DNI o contraseña incorrectos",
         });
     }
+
 
     const valid =
       await bcrypt.compare(
@@ -358,24 +484,29 @@ export const signIn = async (
           .password,
       );
 
+
     if (!valid) {
       return res
         .status(400)
         .json({
           message:
-            "La contraseña es incorrecta",
+            "DNI o contraseña incorrectos",
         });
     }
+
 
     const user =
       toPublicUser(
         result.rows[0],
       );
 
+
     const token =
       await createAccessToken({
-        id: user.id,
+        id:
+          user.id,
       });
+
 
     res.cookie(
       "token",
@@ -383,14 +514,18 @@ export const signIn = async (
       cookieOptions,
     );
 
+
     res.json(user);
   } catch (error) {
     next(error);
   }
 };
 
+
 /*
+  ============================================================
   LOGOUT
+  ============================================================
 */
 
 export const signOut = (
@@ -414,11 +549,15 @@ export const signOut = (
     },
   );
 
+
   res.sendStatus(200);
 };
 
+
 /*
+  ============================================================
   SOLICITAR RECUPERACIÓN
+  ============================================================
 */
 
 export const forgotPassword = async (
@@ -432,6 +571,7 @@ export const forgotPassword = async (
         ?.trim()
         .toLowerCase();
 
+
     if (!email) {
       return res
         .status(400)
@@ -441,6 +581,7 @@ export const forgotPassword = async (
         });
     }
 
+
     const result =
       await pool.query(
         `
@@ -448,11 +589,25 @@ export const forgotPassword = async (
           id,
           name,
           email
+
         FROM users
+
         WHERE email = $1
+
+        LIMIT 1
         `,
-        [email],
+        [
+          email,
+        ],
       );
+
+
+    /*
+      Siempre respondemos igual.
+
+      No revelamos si el email
+      existe o no.
+    */
 
     if (
       !result.rowCount
@@ -463,33 +618,60 @@ export const forgotPassword = async (
       });
     }
 
+
     const user =
       result.rows[0];
+
 
     const resetToken =
       crypto
         .randomBytes(32)
         .toString("hex");
 
+
+    /*
+      En DB nunca guardamos el
+      token enviado por email.
+
+      Solo guardamos SHA-256.
+    */
+
     const resetTokenHash =
       crypto
-        .createHash("sha256")
-        .update(resetToken)
-        .digest("hex");
+        .createHash(
+          "sha256",
+        )
+        .update(
+          resetToken,
+        )
+        .digest(
+          "hex",
+        );
+
 
     const expiresAt =
       new Date(
         Date.now() +
-          30 * 60 * 1000,
+          30 *
+            60 *
+            1000,
       );
+
 
     await pool.query(
       `
       UPDATE users
+
       SET
-        password_reset_token = $1,
-        password_reset_expires = $2,
-        updated_at = CURRENT_TIMESTAMP
+        password_reset_token =
+          $1,
+
+        password_reset_expires =
+          $2,
+
+        updated_at =
+          CURRENT_TIMESTAMP
+
       WHERE id = $3
       `,
       [
@@ -499,17 +681,21 @@ export const forgotPassword = async (
       ],
     );
 
+
     const frontendUrl =
       (
-        process.env.FRONTEND_URL ||
+        process.env
+          .FRONTEND_URL ||
         "http://localhost:5173"
       ).replace(
         /\/$/,
         "",
       );
 
+
     const resetUrl =
       `${frontendUrl}/reset-password/${resetToken}`;
+
 
     try {
       await sendPasswordResetEmail({
@@ -524,12 +710,23 @@ export const forgotPassword = async (
     } catch (
       emailError
     ) {
+      /*
+        Si falla el envío,
+        invalidamos inmediatamente
+        el token generado.
+      */
+
       await pool.query(
         `
         UPDATE users
+
         SET
-          password_reset_token = NULL,
-          password_reset_expires = NULL
+          password_reset_token =
+            NULL,
+
+          password_reset_expires =
+            NULL
+
         WHERE id = $1
         `,
         [
@@ -537,8 +734,10 @@ export const forgotPassword = async (
         ],
       );
 
+
       throw emailError;
     }
+
 
     res.json({
       message:
@@ -549,8 +748,11 @@ export const forgotPassword = async (
   }
 };
 
+
 /*
+  ============================================================
   CAMBIAR CONTRASEÑA
+  ============================================================
 */
 
 export const resetPassword = async (
@@ -558,6 +760,9 @@ export const resetPassword = async (
   res,
   next,
 ) => {
+  const client =
+    await pool.connect();
+
   try {
     const {
       token,
@@ -567,6 +772,7 @@ export const resetPassword = async (
       password,
     } = req.body;
 
+
     if (!token) {
       return res
         .status(400)
@@ -575,6 +781,7 @@ export const resetPassword = async (
             "El enlace de recuperación no es válido",
         });
     }
+
 
     if (
       !password ||
@@ -588,29 +795,59 @@ export const resetPassword = async (
         });
     }
 
+
     const tokenHash =
       crypto
-        .createHash("sha256")
+        .createHash(
+          "sha256",
+        )
         .update(token)
-        .digest("hex");
+        .digest(
+          "hex",
+        );
+
+
+    /*
+      FOR UPDATE evita que dos
+      solicitudes simultáneas puedan
+      reutilizar el mismo token.
+    */
+
+    await client.query(
+      "BEGIN",
+    );
+
 
     const result =
-      await pool.query(
+      await client.query(
         `
-        SELECT id
+        SELECT
+          id
+
         FROM users
-        WHERE password_reset_token = $1
+
+        WHERE password_reset_token =
+          $1
+
           AND password_reset_expires >
-              CURRENT_TIMESTAMP
+            CURRENT_TIMESTAMP
+
+        FOR UPDATE
         `,
         [
           tokenHash,
         ],
       );
 
+
     if (
       !result.rowCount
     ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+
       return res
         .status(400)
         .json({
@@ -619,8 +856,10 @@ export const resetPassword = async (
         });
     }
 
+
     const user =
       result.rows[0];
+
 
     const hashedPassword =
       await bcrypt.hash(
@@ -628,33 +867,86 @@ export const resetPassword = async (
         10,
       );
 
-    await pool.query(
-      `
-      UPDATE users
-      SET
-        password = $1,
-        password_reset_token = NULL,
-        password_reset_expires = NULL,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      `,
-      [
-        hashedPassword,
-        user.id,
-      ],
+
+    const updated =
+      await client.query(
+        `
+        UPDATE users
+
+        SET
+          password = $1,
+
+          password_reset_token =
+            NULL,
+
+          password_reset_expires =
+            NULL,
+
+          updated_at =
+            CURRENT_TIMESTAMP
+
+        WHERE id = $2
+
+          AND password_reset_token =
+            $3
+
+        RETURNING id
+        `,
+        [
+          hashedPassword,
+          user.id,
+          tokenHash,
+        ],
+      );
+
+
+    if (
+      !updated.rowCount
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+
+      return res
+        .status(409)
+        .json({
+          message:
+            "El enlace de recuperación ya fue utilizado.",
+        });
+    }
+
+
+    await client.query(
+      "COMMIT",
     );
+
 
     res.json({
       message:
         "Contraseña actualizada correctamente",
     });
   } catch (error) {
+    try {
+      await client.query(
+        "ROLLBACK",
+      );
+    } catch {
+      // Se libera en finally.
+    }
+
+
     next(error);
+  } finally {
+    client.release();
   }
 };
 
+
 /*
+  ============================================================
   PERFIL
+  ============================================================
 */
 
 export const profile = async (
@@ -683,13 +975,16 @@ export const profile = async (
           verified_at,
           created_at,
           updated_at
+
         FROM users
+
         WHERE id = $1
         `,
         [
           req.userId,
         ],
       );
+
 
     if (
       !result.rowCount
@@ -702,6 +997,7 @@ export const profile = async (
         });
     }
 
+
     res.json(
       result.rows[0],
     );
@@ -710,8 +1006,21 @@ export const profile = async (
   }
 };
 
+
 /*
-  ELEGIR / CAMBIAR LIGA
+  ============================================================
+  ELEGIR LIGA
+  ============================================================
+
+  Este endpoint queda disponible
+  para cuentas antiguas que todavía
+  tengan gender = NULL.
+
+  Una vez elegida la liga:
+  NO puede cambiarse desde la app.
+
+  Las cuentas nuevas ya eligen liga
+  durante el registro.
 */
 
 export const chooseLeague = async (
@@ -719,10 +1028,14 @@ export const chooseLeague = async (
   res,
   next,
 ) => {
+  const client =
+    await pool.connect();
+
   try {
     const {
       gender,
     } = req.body;
+
 
     if (
       !LEAGUES.includes(
@@ -737,21 +1050,132 @@ export const chooseLeague = async (
         });
     }
 
+
+    await client.query(
+      "BEGIN",
+    );
+
+
+    /*
+      Bloqueamos la cuenta para evitar
+      dos elecciones simultáneas.
+    */
+
+    const current =
+      await client.query(
+        `
+        SELECT
+          id,
+          role,
+          gender
+
+        FROM users
+
+        WHERE id = $1
+
+        FOR UPDATE
+        `,
+        [
+          req.userId,
+        ],
+      );
+
+
+    if (
+      !current.rowCount
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+
+      return res
+        .status(404)
+        .json({
+          message:
+            "Usuario no encontrado",
+        });
+    }
+
+
+    const user =
+      current.rows[0];
+
+
+    if (
+      user.role !==
+      "player"
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+
+      return res
+        .status(403)
+        .json({
+          message:
+            "Solo los jugadores pueden elegir una liga.",
+        });
+    }
+
+
+    /*
+      Inmutable una vez elegida.
+    */
+
+    if (user.gender) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+
+      return res
+        .status(409)
+        .json({
+          message:
+            "Tu liga ya fue elegida y no puede modificarse desde la aplicación.",
+
+          reason:
+            "league_already_selected",
+        });
+    }
+
+
+    /*
+      rank_position queda solamente
+      por compatibilidad con datos
+      históricos.
+
+      El ranking real se calcula
+      dinámicamente.
+    */
+
     const result =
-      await pool.query(
+      await client.query(
         `
         UPDATE users
+
         SET
-          gender = $1::varchar,
+          gender =
+            $1::varchar,
+
+          city =
+            $2::varchar,
 
           rank_position =
             COALESCE(
               (
                 SELECT
-                  MAX(rank_position)
+                  MAX(
+                    rank_position
+                  )
+
                 FROM users
+
                 WHERE city =
-                    $2::varchar
+                  $2::varchar
+
                   AND gender =
                     $1::varchar
               ),
@@ -763,6 +1187,12 @@ export const chooseLeague = async (
 
         WHERE id = $3
 
+          AND role =
+            'player'
+
+          AND gender
+            IS NULL
+
         RETURNING *
         `,
         [
@@ -772,16 +1202,31 @@ export const chooseLeague = async (
         ],
       );
 
+
     if (
       !result.rowCount
     ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+
       return res
-        .status(404)
+        .status(409)
         .json({
           message:
-            "Usuario no encontrado",
+            "La liga ya fue elegida o la cuenta no puede modificarse.",
+
+          reason:
+            "league_selection_conflict",
         });
     }
+
+
+    await client.query(
+      "COMMIT",
+    );
+
 
     res.json(
       toPublicUser(
@@ -789,6 +1234,17 @@ export const chooseLeague = async (
       ),
     );
   } catch (error) {
+    try {
+      await client.query(
+        "ROLLBACK",
+      );
+    } catch {
+      // Se libera en finally.
+    }
+
+
     next(error);
+  } finally {
+    client.release();
   }
 };
