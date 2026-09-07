@@ -15,6 +15,14 @@
   ============================================================
   CREAR ALERTA SIN DUPLICAR
   ============================================================
+
+  La base de datos tiene una restricción
+  única para:
+
+  match_id + flag_type
+
+  Por eso ON CONFLICT también protege
+  contra dos requests concurrentes.
 */
 
 export const createMatchAuditFlag = async (
@@ -26,39 +34,51 @@ export const createMatchAuditFlag = async (
     message,
   },
 ) => {
-  const result = await client.query(
-    `
-    INSERT INTO match_audit_flags (
-      match_id,
-      flag_type,
-      severity,
-      message
-    )
+  if (
+    !matchId ||
+    !flagType ||
+    !message
+  ) {
+    return null;
+  }
 
-    SELECT
-      $1,
-      $2,
-      $3,
-      $4
+  const result =
+    await client.query(
+      `
+      INSERT INTO match_audit_flags (
+        match_id,
+        flag_type,
+        severity,
+        message
+      )
 
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM match_audit_flags
-      WHERE match_id = $1
-        AND flag_type = $2
-    )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4
+      )
 
-    RETURNING *
-    `,
-    [
-      matchId,
-      flagType,
-      severity,
-      message,
-    ],
+      ON CONFLICT (
+        match_id,
+        flag_type
+      )
+      DO NOTHING
+
+      RETURNING *
+      `,
+      [
+        matchId,
+        flagType,
+        severity,
+        message,
+      ],
+    );
+
+  return (
+    result.rows[0] ||
+    null
   );
-
-  return result.rows[0] || null;
 };
 
 
@@ -70,6 +90,10 @@ export const createMatchAuditFlag = async (
   Alerta si disputaron 4 o más
   partidos entre sí durante
   los últimos 30 días.
+
+  Solamente contamos:
+  - partidos completados
+  - no anulados
 */
 
 export const checkFrequentOpponents = async (
@@ -80,46 +104,64 @@ export const checkFrequentOpponents = async (
     player2Id,
   },
 ) => {
-  const result = await client.query(
-    `
-    SELECT COUNT(*)::int AS total
+  if (
+    !matchId ||
+    !player1Id ||
+    !player2Id ||
+    Number(player1Id) ===
+      Number(player2Id)
+  ) {
+    return null;
+  }
 
-    FROM matches
+  const result =
+    await client.query(
+      `
+      SELECT
+        COUNT(*)::int
+          AS total
 
-    WHERE status = 'completed'
+      FROM matches
 
-      AND annulled_at IS NULL
+      WHERE status =
+        'completed'
 
-      AND completed_at >=
-        CURRENT_TIMESTAMP -
-        INTERVAL '30 days'
+        AND annulled_at
+          IS NULL
 
-      AND (
-        (
-          player1_id = $1
-          AND player2_id = $2
+        AND completed_at >=
+          CURRENT_TIMESTAMP -
+          INTERVAL '30 days'
+
+        AND (
+          (
+            player1_id = $1
+            AND player2_id = $2
+          )
+
+          OR
+
+          (
+            player1_id = $2
+            AND player2_id = $1
+          )
         )
-
-        OR
-
-        (
-          player1_id = $2
-          AND player2_id = $1
-        )
-      )
-    `,
-    [
-      player1Id,
-      player2Id,
-    ],
-  );
+      `,
+      [
+        player1Id,
+        player2Id,
+      ],
+    );
 
   const total =
     Number(
-      result.rows[0]?.total || 0,
+      result.rows[0]?.total ||
+      0,
     );
 
-  if (total < 4) {
+  if (
+    total < 4
+  ) {
     return null;
   }
 
@@ -130,6 +172,9 @@ export const checkFrequentOpponents = async (
 
       flagType:
         "frequent_opponents",
+
+      severity:
+        "warning",
 
       message:
         `Estos jugadores disputaron ${total} partidos entre sí durante los últimos 30 días.`,
@@ -143,17 +188,25 @@ export const checkFrequentOpponents = async (
   CONCENTRACIÓN DE ELO
   ============================================================
 
-  Esta regla solamente considera partidos
-  posteriores a los primeros 5 partidos
-  nivelatorios de cada jugador.
-
   REGLA:
 
-  - últimos 60 días
-  - mínimo 60 Elo positivo
-  - mínimo 3 victorias contra el mismo rival
-  - 70% o más del Elo positivo proviene
-    de ese rival
+  - ignora los primeros 5 partidos
+    nivelatorios del jugador
+
+  - analiza solamente los últimos
+    60 días
+
+  - necesita mínimo 60 puntos
+    de Elo positivo
+
+  - necesita mínimo 3 victorias
+    contra el mismo rival
+
+  - 70% o más del Elo positivo
+    debe provenir de ese rival
+
+  Los eventos revertidos por
+  administración quedan excluidos.
 */
 
 export const checkEloConcentration = async (
@@ -163,17 +216,22 @@ export const checkEloConcentration = async (
     playerId,
   },
 ) => {
+  if (
+    !matchId ||
+    !playerId
+  ) {
+    return null;
+  }
+
+
   /*
-    Primero numeramos TODOS los partidos
-    que modificaron Elo para ese jugador.
+    Numeramos todos los eventos
+    válidos de partidos del jugador.
 
-    De esta forma podemos excluir realmente
-    sus primeros cinco partidos.
-
-    No alcanza con mirar la fecha,
-    porque los partidos nivelatorios
-    también pueden estar dentro
-    de los últimos 60 días.
+    De esta forma los primeros
+    cinco eventos quedan definidos
+    cronológicamente y no solamente
+    por una ventana de fechas.
   */
 
   const totalResult =
@@ -181,31 +239,49 @@ export const checkEloConcentration = async (
       `
       WITH ordered_events AS (
         SELECT
-          e.*,
+          e.id,
+          e.match_id,
+          e.elo_change,
+          e.created_at,
 
           ROW_NUMBER() OVER (
             ORDER BY
               e.created_at ASC,
               e.id ASC
-          ) AS match_number
+          )::int
+            AS match_number
 
         FROM elo_events e
 
-        WHERE e.user_id = $1
+        JOIN matches m
+          ON m.id =
+             e.match_id
+
+        WHERE e.user_id =
+          $1
 
           AND e.event_type =
             'match_result'
 
           AND e.reversed_at
             IS NULL
+
+          AND m.status =
+            'completed'
+
+          AND m.annulled_at
+            IS NULL
       )
 
       SELECT
         COALESCE(
-          SUM(elo_change)
-            FILTER (
-              WHERE elo_change > 0
-            ),
+          SUM(
+            elo_change
+          )
+          FILTER (
+            WHERE
+              elo_change > 0
+          ),
           0
         )::int
           AS total_positive_elo
@@ -223,19 +299,15 @@ export const checkEloConcentration = async (
       ],
     );
 
+
   const totalPositiveElo =
     Number(
       totalResult
         .rows[0]
         ?.total_positive_elo ||
-        0,
+      0,
     );
 
-
-  /*
-    Necesitamos al menos
-    60 Elo positivo.
-  */
 
   if (
     totalPositiveElo < 60
@@ -245,11 +317,10 @@ export const checkEloConcentration = async (
 
 
   /*
-    Ahora calculamos de qué rival
-    provino ese Elo positivo.
-
-    Nuevamente excluimos los primeros
-    cinco partidos del jugador.
+    Tomamos los eventos positivos
+    posteriores a los 5 partidos
+    nivelatorios y agrupamos el Elo
+    según el rival.
   */
 
   const rivalResult =
@@ -257,27 +328,47 @@ export const checkEloConcentration = async (
       `
       WITH ordered_events AS (
         SELECT
-          e.*,
+          e.id,
+          e.match_id,
+          e.elo_change,
+          e.created_at,
 
           ROW_NUMBER() OVER (
             ORDER BY
               e.created_at ASC,
               e.id ASC
-          ) AS match_number
+          )::int
+            AS match_number
 
         FROM elo_events e
 
-        WHERE e.user_id = $1
+        JOIN matches valid_match
+          ON valid_match.id =
+             e.match_id
+
+        WHERE e.user_id =
+          $1
 
           AND e.event_type =
             'match_result'
 
           AND e.reversed_at
             IS NULL
+
+          AND valid_match.status =
+            'completed'
+
+          AND valid_match.annulled_at
+            IS NULL
       ),
 
       eligible_events AS (
-        SELECT *
+        SELECT
+          id,
+          match_id,
+          elo_change,
+          created_at
+
         FROM ordered_events
 
         WHERE match_number > 5
@@ -293,8 +384,11 @@ export const checkEloConcentration = async (
         CASE
           WHEN m.player1_id = $1
             THEN m.player2_id
-          ELSE m.player1_id
-        END AS opponent_id,
+
+          ELSE
+            m.player1_id
+        END
+          AS opponent_id,
 
         opponent.name
           AS opponent_name,
@@ -302,8 +396,11 @@ export const checkEloConcentration = async (
         COUNT(*)::int
           AS wins_against_opponent,
 
-        SUM(
-          e.elo_change
+        COALESCE(
+          SUM(
+            e.elo_change
+          ),
+          0
         )::int
           AS elo_from_opponent
 
@@ -318,7 +415,9 @@ export const checkEloConcentration = async (
           CASE
             WHEN m.player1_id = $1
               THEN m.player2_id
-            ELSE m.player1_id
+
+            ELSE
+              m.player1_id
           END
 
       WHERE m.status =
@@ -332,7 +431,9 @@ export const checkEloConcentration = async (
         opponent.name
 
       ORDER BY
-        elo_from_opponent DESC
+        elo_from_opponent DESC,
+        wins_against_opponent DESC,
+        opponent_id ASC
 
       LIMIT 1
       `,
@@ -341,26 +442,43 @@ export const checkEloConcentration = async (
       ],
     );
 
+
   if (
     !rivalResult.rowCount
   ) {
     return null;
   }
 
+
   const rival =
     rivalResult.rows[0];
+
 
   const winsAgainstOpponent =
     Number(
       rival
-        .wins_against_opponent,
+        .wins_against_opponent ||
+      0,
     );
+
 
   const eloFromOpponent =
     Number(
       rival
-        .elo_from_opponent,
+        .elo_from_opponent ||
+      0,
     );
+
+
+  if (
+    !Number.isFinite(
+      eloFromOpponent,
+    ) ||
+    eloFromOpponent <= 0
+  ) {
+    return null;
+  }
+
 
   const percentage =
     Math.round(
@@ -371,14 +489,6 @@ export const checkEloConcentration = async (
         100,
     );
 
-
-  /*
-    No alcanza solamente
-    con el porcentaje.
-
-    También necesitamos mínimo
-    3 victorias contra ese rival.
-  */
 
   if (
     winsAgainstOpponent < 3 ||
