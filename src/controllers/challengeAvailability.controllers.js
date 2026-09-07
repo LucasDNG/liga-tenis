@@ -29,12 +29,6 @@ export const getChallengeAvailability =
       await pool.connect();
 
     try {
-      /*
-        =====================================================
-        USUARIO ACTUAL + POSICIÓN
-        =====================================================
-      */
-
       const userResult =
         await client.query(
           `
@@ -73,9 +67,6 @@ export const getChallengeAvailability =
           ],
         );
 
-      /*
-        Admin u otro usuario no jugador.
-      */
       if (
         !userResult.rowCount
       ) {
@@ -86,12 +77,6 @@ export const getChallengeAvailability =
 
       const currentUser =
         userResult.rows[0];
-
-      /*
-        =====================================================
-        JUGADORES DE LA MISMA LIGA
-        =====================================================
-      */
 
       const playersResult =
         await client.query(
@@ -136,18 +121,151 @@ export const getChallengeAvailability =
           ],
         );
 
+      /*
+        Consultamos desafíos activos
+        una sola vez.
+
+        Antes se hacía una query por
+        cada jugador del ranking.
+      */
+      const activeChallengesResult =
+        await client.query(
+          `
+          SELECT
+            id,
+            challenger_id,
+            challenged_id,
+            status
+
+          FROM challenges
+
+          WHERE status IN (
+            'pending',
+            'accepted'
+          )
+
+          AND (
+            challenger_id = $1
+            OR challenged_id = $1
+          )
+          `,
+          [
+            currentUser.id,
+          ],
+        );
+
+      const activeByOpponent =
+        new Map();
+
+      for (
+        const challenge of
+        activeChallengesResult.rows
+      ) {
+        const opponentId =
+          challenge.challenger_id ===
+          currentUser.id
+            ? challenge.challenged_id
+            : challenge.challenger_id;
+
+        activeByOpponent.set(
+          opponentId,
+          challenge,
+        );
+      }
+
+      /*
+        Traemos de una sola vez
+        todos los rechazos hechos
+        contra desafíos enviados
+        por el usuario actual.
+      */
+      const cooldownsResult =
+        await client.query(
+          `
+          SELECT DISTINCT ON (
+            challenged_id
+          )
+            challenged_id,
+            rejected_at,
+
+            rejected_at +
+              INTERVAL '7 days'
+              AS available_at
+
+          FROM challenges
+
+          WHERE challenger_id = $1
+            AND status = 'rejected'
+            AND rejected_at IS NOT NULL
+
+          ORDER BY
+            challenged_id,
+            rejected_at DESC
+          `,
+          [
+            currentUser.id,
+          ],
+        );
+
+      const cooldownByOpponent =
+        new Map();
+
+      for (
+        const cooldown of
+        cooldownsResult.rows
+      ) {
+        cooldownByOpponent.set(
+          cooldown.challenged_id,
+          cooldown,
+        );
+      }
+
+      /*
+        Último desafío resuelto por rival
+        para aplicar la regla de rotación.
+      */
+      const lastResolvedResult =
+        await client.query(
+          `
+          SELECT DISTINCT ON (
+            challenged_id
+          )
+            challenged_id,
+            resolved_at
+
+          FROM challenges
+
+          WHERE challenger_id = $1
+            AND resolved_at IS NOT NULL
+
+          ORDER BY
+            challenged_id,
+            resolved_at DESC
+          `,
+          [
+            currentUser.id,
+          ],
+        );
+
+      const lastResolvedByOpponent =
+        new Map();
+
+      for (
+        const row of
+        lastResolvedResult.rows
+      ) {
+        lastResolvedByOpponent.set(
+          row.challenged_id,
+          row.resolved_at,
+        );
+      }
+
       const availability = {};
 
       for (
         const player of
         playersResult.rows
       ) {
-        /*
-          ===================================================
-          UNO MISMO
-          ===================================================
-        */
-
         if (
           player.id ===
           currentUser.id
@@ -167,12 +285,6 @@ export const getChallengeAvailability =
 
           continue;
         }
-
-        /*
-          ===================================================
-          CUENTA PROPIA SIN VERIFICAR
-          ===================================================
-        */
 
         if (
           currentUser
@@ -195,12 +307,6 @@ export const getChallengeAvailability =
           continue;
         }
 
-        /*
-          ===================================================
-          RIVAL SIN VERIFICAR
-          ===================================================
-        */
-
         if (
           player
             .verification_status !==
@@ -221,12 +327,6 @@ export const getChallengeAvailability =
 
           continue;
         }
-
-        /*
-          ===================================================
-          DISTANCIA DEL RANKING
-          ===================================================
-        */
 
         const difference =
           currentUser.rank_position -
@@ -270,54 +370,12 @@ export const getChallengeAvailability =
           continue;
         }
 
-        /*
-          ===================================================
-          DESAFÍO / PARTIDO ACTIVO
-          ===================================================
-        */
-
-        const activeResult =
-          await client.query(
-            `
-            SELECT
-              id,
-              status
-
-            FROM challenges
-
-            WHERE status IN (
-              'pending',
-              'accepted'
-            )
-
-            AND (
-              (
-                challenger_id = $1
-                AND challenged_id = $2
-              )
-
-              OR
-
-              (
-                challenger_id = $2
-                AND challenged_id = $1
-              )
-            )
-
-            LIMIT 1
-            `,
-            [
-              currentUser.id,
-              player.id,
-            ],
+        const active =
+          activeByOpponent.get(
+            player.id,
           );
 
-        if (
-          activeResult.rowCount
-        ) {
-          const active =
-            activeResult.rows[0];
-
+        if (active) {
           availability[
             player.id
           ] = {
@@ -337,49 +395,12 @@ export const getChallengeAvailability =
           continue;
         }
 
-        /*
-          ===================================================
-          COOLDOWN DE 7 DÍAS
-
-          Importante:
-          buscamos solamente cuando YO fui quien
-          desafió y el rival me rechazó.
-          ===================================================
-        */
-
-        const cooldownResult =
-          await client.query(
-            `
-            SELECT
-              rejected_at,
-
-              rejected_at +
-                INTERVAL '7 days'
-                AS available_at
-
-            FROM challenges
-
-            WHERE challenger_id = $1
-              AND challenged_id = $2
-              AND status = 'rejected'
-              AND rejected_at IS NOT NULL
-
-            ORDER BY rejected_at DESC
-
-            LIMIT 1
-            `,
-            [
-              currentUser.id,
-              player.id,
-            ],
+        const cooldown =
+          cooldownByOpponent.get(
+            player.id,
           );
 
-        if (
-          cooldownResult.rowCount
-        ) {
-          const cooldown =
-            cooldownResult.rows[0];
-
+        if (cooldown) {
           const availableAt =
             new Date(
               cooldown.available_at,
@@ -411,53 +432,19 @@ export const getChallengeAvailability =
           }
         }
 
-        /*
-          ===================================================
-          RUEDA DEL JUGADOR DESAFIADO
-
-          Si ya jugaste/resolviste con ese jugador,
-          pero él tiene desafíos anteriores de otros
-          rivales esperando, no podés volver a meterte
-          adelante.
-          ===================================================
-        */
-
         const lastResolved =
-          await client.query(
-            `
-            SELECT resolved_at
-
-            FROM challenges
-
-            WHERE challenger_id = $1
-              AND challenged_id = $2
-              AND resolved_at IS NOT NULL
-
-            ORDER BY resolved_at DESC
-
-            LIMIT 1
-            `,
-            [
-              currentUser.id,
-              player.id,
-            ],
+          lastResolvedByOpponent.get(
+            player.id,
           );
 
-        if (
-          lastResolved.rowCount
-        ) {
+        if (lastResolved) {
           const waiting =
             await client.query(
               `
               SELECT
-                c.id,
-                u.name
+                c.id
 
               FROM challenges c
-
-              JOIN users u
-                ON u.id =
-                   c.challenger_id
 
               WHERE
                 c.challenged_id = $1
@@ -471,15 +458,15 @@ export const getChallengeAvailability =
 
               ORDER BY
                 c.historical_meetings_at_creation ASC,
-                c.created_at ASC
+                c.created_at ASC,
+                c.id ASC
 
               LIMIT 1
               `,
               [
                 player.id,
                 currentUser.id,
-                lastResolved.rows[0]
-                  .resolved_at,
+                lastResolved,
               ],
             );
 
@@ -502,12 +489,6 @@ export const getChallengeAvailability =
             continue;
           }
         }
-
-        /*
-          ===================================================
-          HABILITADO
-          ===================================================
-        */
 
         availability[
           player.id

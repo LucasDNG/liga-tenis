@@ -1,8 +1,10 @@
 import { pool } from "../db.js";
+
 import {
   LEAGUE_CITY,
   LEAGUES,
 } from "../constants/league.js";
+
 
 export const getRanking = async (
   req,
@@ -11,10 +13,14 @@ export const getRanking = async (
 ) => {
   try {
     const gender =
-      req.query.gender || "male";
+      req.query.gender ||
+      "male";
+
 
     if (
-      !LEAGUES.includes(gender)
+      !LEAGUES.includes(
+        gender,
+      )
     ) {
       return res
         .status(400)
@@ -23,6 +29,7 @@ export const getRanking = async (
             "Liga inválida",
         });
     }
+
 
     const result =
       await pool.query(
@@ -41,13 +48,20 @@ export const getRanking = async (
               rating DESC,
               matches_played DESC,
               id ASC
-          )::int AS rank_position
+          )::int
+            AS rank_position
 
         FROM users
 
         WHERE city = $1
+
           AND gender = $2
-          AND role = 'player'
+
+          AND role =
+            'player'
+
+          AND verification_status =
+            'verified'
 
         ORDER BY
           rating DESC,
@@ -60,10 +74,16 @@ export const getRanking = async (
         ],
       );
 
+
     res.json({
-      league: gender,
-      city: LEAGUE_CITY,
-      players: result.rows,
+      league:
+        gender,
+
+      city:
+        LEAGUE_CITY,
+
+      players:
+        result.rows,
     });
   } catch (error) {
     next(error);
