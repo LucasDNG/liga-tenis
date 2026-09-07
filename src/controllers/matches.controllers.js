@@ -11,11 +11,6 @@ const PLACEMENT_MATCHES = 5;
 const PLACEMENT_K = 64;
 const NORMAL_K = 32;
 
-/*
-  Resultado cargado antes
-  de 40 minutos desde el
-  horario programado.
-*/
 const TOO_FAST_RESULT_MINUTES = 40;
 
 
@@ -147,8 +142,7 @@ const parseScore = (
 
   return {
     winnerSide:
-      p1Sets >
-      p2Sets
+      p1Sets > p2Sets
         ? 1
         : 2,
   };
@@ -354,11 +348,6 @@ export const submitMatchResult =
         matchResult.rows[0];
 
 
-      /*
-        El partido debe tener
-        horario programado.
-      */
-
       if (
         !match.scheduled_at
       ) {
@@ -383,15 +372,30 @@ export const submitMatchResult =
           match.scheduled_at,
         ).getTime();
 
+      if (
+        Number.isNaN(
+          scheduledTime,
+        )
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(400)
+          .json({
+            message:
+              "La fecha y hora registradas para este partido no son válidas.",
+
+            reason:
+              "invalid_schedule",
+          });
+      }
+
+
       const now =
         Date.now();
 
-
-      /*
-        No permitimos cargar
-        un resultado antes
-        del horario programado.
-      */
 
       if (
         scheduledTime >
@@ -417,8 +421,7 @@ export const submitMatchResult =
 
 
       const winnerId =
-        parsed.winnerSide ===
-        1
+        parsed.winnerSide === 1
           ? match.player1_id
           : match.player2_id;
 
@@ -446,6 +449,12 @@ export const submitMatchResult =
 
           WHERE id = $4
 
+            AND status =
+              'pending'
+
+            AND annulled_at
+              IS NULL
+
           RETURNING *
           `,
           [
@@ -461,9 +470,24 @@ export const submitMatchResult =
         );
 
 
-      /*
-        AUDITORÍA
-      */
+      if (
+        !updated.rowCount
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El estado del partido cambió. Actualizá la página e intentá nuevamente.",
+
+            reason:
+              "match_state_changed",
+          });
+      }
+
 
       await client.query(
         `
@@ -498,13 +522,6 @@ export const submitMatchResult =
       );
 
 
-      /*
-        ANTIFRAUDE
-
-        Menos de 40 minutos
-        desde el horario del partido.
-      */
-
       const minutesSinceStart =
         Math.floor(
           (
@@ -516,8 +533,7 @@ export const submitMatchResult =
 
 
       if (
-        minutesSinceStart >=
-          0 &&
+        minutesSinceStart >= 0 &&
         minutesSinceStart <
           TOO_FAST_RESULT_MINUTES
       ) {
@@ -550,9 +566,13 @@ export const submitMatchResult =
           updated.rows[0],
       });
     } catch (error) {
-      await client.query(
-        "ROLLBACK",
-      );
+      try {
+        await client.query(
+          "ROLLBACK",
+        );
+      } catch {
+        // La conexión se libera abajo.
+      }
 
       next(error);
     } finally {
@@ -582,6 +602,62 @@ export const rejectMatchResult =
       );
 
 
+      const found =
+        await client.query(
+          `
+          SELECT *
+
+          FROM matches
+
+          WHERE id = $1
+
+            AND status =
+              'awaiting_confirmation'
+
+            AND annulled_at
+              IS NULL
+
+            AND result_submitted_by
+              <> $2
+
+            AND (
+              player1_id = $2
+              OR
+              player2_id = $2
+            )
+
+          FOR UPDATE
+          `,
+          [
+            req.params.id,
+            req.userId,
+          ],
+        );
+
+
+      if (
+        !found.rowCount
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(404)
+          .json({
+            message:
+              "Resultado para confirmar no encontrado",
+
+            reason:
+              "result_not_found",
+          });
+      }
+
+
+      const current =
+        found.rows[0];
+
+
       const result =
         await client.query(
           `
@@ -601,7 +677,10 @@ export const rejectMatchResult =
               NULL,
 
             result_rejection_count =
-              result_rejection_count + 1,
+              COALESCE(
+                result_rejection_count,
+                0
+              ) + 1,
 
             status =
               'pending'
@@ -611,23 +690,10 @@ export const rejectMatchResult =
             AND status =
               'awaiting_confirmation'
 
-            AND result_submitted_by
-              <> $2
-
-            AND annulled_at
-              IS NULL
-
-            AND (
-              player1_id = $2
-              OR
-              player2_id = $2
-            )
-
           RETURNING *
           `,
           [
-            req.params.id,
-            req.userId,
+            current.id,
           ],
         );
 
@@ -640,13 +706,13 @@ export const rejectMatchResult =
         );
 
         return res
-          .status(404)
+          .status(409)
           .json({
             message:
-              "Resultado para confirmar no encontrado",
+              "El estado del resultado cambió. Actualizá la página.",
 
             reason:
-              "result_not_found",
+              "result_state_changed",
           });
       }
 
@@ -682,18 +748,22 @@ export const rejectMatchResult =
             rejection_count:
               match
                 .result_rejection_count,
+
+            rejected_submission_by:
+              current
+                .result_submitted_by,
+
+            rejected_winner_id:
+              current
+                .proposed_winner_id,
+
+            rejected_score:
+              current
+                .proposed_score,
           }),
         ],
       );
 
-
-      /*
-        Dos rechazos o más:
-        alerta administrativa.
-
-        createMatchAuditFlag
-        evita duplicados.
-      */
 
       if (
         match
@@ -730,9 +800,13 @@ export const rejectMatchResult =
             .result_rejection_count,
       });
     } catch (error) {
-      await client.query(
-        "ROLLBACK",
-      );
+      try {
+        await client.query(
+          "ROLLBACK",
+        );
+      } catch {
+        // La conexión se libera abajo.
+      }
 
       next(error);
     } finally {
@@ -762,50 +836,35 @@ export const confirmMatchResult =
       );
 
 
+      /*
+        Primero bloqueamos el partido.
+
+        Esto evita dos confirmaciones
+        simultáneas del mismo resultado.
+      */
       const found =
         await client.query(
           `
-          SELECT
-            m.*,
+          SELECT *
 
-            u1.rating AS
-              p1_rating,
-
-            u1.matches_played AS
-              p1_matches_played,
-
-            u2.rating AS
-              p2_rating,
-
-            u2.matches_played AS
-              p2_matches_played
-
-          FROM matches m
-
-          JOIN users u1
-            ON u1.id =
-               m.player1_id
-
-          JOIN users u2
-            ON u2.id =
-               m.player2_id
+          FROM matches
 
           WHERE
-            m.id = $1
+            id = $1
 
-            AND m.status =
+            AND status =
               'awaiting_confirmation'
 
-            AND m.result_submitted_by
+            AND result_submitted_by
               <> $2
 
-            AND m.annulled_at
+            AND annulled_at
               IS NULL
 
             AND (
-              m.player1_id = $2
+              player1_id = $2
               OR
-              m.player2_id = $2
+              player2_id = $2
             )
 
           FOR UPDATE
@@ -840,48 +899,269 @@ export const confirmMatchResult =
         found.rows[0];
 
 
+      /*
+        Volvemos a validar el score
+        almacenado antes de tocar Elo.
+      */
+      let proposedScore =
+        match.proposed_score;
+
+      if (
+        typeof proposedScore ===
+        "string"
+      ) {
+        try {
+          proposedScore =
+            JSON.parse(
+              proposedScore,
+            );
+        } catch {
+          proposedScore =
+            null;
+        }
+      }
+
+
+      const parsed =
+        parseScore(
+          proposedScore,
+        );
+
+
+      if (
+        parsed.error
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El resultado almacenado no es válido y no puede confirmarse.",
+
+            reason:
+              "invalid_stored_score",
+          });
+      }
+
+
+      const expectedWinnerId =
+        parsed.winnerSide === 1
+          ? match.player1_id
+          : match.player2_id;
+
+
+      if (
+        Number(
+          match.proposed_winner_id,
+        ) !==
+        Number(
+          expectedWinnerId,
+        )
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El ganador almacenado no coincide con el resultado cargado.",
+
+            reason:
+              "winner_score_mismatch",
+          });
+      }
+
+
+      /*
+        Bloqueamos AMBOS jugadores
+        antes de leer sus Elo.
+
+        El ORDER BY id hace que distintas
+        transacciones bloqueen jugadores
+        siempre en el mismo orden.
+      */
+      const players =
+        await client.query(
+          `
+          SELECT
+            id,
+            rating,
+            matches_played
+
+          FROM users
+
+          WHERE id IN (
+            $1,
+            $2
+          )
+
+          ORDER BY id ASC
+
+          FOR UPDATE
+          `,
+          [
+            match.player1_id,
+            match.player2_id,
+          ],
+        );
+
+
+      if (
+        players.rowCount !== 2
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "No se pudieron cargar correctamente los dos jugadores del partido.",
+
+            reason:
+              "players_not_found",
+          });
+      }
+
+
+      const player1 =
+        players.rows.find(
+          (player) =>
+            Number(player.id) ===
+            Number(
+              match.player1_id,
+            ),
+        );
+
+
+      const player2 =
+        players.rows.find(
+          (player) =>
+            Number(player.id) ===
+            Number(
+              match.player2_id,
+            ),
+        );
+
+
+      if (
+        !player1 ||
+        !player2
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Los jugadores del partido no son válidos.",
+
+            reason:
+              "invalid_players",
+          });
+      }
+
+
       const winnerId =
-        match
-          .proposed_winner_id;
+        Number(
+          match
+            .proposed_winner_id,
+        );
 
 
       const loserId =
         winnerId ===
-        match.player1_id
-          ? match.player2_id
-          : match.player1_id;
+        Number(
+          match.player1_id,
+        )
+          ? Number(
+              match.player2_id,
+            )
+          : Number(
+              match.player1_id,
+            );
+
+
+      const winnerPlayer =
+        winnerId ===
+        Number(
+          player1.id,
+        )
+          ? player1
+          : player2;
+
+
+      const loserPlayer =
+        loserId ===
+        Number(
+          player1.id,
+        )
+          ? player1
+          : player2;
 
 
       const winnerRating =
-        winnerId ===
-        match.player1_id
-          ? match.p1_rating
-          : match.p2_rating;
+        Number(
+          winnerPlayer.rating,
+        );
 
 
       const loserRating =
-        winnerId ===
-        match.player1_id
-          ? match.p2_rating
-          : match.p1_rating;
+        Number(
+          loserPlayer.rating,
+        );
 
 
       const winnerMatchesPlayed =
-        winnerId ===
-        match.player1_id
-          ? match
-              .p1_matches_played
-          : match
-              .p2_matches_played;
+        Number(
+          winnerPlayer
+            .matches_played,
+        );
 
 
       const loserMatchesPlayed =
-        winnerId ===
-        match.player1_id
-          ? match
-              .p2_matches_played
-          : match
-              .p1_matches_played;
+        Number(
+          loserPlayer
+            .matches_played,
+        );
+
+
+      if (
+        !Number.isFinite(
+          winnerRating,
+        ) ||
+        !Number.isFinite(
+          loserRating,
+        ) ||
+        !Number.isInteger(
+          winnerMatchesPlayed,
+        ) ||
+        !Number.isInteger(
+          loserMatchesPlayed,
+        )
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Los datos de ranking de los jugadores no son válidos.",
+
+            reason:
+              "invalid_rating_data",
+          });
+      }
 
 
       const winnerK =
@@ -895,10 +1175,6 @@ export const confirmMatchResult =
           loserMatchesPlayed,
         );
 
-
-      /*
-        Probabilidad esperada.
-      */
 
       const expectedWinner =
         1 /
@@ -956,10 +1232,6 @@ export const confirmMatchResult =
         loserAfter;
 
 
-      /*
-        ACTUALIZAR GANADOR
-      */
-
       await client.query(
         `
         UPDATE users
@@ -981,10 +1253,6 @@ export const confirmMatchResult =
         ],
       );
 
-
-      /*
-        ACTUALIZAR PERDEDOR
-      */
 
       await client.query(
         `
@@ -1008,75 +1276,113 @@ export const confirmMatchResult =
       );
 
 
-      /*
-        CERRAR PARTIDO
-      */
+      const completedMatch =
+        await client.query(
+          `
+          UPDATE matches
 
-      await client.query(
-        `
-        UPDATE matches
+          SET
+            winner_id =
+              proposed_winner_id,
 
-        SET
-          winner_id =
-            proposed_winner_id,
+            score =
+              proposed_score,
 
-          score =
-            proposed_score,
+            status =
+              'completed',
 
-          status =
-            'completed',
+            completed_at =
+              CURRENT_TIMESTAMP,
 
-          completed_at =
-            CURRENT_TIMESTAMP,
+            result_confirmed_at =
+              CURRENT_TIMESTAMP,
 
-          result_confirmed_at =
-            CURRENT_TIMESTAMP,
+            result_confirmed_by =
+              $1
 
-          result_confirmed_by =
-            $1
+          WHERE id = $2
 
-        WHERE id = $2
-        `,
-        [
-          req.userId,
-          match.id,
-        ],
-      );
+            AND status =
+              'awaiting_confirmation'
+
+            AND annulled_at
+              IS NULL
+
+          RETURNING *
+          `,
+          [
+            req.userId,
+            match.id,
+          ],
+        );
 
 
-      /*
-        CERRAR DESAFÍO
+      if (
+        !completedMatch.rowCount
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
 
-        Esto libera el siguiente
-        rival de la rueda.
-      */
+        return res
+          .status(409)
+          .json({
+            message:
+              "El estado del partido cambió antes de poder confirmarlo.",
+
+            reason:
+              "match_state_changed",
+          });
+      }
+
 
       if (
         match.challenge_id
       ) {
-        await client.query(
-          `
-          UPDATE challenges
+        const challenge =
+          await client.query(
+            `
+            UPDATE challenges
 
-          SET
-            status =
-              'completed',
+            SET
+              status =
+                'completed',
 
-            resolved_at =
-              CURRENT_TIMESTAMP
+              resolved_at =
+                CURRENT_TIMESTAMP
 
-          WHERE id = $1
-          `,
-          [
-            match.challenge_id,
-          ],
-        );
+            WHERE id = $1
+
+              AND status =
+                'accepted'
+
+            RETURNING id
+            `,
+            [
+              match.challenge_id,
+            ],
+          );
+
+
+        if (
+          !challenge.rowCount
+        ) {
+          await client.query(
+            "ROLLBACK",
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "El desafío asociado no se encuentra en un estado válido para finalizar.",
+
+              reason:
+                "challenge_state_invalid",
+            });
+        }
       }
 
-
-      /*
-        ELO DEL GANADOR
-      */
 
       await client.query(
         `
@@ -1116,10 +1422,6 @@ export const confirmMatchResult =
       );
 
 
-      /*
-        ELO DEL PERDEDOR
-      */
-
       await client.query(
         `
         INSERT INTO elo_events (
@@ -1158,10 +1460,6 @@ export const confirmMatchResult =
       );
 
 
-      /*
-        AUDITORÍA
-      */
-
       await client.query(
         `
         INSERT INTO audit_events (
@@ -1199,24 +1497,11 @@ export const confirmMatchResult =
               -realLoserDelta,
 
             score:
-              match
-                .proposed_score,
+              proposedScore,
           }),
         ],
       );
 
-
-      /*
-        ======================================================
-        ANTIFRAUDE
-        ======================================================
-      */
-
-
-      /*
-        1. Frecuencia de partidos
-        entre estos dos jugadores.
-      */
 
       await checkFrequentOpponents(
         client,
@@ -1232,15 +1517,6 @@ export const confirmMatchResult =
         },
       );
 
-
-      /*
-        2. Concentración del Elo
-        del ganador.
-
-        Solamente tiene sentido
-        comprobar el jugador que
-        obtuvo Elo positivo.
-      */
 
       await checkEloConcentration(
         client,
@@ -1293,9 +1569,13 @@ export const confirmMatchResult =
           true,
       });
     } catch (error) {
-      await client.query(
-        "ROLLBACK",
-      );
+      try {
+        await client.query(
+          "ROLLBACK",
+        );
+      } catch {
+        // La conexión se libera abajo.
+      }
 
       next(error);
     } finally {
