@@ -16,8 +16,78 @@ const TOO_FAST_RESULT_MINUTES = 40;
 
 /*
   ============================================================
+  VALIDACIÓN DE VALOR DE GAME
+  ============================================================
+
+  No usamos Number() directamente sobre
+  cualquier cosa porque:
+
+  Number("")   -> 0
+  Number(null) -> 0
+  Number(false)-> 0
+
+  Eso podía convertir datos inválidos en
+  resultados aparentemente válidos.
+*/
+
+const parseGameValue = (
+  value,
+) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    typeof value === "boolean"
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value !== "number" &&
+    typeof value !== "string"
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value === "string" &&
+    value.trim() === ""
+  ) {
+    return null;
+  }
+
+  const number =
+    Number(value);
+
+  if (
+    !Number.isInteger(
+      number,
+    )
+  ) {
+    return null;
+  }
+
+  return number;
+};
+
+
+/*
+  ============================================================
   VALIDACIÓN DE SET
   ============================================================
+
+  Válidos:
+
+  6-0
+  6-1
+  6-2
+  6-3
+  6-4
+
+  7-5
+  7-6
+
+  y sus inversos.
 */
 
 const isValidSet = (
@@ -33,11 +103,19 @@ const isValidSet = (
     return false;
   }
 
+
   const max =
-    Math.max(a, b);
+    Math.max(
+      a,
+      b,
+    );
 
   const min =
-    Math.min(a, b);
+    Math.min(
+      a,
+      b,
+    );
+
 
   if (
     max === 6 &&
@@ -45,6 +123,7 @@ const isValidSet = (
   ) {
     return true;
   }
+
 
   if (
     max === 7 &&
@@ -56,47 +135,103 @@ const isValidSet = (
     return true;
   }
 
+
   return false;
 };
 
 
 /*
   ============================================================
-  VALIDAR RESULTADO
+  VALIDAR RESULTADO COMPLETO
   ============================================================
+
+  Reglas:
+
+  - exactamente 2 o 3 sets
+  - ningún valor vacío/null
+  - cada set debe ser válido
+  - con 2 sets tiene que ser 2-0
+  - con 3 sets los primeros dos
+    obligatoriamente tienen que estar 1-1
+  - el tercer set define al ganador
+
+  Esto evita, por ejemplo:
+
+  6-0 / 6-0 / 0-6
+
+  Ese resultado tiene un jugador con
+  dos sets ganados, pero el tercero nunca
+  debería haberse jugado.
 */
 
 const parseScore = (
   score,
 ) => {
   if (
-    !Array.isArray(score) ||
-    score.length < 2 ||
-    score.length > 3
+    !Array.isArray(
+      score,
+    ) ||
+    (
+      score.length !== 2 &&
+      score.length !== 3
+    )
   ) {
     return {
       error:
-        "El partido debe tener 2 o 3 sets",
+        "El partido debe tener exactamente 2 o 3 sets",
     };
   }
 
-  let p1Sets = 0;
-  let p2Sets = 0;
+
+  const normalizedScore = [];
+  const setWinners = [];
+
 
   for (
     let i = 0;
     i < score.length;
     i++
   ) {
+    const currentSet =
+      score[i];
+
+
+    if (
+      !currentSet ||
+      typeof currentSet !==
+        "object" ||
+      Array.isArray(
+        currentSet,
+      )
+    ) {
+      return {
+        error:
+          `El Set ${i + 1} no tiene un formato válido.`,
+      };
+    }
+
+
     const a =
-      Number(
-        score[i]?.p1,
+      parseGameValue(
+        currentSet.p1,
       );
 
     const b =
-      Number(
-        score[i]?.p2,
+      parseGameValue(
+        currentSet.p2,
       );
+
+
+    if (
+      a === null ||
+      b === null
+    ) {
+      return {
+        error:
+          `Completá correctamente los dos valores del Set ${i + 1}.`,
+      };
+    }
+
 
     if (
       !isValidSet(
@@ -110,41 +245,82 @@ const parseScore = (
       };
     }
 
-    if (a > b) {
-      p1Sets++;
-    } else {
-      p2Sets++;
+
+    normalizedScore.push({
+      p1:
+        a,
+
+      p2:
+        b,
+    });
+
+
+    setWinners.push(
+      a > b
+        ? 1
+        : 2,
+    );
+  }
+
+
+  /*
+    DOS SETS
+
+    Solo es válido 2-0.
+  */
+
+  if (
+    normalizedScore.length ===
+    2
+  ) {
+    if (
+      setWinners[0] !==
+      setWinners[1]
+    ) {
+      return {
+        error:
+          "Si cada jugador ganó un set, tenés que cargar el tercer set.",
+      };
     }
-  }
 
-  if (
-    p1Sets !== 2 &&
-    p2Sets !== 2
-  ) {
+
     return {
-      error:
-        "El resultado no define un ganador al mejor de 3 sets",
+      winnerSide:
+        setWinners[0],
+
+      normalizedScore,
     };
   }
 
+
+  /*
+    TRES SETS
+
+    Los dos primeros deben
+    necesariamente estar 1-1.
+  */
+
   if (
-    score.length === 3 &&
-    (
-      p1Sets === 3 ||
-      p2Sets === 3
-    )
+    setWinners[0] ===
+    setWinners[1]
   ) {
     return {
       error:
-        "Si un jugador ganó los dos primeros sets no corresponde tercer set",
+        "Si un jugador ganó los dos primeros sets no corresponde cargar un tercer set.",
     };
   }
+
+
+  /*
+    El ganador general es quien
+    ganó el tercer set.
+  */
 
   return {
     winnerSide:
-      p1Sets > p2Sets
-        ? 1
-        : 2,
+      setWinners[2],
+
+    normalizedScore,
   };
 };
 
@@ -223,19 +399,24 @@ export const getMyMatches =
                m.result_confirmed_by
 
           WHERE
-            m.player1_id = $1
+            (
+              m.player1_id = $1
+              OR
+              m.player2_id = $1
+            )
 
-            OR
-
-            m.player2_id = $1
+            AND m.annulled_at
+              IS NULL
 
           ORDER BY
-            m.created_at DESC
+            m.created_at DESC,
+            m.id DESC
           `,
           [
             req.userId,
           ],
         );
+
 
       res.json({
         matches:
@@ -267,14 +448,17 @@ export const submitMatchResult =
         "BEGIN",
       );
 
+
       const {
         score,
       } = req.body;
+
 
       const parsed =
         parseScore(
           score,
         );
+
 
       if (
         parsed.error
@@ -293,6 +477,15 @@ export const submitMatchResult =
               "invalid_score",
           });
       }
+
+
+      /*
+        Guardamos únicamente el score
+        normalizado y validado.
+      */
+
+      const normalizedScore =
+        parsed.normalizedScore;
 
 
       const matchResult =
@@ -372,6 +565,7 @@ export const submitMatchResult =
           match.scheduled_at,
         ).getTime();
 
+
       if (
         Number.isNaN(
           scheduledTime,
@@ -421,7 +615,8 @@ export const submitMatchResult =
 
 
       const winnerId =
-        parsed.winnerSide === 1
+        parsed.winnerSide ===
+        1
           ? match.player1_id
           : match.player2_id;
 
@@ -461,7 +656,7 @@ export const submitMatchResult =
             winnerId,
 
             JSON.stringify(
-              score,
+              normalizedScore,
             ),
 
             req.userId,
@@ -516,7 +711,8 @@ export const submitMatchResult =
             winner_id:
               winnerId,
 
-            score,
+            score:
+              normalizedScore,
           }),
         ],
       );
@@ -533,7 +729,8 @@ export const submitMatchResult =
 
 
       if (
-        minutesSinceStart >= 0 &&
+        minutesSinceStart >=
+          0 &&
         minutesSinceStart <
           TOO_FAST_RESULT_MINUTES
       ) {
@@ -690,6 +887,9 @@ export const rejectMatchResult =
             AND status =
               'awaiting_confirmation'
 
+            AND annulled_at
+              IS NULL
+
           RETURNING *
           `,
           [
@@ -837,11 +1037,9 @@ export const confirmMatchResult =
 
 
       /*
-        Primero bloqueamos el partido.
-
-        Esto evita dos confirmaciones
-        simultáneas del mismo resultado.
+        Bloqueamos primero el partido.
       */
+
       const found =
         await client.query(
           `
@@ -900,11 +1098,16 @@ export const confirmMatchResult =
 
 
       /*
-        Volvemos a validar el score
-        almacenado antes de tocar Elo.
+        Volvemos a validar lo almacenado.
+
+        Aunque el score haya sido validado
+        al enviarse, no confiamos ciegamente
+        en el contenido de la base.
       */
+
       let proposedScore =
         match.proposed_score;
+
 
       if (
         typeof proposedScore ===
@@ -947,15 +1150,21 @@ export const confirmMatchResult =
       }
 
 
+      proposedScore =
+        parsed.normalizedScore;
+
+
       const expectedWinnerId =
-        parsed.winnerSide === 1
+        parsed.winnerSide ===
+        1
           ? match.player1_id
           : match.player2_id;
 
 
       if (
         Number(
-          match.proposed_winner_id,
+          match
+            .proposed_winner_id,
         ) !==
         Number(
           expectedWinnerId,
@@ -978,13 +1187,10 @@ export const confirmMatchResult =
 
 
       /*
-        Bloqueamos AMBOS jugadores
-        antes de leer sus Elo.
-
-        El ORDER BY id hace que distintas
-        transacciones bloqueen jugadores
+        Bloqueamos ambos jugadores
         siempre en el mismo orden.
       */
+
       const players =
         await client.query(
           `
@@ -1000,7 +1206,8 @@ export const confirmMatchResult =
             $2
           )
 
-          ORDER BY id ASC
+          ORDER BY
+            id ASC
 
           FOR UPDATE
           `,
@@ -1012,7 +1219,8 @@ export const confirmMatchResult =
 
 
       if (
-        players.rowCount !== 2
+        players.rowCount !==
+        2
       ) {
         await client.query(
           "ROLLBACK",
@@ -1032,8 +1240,12 @@ export const confirmMatchResult =
 
       const player1 =
         players.rows.find(
-          (player) =>
-            Number(player.id) ===
+          (
+            player,
+          ) =>
+            Number(
+              player.id,
+            ) ===
             Number(
               match.player1_id,
             ),
@@ -1042,8 +1254,12 @@ export const confirmMatchResult =
 
       const player2 =
         players.rows.find(
-          (player) =>
-            Number(player.id) ===
+          (
+            player,
+          ) =>
+            Number(
+              player.id,
+            ) ===
             Number(
               match.player2_id,
             ),
@@ -1146,7 +1362,11 @@ export const confirmMatchResult =
         ) ||
         !Number.isInteger(
           loserMatchesPlayed,
-        )
+        ) ||
+        winnerMatchesPlayed <
+          0 ||
+        loserMatchesPlayed <
+          0
       ) {
         await client.query(
           "ROLLBACK",
@@ -1286,7 +1506,7 @@ export const confirmMatchResult =
               proposed_winner_id,
 
             score =
-              proposed_score,
+              $1,
 
             status =
               'completed',
@@ -1298,9 +1518,9 @@ export const confirmMatchResult =
               CURRENT_TIMESTAMP,
 
             result_confirmed_by =
-              $1
+              $2
 
-          WHERE id = $2
+          WHERE id = $3
 
             AND status =
               'awaiting_confirmation'
@@ -1311,6 +1531,10 @@ export const confirmMatchResult =
           RETURNING *
           `,
           [
+            JSON.stringify(
+              proposedScore,
+            ),
+
             req.userId,
             match.id,
           ],
@@ -1335,6 +1559,10 @@ export const confirmMatchResult =
           });
       }
 
+
+      /*
+        Cerramos el desafío relacionado.
+      */
 
       if (
         match.challenge_id
@@ -1384,6 +1612,10 @@ export const confirmMatchResult =
       }
 
 
+      /*
+        EVENTO ELO GANADOR
+      */
+
       await client.query(
         `
         INSERT INTO elo_events (
@@ -1422,6 +1654,10 @@ export const confirmMatchResult =
       );
 
 
+      /*
+        EVENTO ELO PERDEDOR
+      */
+
       await client.query(
         `
         INSERT INTO elo_events (
@@ -1459,6 +1695,10 @@ export const confirmMatchResult =
         ],
       );
 
+
+      /*
+        AUDITORÍA
+      */
 
       await client.query(
         `
@@ -1502,6 +1742,10 @@ export const confirmMatchResult =
         ],
       );
 
+
+      /*
+        ANTIFRAUDE
+      */
 
       await checkFrequentOpponents(
         client,
