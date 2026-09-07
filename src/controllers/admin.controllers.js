@@ -1,6 +1,7 @@
 import { pool } from "../db.js";
 import cloudinary from "../config/cloudinary.js";
 
+
 /*
   ============================================================
   USUARIOS PENDIENTES
@@ -14,7 +15,8 @@ export const getPendingUsers = async (
 ) => {
   try {
     const result =
-      await pool.query(`
+      await pool.query(
+        `
         SELECT
           id,
           name,
@@ -26,19 +28,29 @@ export const getPendingUsers = async (
           gender,
           verification_status,
           created_at
+
         FROM users
+
         WHERE verification_status =
           'pending_verification'
-        ORDER BY created_at ASC
-      `);
+
+          AND role =
+            'player'
+
+        ORDER BY
+          created_at ASC
+        `,
+      );
 
     res.json({
-      users: result.rows,
+      users:
+        result.rows,
     });
   } catch (error) {
     next(error);
   }
 };
+
 
 /*
   ============================================================
@@ -72,10 +84,17 @@ export const getPendingUserById =
             dni_front_path,
             dni_back_path,
             created_at
+
           FROM users
+
           WHERE id = $1
+
+            AND role =
+              'player'
           `,
-          [id],
+          [
+            id,
+          ],
         );
 
       if (
@@ -99,8 +118,12 @@ export const getPendingUserById =
               {
                 type:
                   "authenticated",
-                secure: true,
-                sign_url: true,
+
+                secure:
+                  true,
+
+                sign_url:
+                  true,
               },
             )
           : null;
@@ -112,30 +135,51 @@ export const getPendingUserById =
               {
                 type:
                   "authenticated",
-                secure: true,
-                sign_url: true,
+
+                secure:
+                  true,
+
+                sign_url:
+                  true,
               },
             )
           : null;
 
       res.json({
         user: {
-          id: user.id,
-          name: user.name,
+          id:
+            user.id,
+
+          name:
+            user.name,
+
           first_name:
             user.first_name,
+
           last_name:
             user.last_name,
-          dni: user.dni,
-          phone: user.phone,
-          email: user.email,
-          gender: user.gender,
+
+          dni:
+            user.dni,
+
+          phone:
+            user.phone,
+
+          email:
+            user.email,
+
+          gender:
+            user.gender,
+
           verification_status:
             user.verification_status,
+
           created_at:
             user.created_at,
+
           dni_front_url:
             dniFrontUrl,
+
           dni_back_url:
             dniBackUrl,
         },
@@ -144,6 +188,7 @@ export const getPendingUserById =
       next(error);
     }
   };
+
 
 /*
   ============================================================
@@ -165,14 +210,25 @@ export const approveUser =
         await pool.query(
           `
           UPDATE users
+
           SET
             verification_status =
               'verified',
+
             verified_at =
               CURRENT_TIMESTAMP,
+
             updated_at =
               CURRENT_TIMESTAMP
+
           WHERE id = $1
+
+            AND role =
+              'player'
+
+            AND verification_status =
+              'pending_verification'
+
           RETURNING
             id,
             name,
@@ -180,7 +236,9 @@ export const approveUser =
             verification_status,
             verified_at
           `,
-          [id],
+          [
+            id,
+          ],
         );
 
       if (
@@ -190,13 +248,14 @@ export const approveUser =
           .status(404)
           .json({
             message:
-              "Usuario no encontrado",
+              "Jugador pendiente de verificación no encontrado",
           });
       }
 
       res.json({
         message:
           "Jugador aprobado correctamente",
+
         user:
           result.rows[0],
       });
@@ -204,6 +263,7 @@ export const approveUser =
       next(error);
     }
   };
+
 
 /*
   ============================================================
@@ -225,20 +285,34 @@ export const rejectUser =
         await pool.query(
           `
           UPDATE users
+
           SET
             verification_status =
               'rejected',
-            verified_at = NULL,
+
+            verified_at =
+              NULL,
+
             updated_at =
               CURRENT_TIMESTAMP
+
           WHERE id = $1
+
+            AND role =
+              'player'
+
+            AND verification_status =
+              'pending_verification'
+
           RETURNING
             id,
             name,
             email,
             verification_status
           `,
-          [id],
+          [
+            id,
+          ],
         );
 
       if (
@@ -248,13 +322,14 @@ export const rejectUser =
           .status(404)
           .json({
             message:
-              "Usuario no encontrado",
+              "Jugador pendiente de verificación no encontrado",
           });
       }
 
       res.json({
         message:
           "Jugador rechazado correctamente",
+
         user:
           result.rows[0],
       });
@@ -262,6 +337,7 @@ export const rejectUser =
       next(error);
     }
   };
+
 
 /*
   ============================================================
@@ -288,24 +364,31 @@ export const getAuditMatches =
             m.score,
 
             m.player1_id,
+
             p1.name AS
               player1_name,
 
             m.player2_id,
+
             p2.name AS
               player2_name,
 
             m.winner_id,
+
             winner.name AS
               winner_name,
 
             m.annulled_at,
             m.annul_reason,
 
-            COUNT(f.id)::int
+            COUNT(
+              f.id
+            )::int
               AS flag_count,
 
-            COUNT(f.id)
+            COUNT(
+              f.id
+            )
               FILTER (
                 WHERE
                   f.resolved = FALSE
@@ -338,7 +421,11 @@ export const getAuditMatches =
 
           ORDER BY
             unresolved_flags DESC,
+
             m.completed_at DESC
+              NULLS LAST,
+
+            m.id DESC
           `,
         );
 
@@ -350,6 +437,7 @@ export const getAuditMatches =
       next(error);
     }
   };
+
 
 /*
   ============================================================
@@ -369,10 +457,13 @@ export const getAuditMatchById =
           `
           SELECT
             m.*,
+
             p1.name AS
               player1_name,
+
             p2.name AS
               player2_name,
+
             winner.name AS
               winner_name
 
@@ -412,20 +503,31 @@ export const getAuditMatchById =
         await pool.query(
           `
           SELECT
-            id,
-            flag_type,
-            severity,
-            message,
-            resolved,
-            resolved_at,
-            created_at
+            f.id,
+            f.flag_type,
+            f.severity,
+            f.message,
+            f.resolved,
+            f.resolved_at,
+            f.resolved_by,
+            resolver.name AS
+              resolved_by_name,
+            f.created_at
 
-          FROM match_audit_flags
+          FROM match_audit_flags f
 
-          WHERE match_id = $1
+          LEFT JOIN users resolver
+            ON resolver.id =
+               f.resolved_by
+
+          WHERE f.match_id = $1
 
           ORDER BY
-            created_at DESC
+            f.resolved ASC,
+
+            f.created_at DESC,
+
+            f.id DESC
           `,
           [
             req.params.id,
@@ -437,8 +539,12 @@ export const getAuditMatchById =
           `
           SELECT
             e.*,
+
             u.name AS
-              player_name
+              player_name,
+
+            reverser.name AS
+              reversed_by_name
 
           FROM elo_events e
 
@@ -446,10 +552,15 @@ export const getAuditMatchById =
             ON u.id =
                e.user_id
 
+          LEFT JOIN users reverser
+            ON reverser.id =
+               e.reversed_by
+
           WHERE e.match_id = $1
 
           ORDER BY
-            e.created_at ASC
+            e.created_at ASC,
+            e.id ASC
           `,
           [
             req.params.id,
@@ -461,6 +572,7 @@ export const getAuditMatchById =
           `
           SELECT
             a.*,
+
             u.name AS
               user_name
 
@@ -473,7 +585,8 @@ export const getAuditMatchById =
           WHERE a.match_id = $1
 
           ORDER BY
-            a.created_at DESC
+            a.created_at DESC,
+            a.id DESC
           `,
           [
             req.params.id,
@@ -483,10 +596,13 @@ export const getAuditMatchById =
       res.json({
         match:
           matchResult.rows[0],
+
         flags:
           flags.rows,
+
         elo_events:
           elo.rows,
+
         audit_events:
           audit.rows,
       });
@@ -494,6 +610,7 @@ export const getAuditMatchById =
       next(error);
     }
   };
+
 
 /*
   ============================================================
@@ -512,12 +629,22 @@ export const resolveAuditFlag =
         await pool.query(
           `
           UPDATE match_audit_flags
+
           SET
-            resolved = TRUE,
+            resolved =
+              TRUE,
+
             resolved_at =
               CURRENT_TIMESTAMP,
-            resolved_by = $1
+
+            resolved_by =
+              $1
+
           WHERE id = $2
+
+            AND resolved =
+              FALSE
+
           RETURNING *
           `,
           [
@@ -533,13 +660,14 @@ export const resolveAuditFlag =
           .status(404)
           .json({
             message:
-              "Alerta no encontrada",
+              "Alerta pendiente no encontrada",
           });
       }
 
       res.json({
         message:
           "Alerta marcada como revisada",
+
         flag:
           result.rows[0],
       });
@@ -547,6 +675,7 @@ export const resolveAuditFlag =
       next(error);
     }
   };
+
 
 /*
   ============================================================
@@ -571,32 +700,50 @@ export const annulMatch =
         ).trim();
 
       if (
-        reason.length < 5
+        reason.length < 5 ||
+        reason.length > 500
       ) {
         return res
           .status(400)
           .json({
             message:
-              "Indicá el motivo de la anulación.",
+              "Indicá un motivo de entre 5 y 500 caracteres.",
           });
       }
+
 
       await client.query(
         "BEGIN",
       );
 
+
+      /*
+        Primero bloqueamos el partido.
+
+        Es el mismo orden utilizado
+        durante la confirmación:
+        partido -> jugadores.
+
+        Eso disminuye el riesgo
+        de deadlocks.
+      */
+
       const found =
         await client.query(
           `
           SELECT *
+
           FROM matches
+
           WHERE id = $1
+
           FOR UPDATE
           `,
           [
             req.params.id,
           ],
         );
+
 
       if (
         !found.rowCount
@@ -613,8 +760,10 @@ export const annulMatch =
           });
       }
 
+
       const match =
         found.rows[0];
+
 
       if (
         match.annulled_at
@@ -630,6 +779,7 @@ export const annulMatch =
               "Este partido ya fue anulado.",
           });
       }
+
 
       if (
         match.status !==
@@ -647,20 +797,100 @@ export const annulMatch =
           });
       }
 
+
+      if (
+        !match.player1_id ||
+        !match.player2_id
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El partido no tiene jugadores válidos.",
+          });
+      }
+
+
       /*
-        Movimientos Elo originales.
+        Bloqueamos los dos jugadores
+        en orden estable.
+
+        confirmMatchResult también
+        los bloquea por id ASC.
+      */
+
+      const players =
+        await client.query(
+          `
+          SELECT
+            id,
+            rating,
+            matches_played
+
+          FROM users
+
+          WHERE id IN (
+            $1,
+            $2
+          )
+
+          ORDER BY
+            id ASC
+
+          FOR UPDATE
+          `,
+          [
+            match.player1_id,
+            match.player2_id,
+          ],
+        );
+
+
+      if (
+        players.rowCount !== 2
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "No se pudieron cargar correctamente los jugadores del partido.",
+          });
+      }
+
+
+      /*
+        Buscamos exactamente los
+        movimientos Elo originales
+        de este partido.
       */
 
       const eloEvents =
         await client.query(
           `
           SELECT *
+
           FROM elo_events
+
           WHERE match_id = $1
+
             AND event_type =
               'match_result'
+
             AND reversed_at
               IS NULL
+
+          ORDER BY
+            user_id ASC,
+            id ASC
+
           FOR UPDATE
           `,
           [
@@ -668,40 +898,177 @@ export const annulMatch =
           ],
         );
 
+
       /*
-        Revertimos el Elo
-        de cada jugador.
+        Un partido confirmado normal
+        debe tener exactamente:
+        - un movimiento para ganador
+        - un movimiento para perdedor
+
+        Si falta alguno, no anulamos
+        parcialmente.
+      */
+
+      if (
+        eloEvents.rowCount !== 2
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El historial Elo de este partido está incompleto. No se puede anular automáticamente.",
+
+            reason:
+              "invalid_elo_history",
+          });
+      }
+
+
+      const expectedPlayerIds =
+        new Set([
+          Number(
+            match.player1_id,
+          ),
+
+          Number(
+            match.player2_id,
+          ),
+        ]);
+
+
+      const eloPlayerIds =
+        new Set(
+          eloEvents.rows.map(
+            (event) =>
+              Number(
+                event.user_id,
+              ),
+          ),
+        );
+
+
+      if (
+        eloPlayerIds.size !== 2 ||
+        ![
+          ...expectedPlayerIds,
+        ].every(
+          (id) =>
+            eloPlayerIds.has(
+              id,
+            ),
+        )
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Los movimientos Elo no corresponden a los jugadores de este partido.",
+
+            reason:
+              "elo_players_mismatch",
+          });
+      }
+
+
+      const playerMap =
+        new Map(
+          players.rows.map(
+            (player) => [
+              Number(
+                player.id,
+              ),
+
+              player,
+            ],
+          ),
+        );
+
+
+      /*
+        Aplicamos una reversión
+        compensatoria sobre el Elo actual.
+
+        También marcamos como revertido
+        el evento original y generamos
+        un nuevo evento administrativo.
       */
 
       for (
         const event of
         eloEvents.rows
       ) {
-        const user =
-          await client.query(
-            `
-            SELECT
-              rating
-            FROM users
-            WHERE id = $1
-            FOR UPDATE
-            `,
-            [
+        const player =
+          playerMap.get(
+            Number(
               event.user_id,
-            ],
+            ),
           );
 
-        if (
-          !user.rowCount
-        ) {
-          continue;
+
+        if (!player) {
+          await client.query(
+            "ROLLBACK",
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "No se encontró uno de los jugadores del historial Elo.",
+
+              reason:
+                "elo_player_not_found",
+            });
         }
 
+
         const before =
-          user.rows[0].rating;
+          Number(
+            player.rating,
+          );
+
+
+        const eventDelta =
+          Number(
+            event.elo_change,
+          );
+
+
+        if (
+          !Number.isFinite(
+            before,
+          ) ||
+          !Number.isFinite(
+            eventDelta,
+          )
+        ) {
+          await client.query(
+            "ROLLBACK",
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "El historial Elo contiene valores inválidos.",
+
+              reason:
+                "invalid_elo_values",
+            });
+        }
+
 
         const reversal =
-          -event.elo_change;
+          -eventDelta;
+
 
         const after =
           Math.max(
@@ -710,18 +1077,28 @@ export const annulMatch =
               reversal,
           );
 
+
+        const realReversal =
+          after -
+          before;
+
+
         await client.query(
           `
           UPDATE users
+
           SET
             rating = $1,
+
             matches_played =
               GREATEST(
                 0,
                 matches_played - 1
               ),
+
             updated_at =
               CURRENT_TIMESTAMP
+
           WHERE id = $2
           `,
           [
@@ -730,20 +1107,60 @@ export const annulMatch =
           ],
         );
 
-        await client.query(
-          `
-          UPDATE elo_events
-          SET
-            reversed_at =
-              CURRENT_TIMESTAMP,
-            reversed_by = $1
-          WHERE id = $2
-          `,
-          [
-            req.userId,
-            event.id,
-          ],
-        );
+
+        /*
+          Actualizamos nuestro mapa
+          también, por seguridad.
+        */
+
+        player.rating =
+          after;
+
+
+        const reversed =
+          await client.query(
+            `
+            UPDATE elo_events
+
+            SET
+              reversed_at =
+                CURRENT_TIMESTAMP,
+
+              reversed_by =
+                $1
+
+            WHERE id = $2
+
+              AND reversed_at
+                IS NULL
+
+            RETURNING id
+            `,
+            [
+              req.userId,
+              event.id,
+            ],
+          );
+
+
+        if (
+          !reversed.rowCount
+        ) {
+          await client.query(
+            "ROLLBACK",
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "Uno de los movimientos Elo ya había sido revertido.",
+
+              reason:
+                "elo_already_reversed",
+            });
+        }
+
 
         await client.query(
           `
@@ -757,6 +1174,7 @@ export const annulMatch =
             elo_after,
             description
           )
+
           VALUES (
             $1,
             $2,
@@ -772,79 +1190,161 @@ export const annulMatch =
             event.user_id,
             match.id,
             match.challenge_id,
+
             before,
-            reversal,
+            realReversal,
             after,
+
             `Reversión por anulación administrativa del partido #${match.id}`,
           ],
         );
       }
 
+
       /*
         Marcamos partido como anulado.
       */
 
-      await client.query(
-        `
-        UPDATE matches
-        SET
-          annulled_at =
-            CURRENT_TIMESTAMP,
-          annulled_by = $1,
-          annul_reason = $2,
-          status = 'annulled'
-        WHERE id = $3
-        `,
-        [
-          req.userId,
-          reason,
-          match.id,
-        ],
-      );
+      const annulled =
+        await client.query(
+          `
+          UPDATE matches
+
+          SET
+            annulled_at =
+              CURRENT_TIMESTAMP,
+
+            annulled_by =
+              $1,
+
+            annul_reason =
+              $2,
+
+            status =
+              'annulled'
+
+          WHERE id = $3
+
+            AND status =
+              'completed'
+
+            AND annulled_at
+              IS NULL
+
+          RETURNING *
+          `,
+          [
+            req.userId,
+            reason,
+            match.id,
+          ],
+        );
+
+
+      if (
+        !annulled.rowCount
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El estado del partido cambió antes de poder anularlo.",
+
+            reason:
+              "match_state_changed",
+          });
+      }
+
 
       /*
-        Cerramos desafío relacionado.
+        Cerramos el desafío relacionado.
+
+        No tocamos desafíos en otro
+        estado inesperado.
       */
 
       if (
         match.challenge_id
       ) {
-        await client.query(
-          `
-          UPDATE challenges
-          SET
-            status =
-              'annulled',
-            resolved_at =
-              CURRENT_TIMESTAMP
-          WHERE id = $1
-          `,
-          [
-            match.challenge_id,
-          ],
-        );
+        const challenge =
+          await client.query(
+            `
+            UPDATE challenges
+
+            SET
+              status =
+                'annulled',
+
+              resolved_at =
+                CURRENT_TIMESTAMP
+
+            WHERE id = $1
+
+              AND status =
+                'completed'
+
+            RETURNING id
+            `,
+            [
+              match.challenge_id,
+            ],
+          );
+
+
+        if (
+          !challenge.rowCount
+        ) {
+          await client.query(
+            "ROLLBACK",
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "El desafío relacionado no está en un estado válido para ser anulado.",
+
+              reason:
+                "challenge_state_invalid",
+            });
+        }
       }
 
+
       /*
-        Marcamos alertas como resueltas.
+        Marcamos alertas pendientes
+        como resueltas.
       */
 
       await client.query(
         `
         UPDATE match_audit_flags
+
         SET
-          resolved = TRUE,
+          resolved =
+            TRUE,
+
           resolved_at =
             CURRENT_TIMESTAMP,
-          resolved_by = $1
+
+          resolved_by =
+            $1
+
         WHERE match_id = $2
-          AND resolved = FALSE
+
+          AND resolved =
+            FALSE
         `,
         [
           req.userId,
           match.id,
         ],
       );
+
 
       /*
         Auditoría permanente.
@@ -859,6 +1359,7 @@ export const annulMatch =
           event_type,
           details
         )
+
         VALUES (
           $1,
           $2,
@@ -871,24 +1372,37 @@ export const annulMatch =
           req.userId,
           match.id,
           match.challenge_id,
+
           JSON.stringify({
             reason,
+
+            original_winner_id:
+              match.winner_id,
+
+            original_score:
+              match.score,
           }),
         ],
       );
 
+
       await client.query(
         "COMMIT",
       );
+
 
       res.json({
         message:
           "Partido anulado y Elo revertido correctamente.",
       });
     } catch (error) {
-      await client.query(
-        "ROLLBACK",
-      );
+      try {
+        await client.query(
+          "ROLLBACK",
+        );
+      } catch {
+        // La conexión se libera abajo.
+      }
 
       next(error);
     } finally {
