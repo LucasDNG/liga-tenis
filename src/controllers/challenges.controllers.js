@@ -1,121 +1,116 @@
 import { pool } from "../db.js";
 
-
 const REJECTION_ELO_PENALTY = 8;
 const REJECTION_COOLDOWN_DAYS = 7;
 
 const PLACEMENT_MATCHES = 5;
+const MAX_RANKED_CHALLENGE_DISTANCE = 3;
 
 
 /*
   ============================================================
-  JUGADOR + POSICIÓN COMPETITIVA
+  JUGADOR
   ============================================================
-
-  IMPORTANTE:
-
-  Esta posición debe ser EXACTAMENTE
-  compatible con challengeAvailability.
-
-  Solo participan:
-  - role = player
-  - liga elegida
-  - verificados
-
-  Orden competitivo:
-
-  1. establecidos: 5+ partidos
-  2. provisionales: menos de 5 partidos
-
-  Dentro de cada grupo:
-  - Elo DESC
-  - partidos DESC
-  - id ASC
-
-  El ranking PÚBLICO oficial es distinto:
-  los provisionales no reciben número oficial.
-
-  Pero para poder completar sus 5 partidos
-  necesitan una posición competitiva interna.
 */
 
-const getRankedPlayer = async (
+const getPlayer = async (
   client,
   id,
 ) => {
-  const result =
-    await client.query(
-      `
-      WITH ranked AS (
-        SELECT
-          id,
+  const result = await client.query(
+    `
+    SELECT
+      id,
+      name,
+      phone,
+      city,
+      gender,
+      rating,
+      matches_played,
+      verification_status,
+      role,
+      matches_played < $2
+        AS provisional
 
-          matches_played < $2
-            AS provisional,
+    FROM users
 
-          ROW_NUMBER() OVER (
-            PARTITION BY
-              city,
-              gender
-
-            ORDER BY
-              CASE
-                WHEN matches_played >= $2
-                  THEN 0
-                ELSE 1
-              END ASC,
-
-              rating DESC,
-              matches_played DESC,
-              id ASC
-          )::int
-            AS rank_position
-
-        FROM users
-
-        WHERE role =
-          'player'
-
-          AND gender
-            IS NOT NULL
-
-          AND verification_status =
-            'verified'
-      )
-
-      SELECT
-        u.id,
-        u.name,
-        u.phone,
-        u.city,
-        u.gender,
-        u.rating,
-        u.matches_played,
-        u.verification_status,
-        u.role,
-
-        ranked.provisional,
-        ranked.rank_position
-
-      FROM users u
-
-      LEFT JOIN ranked
-        ON ranked.id =
-           u.id
-
-      WHERE u.id = $1
-
-        AND u.role =
-          'player'
-      `,
-      [
-        id,
-        PLACEMENT_MATCHES,
-      ],
-    );
-
+    WHERE id = $1
+      AND role = 'player'
+    `,
+    [
+      id,
+      PLACEMENT_MATCHES,
+    ],
+  );
 
   return result.rows[0];
+};
+
+
+/*
+  ============================================================
+  RANKING OFICIAL
+
+  Solamente jugadores con 5+ partidos.
+  ============================================================
+*/
+
+const getOfficialPosition = async (
+  client,
+  player,
+) => {
+  if (
+    !player ||
+    Number(player.matches_played) <
+      PLACEMENT_MATCHES
+  ) {
+    return null;
+  }
+
+  const result = await client.query(
+    `
+    WITH official_ranking AS (
+      SELECT
+        id,
+
+        ROW_NUMBER() OVER (
+          ORDER BY
+            rating DESC,
+            matches_played DESC,
+            id ASC
+        )::int AS official_position
+
+      FROM users
+
+      WHERE
+        role = 'player'
+        AND verification_status = 'verified'
+        AND city = $1
+        AND gender = $2
+        AND matches_played >= $3
+    )
+
+    SELECT
+      official_position
+
+    FROM official_ranking
+
+    WHERE id = $4
+    `,
+    [
+      player.city,
+      player.gender,
+      PLACEMENT_MATCHES,
+      player.id,
+    ],
+  );
+
+  return result.rowCount
+    ? Number(
+        result.rows[0]
+          .official_position,
+      )
+    : null;
 };
 
 
@@ -130,171 +125,334 @@ const getHistoricalMeetings = async (
   player1Id,
   player2Id,
 ) => {
-  const result =
-    await client.query(
-      `
-      SELECT
-        COUNT(*)::int
-          AS total
+  const result = await client.query(
+    `
+    SELECT
+      COUNT(*)::int AS total
 
-      FROM matches
+    FROM matches
 
-      WHERE status =
-        'completed'
-
-        AND annulled_at
-          IS NULL
-
-        AND (
-          (
-            player1_id = $1
-            AND player2_id = $2
-          )
-
-          OR
-
-          (
-            player1_id = $2
-            AND player2_id = $1
-          )
+    WHERE
+      status = 'completed'
+      AND annulled_at IS NULL
+      AND (
+        (
+          player1_id = $1
+          AND player2_id = $2
         )
-      `,
-      [
-        player1Id,
-        player2Id,
-      ],
-    );
+        OR
+        (
+          player1_id = $2
+          AND player2_id = $1
+        )
+      )
+    `,
+    [
+      player1Id,
+      player2Id,
+    ],
+  );
 
-
-  return result.rows[0].total;
+  return Number(
+    result.rows[0].total,
+  );
 };
 
 
 /*
   ============================================================
-  RUEDA DE RIVALES
+  MÍNIMO DE ENFRENTAMIENTOS DE LA RUEDA
+
+  PROVISIONAL:
+  todos los jugadores verificados de
+  su misma liga son candidatos.
+
+  RANKEADO:
+  solamente los 3 puestos oficiales
+  superiores son candidatos.
+
+  El jugador solo puede elegir rivales
+  que tengan el mínimo número de
+  enfrentamientos dentro de esa rueda.
   ============================================================
 */
 
-const getRotationState = async (
-  client,
-  userId,
-) => {
-  const activeMatch =
-    await client.query(
-      `
-      SELECT
-        c.id AS
-          challenge_id,
+const getRotationMinimumMeetings =
+  async (
+    client,
+    challenger,
+  ) => {
+    const challengerProvisional =
+      Number(
+        challenger.matches_played,
+      ) < PLACEMENT_MATCHES;
 
-        c.challenger_id,
+    if (challengerProvisional) {
+      const result =
+        await client.query(
+          `
+          WITH opponents AS (
+            SELECT
+              u.id
 
-        u.name AS
-          challenger_name,
+            FROM users u
 
-        c.venue,
-        c.scheduled_at
+            WHERE
+              u.role = 'player'
+              AND u.verification_status = 'verified'
+              AND u.city = $1
+              AND u.gender = $2
+              AND u.id <> $3
+          ),
 
-      FROM challenges c
+          meeting_counts AS (
+            SELECT
+              o.id,
 
-      JOIN users u
-        ON u.id =
-           c.challenger_id
+              COUNT(m.id)::int
+                AS meetings
 
-      WHERE c.challenged_id = $1
+            FROM opponents o
 
-        AND c.status =
-          'accepted'
+            LEFT JOIN matches m
+              ON m.status = 'completed'
+              AND m.annulled_at IS NULL
+              AND (
+                (
+                  m.player1_id = $3
+                  AND m.player2_id = o.id
+                )
+                OR
+                (
+                  m.player2_id = $3
+                  AND m.player1_id = o.id
+                )
+              )
 
-      ORDER BY
-        c.accepted_at ASC
-          NULLS LAST,
+            GROUP BY o.id
+          )
 
-        c.created_at ASC,
-        c.id ASC
+          SELECT
+            COALESCE(
+              MIN(meetings),
+              0
+            )::int AS minimum_meetings
 
-      LIMIT 1
-      `,
-      [
-        userId,
-      ],
-    );
+          FROM meeting_counts
+          `,
+          [
+            challenger.city,
+            challenger.gender,
+            challenger.id,
+          ],
+        );
 
+      return Number(
+        result.rows[0]
+          ?.minimum_meetings || 0,
+      );
+    }
 
-  if (
-    activeMatch.rowCount
-  ) {
-    return {
-      blockedByActiveMatch:
-        true,
+    const challengerPosition =
+      await getOfficialPosition(
+        client,
+        challenger,
+      );
 
-      activeChallenge:
-        activeMatch.rows[0],
+    if (!challengerPosition) {
+      return null;
+    }
 
-      currentChallenge:
-        null,
+    const result =
+      await client.query(
+        `
+        WITH official_ranking AS (
+          SELECT
+            id,
 
-      pendingChallenges:
-        [],
-    };
-  }
+            ROW_NUMBER() OVER (
+              ORDER BY
+                rating DESC,
+                matches_played DESC,
+                id ASC
+            )::int AS official_position
 
+          FROM users
 
-  const pending =
-    await client.query(
-      `
-      SELECT
-        c.id,
-        c.challenger_id,
-        c.challenged_id,
-        c.historical_meetings_at_creation,
-        c.created_at,
+          WHERE
+            role = 'player'
+            AND verification_status = 'verified'
+            AND city = $1
+            AND gender = $2
+            AND matches_played >= $3
+        ),
 
-        u.name AS
-          challenger_name
+        eligible AS (
+          SELECT
+            id
 
-      FROM challenges c
+          FROM official_ranking
 
-      JOIN users u
-        ON u.id =
-           c.challenger_id
+          WHERE
+            official_position <
+              $4
 
-      WHERE c.challenged_id = $1
+            AND official_position >=
+              $4 - $5
+        ),
 
-        AND c.status =
-          'pending'
+        meeting_counts AS (
+          SELECT
+            e.id,
 
-      ORDER BY
-        c.historical_meetings_at_creation ASC,
-        c.created_at ASC,
-        c.id ASC
-      `,
-      [
-        userId,
-      ],
-    );
+            COUNT(m.id)::int
+              AS meetings
 
+          FROM eligible e
 
-  return {
-    blockedByActiveMatch:
-      false,
+          LEFT JOIN matches m
+            ON m.status = 'completed'
+            AND m.annulled_at IS NULL
+            AND (
+              (
+                m.player1_id = $6
+                AND m.player2_id = e.id
+              )
+              OR
+              (
+                m.player2_id = $6
+                AND m.player1_id = e.id
+              )
+            )
 
-    activeChallenge:
-      null,
+          GROUP BY e.id
+        )
 
-    currentChallenge:
-      pending.rows[0] ||
-      null,
+        SELECT
+          MIN(meetings)::int
+            AS minimum_meetings
 
-    pendingChallenges:
-      pending.rows,
+        FROM meeting_counts
+        `,
+        [
+          challenger.city,
+          challenger.gender,
+          PLACEMENT_MATCHES,
+          challengerPosition,
+          MAX_RANKED_CHALLENGE_DISTANCE,
+          challenger.id,
+        ],
+      );
+
+    const value =
+      result.rows[0]
+        ?.minimum_meetings;
+
+    return value === null ||
+      value === undefined
+      ? null
+      : Number(value);
   };
-};
 
 
 /*
   ============================================================
-  ROTACIÓN DESPUÉS DE UN TURNO RESUELTO
+  VALIDAR REGLA DEPORTIVA DEL DESAFÍO
+  ============================================================
+*/
+
+const validateSportEligibility =
+  async (
+    client,
+    challenger,
+    challenged,
+  ) => {
+    const challengerProvisional =
+      Number(
+        challenger.matches_played,
+      ) < PLACEMENT_MATCHES;
+
+    /*
+      Durante colocación puede desafiar
+      a cualquier jugador verificado de
+      su liga, pero siempre respetando
+      la rueda.
+    */
+    if (challengerProvisional) {
+      return {
+        allowed: true,
+        challengerPosition: null,
+        challengedPosition:
+          await getOfficialPosition(
+            client,
+            challenged,
+          ),
+      };
+    }
+
+    /*
+      Un rankeado solamente desafía
+      jugadores que también tengan
+      ranking oficial.
+    */
+    const challengerPosition =
+      await getOfficialPosition(
+        client,
+        challenger,
+      );
+
+    const challengedPosition =
+      await getOfficialPosition(
+        client,
+        challenged,
+      );
+
+    if (
+      !challengerPosition ||
+      !challengedPosition
+    ) {
+      return {
+        allowed: false,
+        reason:
+          "provisional_not_official_target",
+        message:
+          "Los jugadores rankeados solo pueden desafiar jugadores con posición oficial.",
+      };
+    }
+
+    const difference =
+      challengerPosition -
+      challengedPosition;
+
+    if (
+      difference < 1 ||
+      difference >
+        MAX_RANKED_CHALLENGE_DISTANCE
+    ) {
+      return {
+        allowed: false,
+        reason: "ranking_distance",
+        message:
+          "Solo podés desafiar hasta 3 posiciones oficiales por encima.",
+      };
+    }
+
+    return {
+      allowed: true,
+      challengerPosition,
+      challengedPosition,
+    };
+  };
+
+
+/*
+  ============================================================
+  RUEDA DEL RECEPTOR
+
+  Si ya resolvió un turno con este
+  desafiante y había otros esperando,
+  debe avanzar la rueda antes de volver
+  a recibir al mismo.
   ============================================================
 */
 
@@ -311,12 +469,10 @@ const hasOlderPendingRivals = async (
 
       FROM challenges
 
-      WHERE challenger_id = $1
-
+      WHERE
+        challenger_id = $1
         AND challenged_id = $2
-
-        AND resolved_at
-          IS NOT NULL
+        AND resolved_at IS NOT NULL
 
       ORDER BY
         resolved_at DESC,
@@ -330,18 +486,13 @@ const hasOlderPendingRivals = async (
       ],
     );
 
-
-  if (
-    !lastResolved.rowCount
-  ) {
+  if (!lastResolved.rowCount) {
     return false;
   }
-
 
   const resolvedAt =
     lastResolved.rows[0]
       .resolved_at;
-
 
   const waiting =
     await client.query(
@@ -351,13 +502,10 @@ const hasOlderPendingRivals = async (
 
       FROM challenges
 
-      WHERE challenged_id = $1
-
+      WHERE
+        challenged_id = $1
         AND challenger_id <> $2
-
-        AND status =
-          'pending'
-
+        AND status = 'pending'
         AND created_at <= $3
 
       ORDER BY
@@ -374,7 +522,6 @@ const hasOlderPendingRivals = async (
       ],
     );
 
-
   return Boolean(
     waiting.rowCount,
   );
@@ -383,7 +530,7 @@ const hasOlderPendingRivals = async (
 
 /*
   ============================================================
-  COOLDOWN POR RECHAZO
+  COOLDOWN
   ============================================================
 */
 
@@ -398,21 +545,17 @@ const getRejectionCooldown = async (
       SELECT
         rejected_at,
 
-        rejected_at +
-          INTERVAL '7 days'
+        rejected_at
+          + INTERVAL '7 days'
           AS available_at
 
       FROM challenges
 
-      WHERE challenger_id = $1
-
+      WHERE
+        challenger_id = $1
         AND challenged_id = $2
-
-        AND status =
-          'rejected'
-
-        AND rejected_at
-          IS NOT NULL
+        AND status = 'rejected'
+        AND rejected_at IS NOT NULL
 
       ORDER BY
         rejected_at DESC,
@@ -426,23 +569,17 @@ const getRejectionCooldown = async (
       ],
     );
 
-
-  if (
-    !result.rowCount
-  ) {
+  if (!result.rowCount) {
     return null;
   }
 
-
   const row =
     result.rows[0];
-
 
   const availableAt =
     new Date(
       row.available_at,
     );
-
 
   if (
     Number.isNaN(
@@ -454,13 +591,120 @@ const getRejectionCooldown = async (
     return null;
   }
 
-
   return {
     rejectedAt:
       row.rejected_at,
 
     availableAt:
       row.available_at,
+  };
+};
+
+
+/*
+  ============================================================
+  RUEDA DE DESAFÍOS RECIBIDOS
+
+  El receptor debe resolver:
+  1. menor cantidad de enfrentamientos
+  2. desafío más antiguo
+  3. id más bajo
+
+  El provisional participa exactamente
+  igual que cualquier otro jugador.
+  ============================================================
+*/
+
+const getRotationState = async (
+  client,
+  userId,
+) => {
+  const activeMatch =
+    await client.query(
+      `
+      SELECT
+        c.id AS challenge_id,
+        c.challenger_id,
+
+        u.name AS challenger_name,
+
+        c.venue,
+        c.scheduled_at
+
+      FROM challenges c
+
+      JOIN users u
+        ON u.id =
+           c.challenger_id
+
+      WHERE
+        c.challenged_id = $1
+        AND c.status = 'accepted'
+
+      ORDER BY
+        c.accepted_at ASC
+          NULLS LAST,
+        c.created_at ASC,
+        c.id ASC
+
+      LIMIT 1
+      `,
+      [userId],
+    );
+
+  if (activeMatch.rowCount) {
+    return {
+      blockedByActiveMatch: true,
+      activeChallenge:
+        activeMatch.rows[0],
+      currentChallenge: null,
+      pendingChallenges: [],
+    };
+  }
+
+  const pending =
+    await client.query(
+      `
+      SELECT
+        c.id,
+        c.challenger_id,
+        c.challenged_id,
+        c.historical_meetings_at_creation,
+        c.created_at,
+
+        u.name AS challenger_name,
+
+        u.matches_played < $2
+          AS challenger_provisional
+
+      FROM challenges c
+
+      JOIN users u
+        ON u.id =
+           c.challenger_id
+
+      WHERE
+        c.challenged_id = $1
+        AND c.status = 'pending'
+
+      ORDER BY
+        c.historical_meetings_at_creation ASC,
+        c.created_at ASC,
+        c.id ASC
+      `,
+      [
+        userId,
+        PLACEMENT_MATCHES,
+      ],
+    );
+
+  return {
+    blockedByActiveMatch: false,
+    activeChallenge: null,
+    currentChallenge:
+      pending.rows[0] || null,
+    pendingChallenges:
+      pending.rows,
   };
 };
 
@@ -481,16 +725,12 @@ export const createChallenge = async (
 
   try {
     const challengerId =
-      Number(
-        req.userId,
-      );
-
+      Number(req.userId);
 
     const challengedId =
       Number(
         req.body.challenged_id,
       );
-
 
     if (
       !Number.isInteger(
@@ -503,12 +743,10 @@ export const createChallenge = async (
         .json({
           message:
             "Sesión inválida",
-
           reason:
             "invalid_session",
         });
     }
-
 
     if (
       !Number.isInteger(
@@ -523,31 +761,26 @@ export const createChallenge = async (
         .json({
           message:
             "Rival inválido",
-
           reason:
             "invalid_opponent",
         });
     }
 
-
     await client.query(
       "BEGIN",
     );
 
-
     const challenger =
-      await getRankedPlayer(
+      await getPlayer(
         client,
         challengerId,
       );
 
-
     const challenged =
-      await getRankedPlayer(
+      await getPlayer(
         client,
         challengedId,
       );
-
 
     if (
       !challenger ||
@@ -557,22 +790,15 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(404)
         .json({
           message:
             "Jugador no encontrado",
-
           reason:
             "player_not_found",
         });
     }
-
-
-    /*
-      DESAFIANTE VERIFICADO
-    */
 
     if (
       challenger
@@ -583,26 +809,15 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(403)
         .json({
           message:
-            challenger
-              .verification_status ===
-            "rejected"
-              ? "Tu documentación fue rechazada. No podés crear desafíos hasta volver a verificar tu identidad."
-              : "Tu identidad todavía está pendiente de verificación.",
-
+            "Tu identidad debe estar verificada para crear desafíos.",
           reason:
             "challenger_not_verified",
         });
     }
-
-
-    /*
-      RIVAL VERIFICADO
-    */
 
     if (
       challenged
@@ -613,66 +828,33 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(400)
         .json({
           message:
             "Ese jugador todavía no está habilitado para competir.",
-
           reason:
             "challenged_not_verified",
         });
     }
 
-
-    /*
-      LIGA ELEGIDA
-    */
-
     if (
-      !challenger.gender
-    ) {
-      await client.query(
-        "ROLLBACK",
-      );
-
-
-      return res
-        .status(400)
-        .json({
-          message:
-            "Primero elegí tu Liga Masculina o Femenina en Mi perfil",
-
-          reason:
-            "league_not_selected",
-        });
-    }
-
-
-    if (
+      !challenger.gender ||
       !challenged.gender
     ) {
       await client.query(
         "ROLLBACK",
       );
 
-
       return res
         .status(400)
         .json({
           message:
-            "Ese jugador todavía no eligió una liga.",
-
+            "Ambos jugadores deben tener una liga seleccionada.",
           reason:
-            "opponent_without_league",
+            "league_not_selected",
         });
     }
-
-
-    /*
-      MISMA LIGA
-    */
 
     if (
       challenger.gender !==
@@ -682,22 +864,15 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(400)
         .json({
           message:
-            "Solo podés desafiar jugadores de tu misma liga",
-
+            "Solo podés desafiar jugadores de tu misma liga.",
           reason:
             "different_league",
         });
     }
-
-
-    /*
-      MISMA CIUDAD
-    */
 
     if (
       challenger.city !==
@@ -707,83 +882,90 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(400)
         .json({
           message:
-            "Solo podés desafiar jugadores de tu misma ciudad",
-
+            "Solo podés desafiar jugadores de tu misma ciudad.",
           reason:
             "different_city",
         });
     }
 
-
     /*
-      POSICIONES COMPETITIVAS
+      REGLA DEPORTIVA.
     */
+    const sportEligibility =
+      await validateSportEligibility(
+        client,
+        challenger,
+        challenged,
+      );
 
     if (
-      !Number.isInteger(
-        challenger.rank_position,
-      ) ||
-      !Number.isInteger(
-        challenged.rank_position,
-      )
+      !sportEligibility.allowed
     ) {
       await client.query(
         "ROLLBACK",
       );
-
-
-      return res
-        .status(409)
-        .json({
-          message:
-            "No se pudo determinar la posición competitiva de los jugadores.",
-
-          reason:
-            "ranking_unavailable",
-        });
-    }
-
-
-    /*
-      SOLO HACIA ARRIBA
-      MÁXIMO 3 POSICIONES
-    */
-
-    const difference =
-      challenger.rank_position -
-      challenged.rank_position;
-
-
-    if (
-      difference < 1 ||
-      difference > 3
-    ) {
-      await client.query(
-        "ROLLBACK",
-      );
-
 
       return res
         .status(400)
         .json({
           message:
-            "Solo podés desafiar hasta 3 posiciones por encima",
-
+            sportEligibility.message,
           reason:
-            "ranking_distance",
+            sportEligibility.reason,
         });
     }
 
+    /*
+      RUEDA DEL DESAFIANTE.
+
+      Esta validación es la que evita
+      que alguien juegue dos veces con
+      un amigo mientras todavía tiene
+      rivales de la rueda sin enfrentar.
+    */
+    const historicalMeetings =
+      await getHistoricalMeetings(
+        client,
+        challengerId,
+        challengedId,
+      );
+
+    const minimumMeetings =
+      await getRotationMinimumMeetings(
+        client,
+        challenger,
+      );
+
+    if (
+      minimumMeetings !== null &&
+      historicalMeetings >
+        minimumMeetings
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+      return res
+        .status(409)
+        .json({
+          message:
+            "Antes tenés que jugar con rivales de tu rueda a los que enfrentaste menos veces.",
+          reason:
+            "opponent_rotation",
+          historical_meetings:
+            historicalMeetings,
+          minimum_meetings:
+            minimumMeetings,
+        });
+    }
 
     /*
-      COOLDOWN POR RECHAZO
+      COOLDOWN.
     */
-
     const cooldown =
       await getRejectionCooldown(
         client,
@@ -791,35 +973,28 @@ export const createChallenge = async (
         challengedId,
       );
 
-
     if (cooldown) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(429)
         .json({
           message:
             "Este jugador rechazó tu último desafío. Tenés que esperar 7 días para volver a desafiarlo.",
-
           reason:
             "rejection_cooldown",
-
           available_at:
             cooldown.availableAt,
-
           cooldown_days:
             REJECTION_COOLDOWN_DAYS,
         });
     }
 
-
     /*
-      NO DUPLICAR DESAFÍOS ACTIVOS
+      NO DUPLICAR ACTIVO.
     */
-
     const active =
       await client.query(
         `
@@ -829,27 +1004,22 @@ export const createChallenge = async (
 
         FROM challenges
 
-        WHERE status IN (
-          'pending',
-          'accepted'
-        )
-
+        WHERE
+          status IN (
+            'pending',
+            'accepted'
+          )
           AND (
             (
               challenger_id = $1
               AND challenged_id = $2
             )
-
             OR
-
             (
               challenger_id = $2
               AND challenged_id = $1
             )
           )
-
-        ORDER BY
-          id ASC
 
         LIMIT 1
         `,
@@ -859,31 +1029,24 @@ export const createChallenge = async (
         ],
       );
 
-
-    if (
-      active.rowCount
-    ) {
+    if (active.rowCount) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(409)
         .json({
           message:
             "Ya existe un desafío o partido activo entre ustedes.",
-
           reason:
             "active_challenge",
         });
     }
 
-
     /*
-      RUEDA DE RIVALES
+      RUEDA DEL RECEPTOR.
     */
-
     const mustWaitForOthers =
       await hasOlderPendingRivals(
         client,
@@ -891,42 +1054,20 @@ export const createChallenge = async (
         challengedId,
       );
 
-
-    if (
-      mustWaitForOthers
-    ) {
+    if (mustWaitForOthers) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(409)
         .json({
           message:
-            "Todavía hay otros desafíos anteriores que este jugador debe resolver antes de que puedas volver a desafiarlo.",
-
+            "Este jugador todavía tiene otros rivales anteriores esperando en su rueda.",
           reason:
             "rotation_wait",
         });
     }
-
-
-    /*
-      ENFRENTAMIENTOS HISTÓRICOS
-    */
-
-    const historicalMeetings =
-      await getHistoricalMeetings(
-        client,
-        challengerId,
-        challengedId,
-      );
-
-
-    /*
-      CREAR
-    */
 
     const created =
       await client.query(
@@ -954,11 +1095,6 @@ export const createChallenge = async (
         ],
       );
 
-
-    /*
-      AUDITORÍA
-    */
-
     await client.query(
       `
       INSERT INTO audit_events (
@@ -983,12 +1119,6 @@ export const createChallenge = async (
           challenged_id:
             challengedId,
 
-          challenger_competitive_position:
-            challenger.rank_position,
-
-          challenged_competitive_position:
-            challenged.rank_position,
-
           challenger_provisional:
             Boolean(
               challenger.provisional,
@@ -999,17 +1129,29 @@ export const createChallenge = async (
               challenged.provisional,
             ),
 
+          challenger_official_position:
+            sportEligibility
+              .challengerPosition,
+
+          challenged_official_position:
+            sportEligibility
+              .challengedPosition,
+
           historical_meetings:
             historicalMeetings,
+
+          rotation_minimum_meetings:
+            minimumMeetings,
+
+          placement_matches:
+            PLACEMENT_MATCHES,
         }),
       ],
     );
 
-
     await client.query(
       "COMMIT",
     );
-
 
     res
       .status(201)
@@ -1024,7 +1166,6 @@ export const createChallenge = async (
           challenger: {
             name:
               challenger.name,
-
             phone:
               challenger.phone,
           },
@@ -1032,7 +1173,6 @@ export const createChallenge = async (
           challenged: {
             name:
               challenged.name,
-
             phone:
               challenged.phone,
           },
@@ -1046,7 +1186,6 @@ export const createChallenge = async (
     } catch {
       // Se libera en finally.
     }
-
 
     next(error);
   } finally {
@@ -1085,6 +1224,12 @@ export const getMyChallenges = async (
           u2.phone AS
             challenged_phone,
 
+          u1.matches_played < $2
+            AS challenger_provisional,
+
+          u2.matches_played < $2
+            AS challenged_provisional,
+
           updater.name AS
             schedule_updated_by_name
 
@@ -1104,9 +1249,7 @@ export const getMyChallenges = async (
 
         WHERE
           c.challenger_id = $1
-
           OR
-
           c.challenged_id = $1
 
         ORDER BY
@@ -1115,16 +1258,14 @@ export const getMyChallenges = async (
         `,
         [
           req.userId,
+          PLACEMENT_MATCHES,
         ],
       );
-
 
     const client =
       await pool.connect();
 
-
     let rotation;
-
 
     try {
       rotation =
@@ -1136,37 +1277,24 @@ export const getMyChallenges = async (
       client.release();
     }
 
-
     const currentId =
       rotation
         .currentChallenge
-        ?.id ||
-      null;
-
+        ?.id || null;
 
     const challenges =
       result.rows.map(
-        (
-          challenge,
-        ) => {
+        (challenge) => {
           const incoming =
             Number(
               challenge.challenged_id,
             ) ===
-            Number(
-              req.userId,
-            );
+            Number(req.userId);
 
-
-          let canAccept =
-            false;
-
-          let canReject =
-            false;
-
+          let canAccept = false;
+          let canReject = false;
           let rotationMessage =
             null;
-
 
           if (
             incoming &&
@@ -1180,18 +1308,11 @@ export const getMyChallenges = async (
               rotationMessage =
                 `Primero tenés que jugar el partido ya confirmado contra ${rotation.activeChallenge.challenger_name}.`;
             } else if (
-              Number(
-                challenge.id,
-              ) ===
-              Number(
-                currentId,
-              )
+              Number(challenge.id) ===
+              Number(currentId)
             ) {
-              canAccept =
-                true;
-
-              canReject =
-                true;
+              canAccept = true;
+              canReject = true;
             } else if (
               rotation
                 .currentChallenge
@@ -1200,7 +1321,6 @@ export const getMyChallenges = async (
                 `Antes tenés que resolver el desafío de ${rotation.currentChallenge.challenger_name}.`;
             }
           }
-
 
           return {
             ...challenge,
@@ -1216,7 +1336,6 @@ export const getMyChallenges = async (
           };
         },
       );
-
 
     res.json({
       challenges,
@@ -1236,6 +1355,12 @@ export const getMyChallenges = async (
           rotation
             .activeChallenge
             ?.challenger_name ||
+          null,
+
+        current_opponent_provisional:
+          rotation
+            .currentChallenge
+            ?.challenger_provisional ??
           null,
       },
     });
@@ -1265,12 +1390,10 @@ export const scheduleChallenge = async (
       scheduled_at,
     } = req.body;
 
-
     const cleanVenue =
       String(
         venue || "",
       ).trim();
-
 
     if (
       cleanVenue.length < 3 ||
@@ -1281,18 +1404,13 @@ export const scheduleChallenge = async (
         .json({
           message:
             "Ingresá un lugar válido para jugar.",
-
           reason:
             "invalid_venue",
         });
     }
 
-
     const scheduledDate =
-      new Date(
-        scheduled_at,
-      );
-
+      new Date(scheduled_at);
 
     if (
       !scheduled_at ||
@@ -1305,12 +1423,10 @@ export const scheduleChallenge = async (
         .json({
           message:
             "Ingresá una fecha y hora válidas.",
-
           reason:
             "invalid_schedule",
         });
     }
-
 
     if (
       scheduledDate.getTime() <=
@@ -1321,17 +1437,14 @@ export const scheduleChallenge = async (
         .json({
           message:
             "El partido debe programarse para una fecha futura.",
-
           reason:
             "schedule_in_past",
         });
     }
 
-
     await client.query(
       "BEGIN",
     );
-
 
     const result =
       await client.query(
@@ -1340,16 +1453,12 @@ export const scheduleChallenge = async (
 
         SET
           venue = $1,
-
           scheduled_at = $2,
-
           schedule_updated_by = $3
 
-        WHERE id = $4
-
-          AND status =
-            'pending'
-
+        WHERE
+          id = $4
+          AND status = 'pending'
           AND (
             challenger_id = $3
             OR challenged_id = $3
@@ -1365,26 +1474,20 @@ export const scheduleChallenge = async (
         ],
       );
 
-
-    if (
-      !result.rowCount
-    ) {
+    if (!result.rowCount) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(404)
         .json({
           message:
             "Desafío pendiente no encontrado.",
-
           reason:
             "challenge_not_found",
         });
     }
-
 
     await client.query(
       `
@@ -1411,16 +1514,15 @@ export const scheduleChallenge = async (
             cleanVenue,
 
           scheduled_at:
-            scheduledDate.toISOString(),
+            scheduledDate
+              .toISOString(),
         }),
       ],
     );
 
-
     await client.query(
       "COMMIT",
     );
-
 
     res.json({
       message:
@@ -1437,7 +1539,6 @@ export const scheduleChallenge = async (
     } catch {
       // Se libera en finally.
     }
-
 
     next(error);
   } finally {
@@ -1465,7 +1566,6 @@ export const acceptChallenge = async (
       "BEGIN",
     );
 
-
     const currentUser =
       await client.query(
         `
@@ -1474,7 +1574,8 @@ export const acceptChallenge = async (
           role,
           gender,
           city,
-          verification_status
+          verification_status,
+          matches_played
 
         FROM users
 
@@ -1482,19 +1583,13 @@ export const acceptChallenge = async (
 
         FOR UPDATE
         `,
-        [
-          req.userId,
-        ],
+        [req.userId],
       );
 
-
-    if (
-      !currentUser.rowCount
-    ) {
+    if (!currentUser.rowCount) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(404)
@@ -1504,10 +1599,8 @@ export const acceptChallenge = async (
         });
     }
 
-
     const challengedUser =
       currentUser.rows[0];
-
 
     if (
       challengedUser.role !==
@@ -1520,25 +1613,30 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(403)
         .json({
           message:
             "Tu cuenta debe estar verificada para aceptar desafíos.",
-
           reason:
             "not_verified",
         });
     }
 
+    /*
+      Esta es la regla que hace que
+      "si te toca el provisional,
+      te toca".
 
+      No distinguimos provisional/rankeado:
+      la cola se resuelve por historial
+      y antigüedad.
+    */
     const rotation =
       await getRotationState(
         client,
         req.userId,
       );
-
 
     if (
       rotation
@@ -1548,18 +1646,15 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(409)
         .json({
           message:
             `Primero tenés que jugar el partido ya confirmado contra ${rotation.activeChallenge.challenger_name}.`,
-
           reason:
             "active_match",
         });
     }
-
 
     if (
       !rotation
@@ -1569,23 +1664,18 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(404)
         .json({
           message:
             "No tenés desafíos pendientes para aceptar.",
-
           reason:
             "no_pending_challenges",
         });
     }
 
-
     if (
-      Number(
-        req.params.id,
-      ) !==
+      Number(req.params.id) !==
       Number(
         rotation
           .currentChallenge
@@ -1596,28 +1686,23 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(409)
         .json({
           message:
             `Antes tenés que resolver el desafío de ${rotation.currentChallenge.challenger_name}.`,
-
           reason:
             "rotation_blocked",
-
           current_challenge_id:
             rotation
               .currentChallenge
               .id,
-
           current_opponent:
             rotation
               .currentChallenge
               .challenger_name,
         });
     }
-
 
     const challenge =
       await client.query(
@@ -1626,12 +1711,10 @@ export const acceptChallenge = async (
 
         FROM challenges
 
-        WHERE id = $1
-
+        WHERE
+          id = $1
           AND challenged_id = $2
-
-          AND status =
-            'pending'
+          AND status = 'pending'
 
         FOR UPDATE
         `,
@@ -1641,14 +1724,10 @@ export const acceptChallenge = async (
         ],
       );
 
-
-    if (
-      !challenge.rowCount
-    ) {
+    if (!challenge.rowCount) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(404)
@@ -1658,10 +1737,8 @@ export const acceptChallenge = async (
         });
     }
 
-
     const c =
       challenge.rows[0];
-
 
     if (
       !c.venue ||
@@ -1671,24 +1748,20 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(400)
         .json({
           message:
             "Antes de aceptar tienen que cargar el lugar, la fecha y la hora del partido.",
-
           reason:
             "schedule_required",
         });
     }
 
-
     const scheduledTime =
       new Date(
         c.scheduled_at,
       ).getTime();
-
 
     if (
       Number.isNaN(
@@ -1701,18 +1774,15 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(400)
         .json({
           message:
             "El horario cargado ya pasó. Actualicen el turno antes de aceptar.",
-
           reason:
             "schedule_expired",
         });
     }
-
 
     const challenger =
       await client.query(
@@ -1722,7 +1792,8 @@ export const acceptChallenge = async (
           role,
           gender,
           city,
-          verification_status
+          verification_status,
+          matches_played
 
         FROM users
 
@@ -1730,35 +1801,26 @@ export const acceptChallenge = async (
 
         FOR UPDATE
         `,
-        [
-          c.challenger_id,
-        ],
+        [c.challenger_id],
       );
 
-
-    if (
-      !challenger.rowCount
-    ) {
+    if (!challenger.rowCount) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(400)
         .json({
           message:
             "El jugador que creó este desafío ya no está habilitado para competir.",
-
           reason:
             "challenger_not_verified",
         });
     }
 
-
     const challengerUser =
       challenger.rows[0];
-
 
     if (
       challengerUser.role !==
@@ -1775,59 +1837,46 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(400)
         .json({
           message:
             "El jugador que creó este desafío ya no está habilitado para competir en esta liga.",
-
           reason:
             "challenger_not_eligible",
         });
     }
 
-
     const existingMatch =
       await client.query(
         `
-        SELECT
-          id
+        SELECT id
 
         FROM matches
 
-        WHERE challenge_id = $1
-
-          AND annulled_at
-            IS NULL
+        WHERE
+          challenge_id = $1
+          AND annulled_at IS NULL
 
         LIMIT 1
         `,
-        [
-          c.id,
-        ],
+        [c.id],
       );
 
-
-    if (
-      existingMatch.rowCount
-    ) {
+    if (existingMatch.rowCount) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(409)
         .json({
           message:
             "Este desafío ya tiene un partido asociado.",
-
           reason:
             "match_already_exists",
         });
     }
-
 
     const updatedChallenge =
       await client.query(
@@ -1835,24 +1884,18 @@ export const acceptChallenge = async (
         UPDATE challenges
 
         SET
-          status =
-            'accepted',
-
+          status = 'accepted',
           accepted_at =
             CURRENT_TIMESTAMP
 
-        WHERE id = $1
-
-          AND status =
-            'pending'
+        WHERE
+          id = $1
+          AND status = 'pending'
 
         RETURNING id
         `,
-        [
-          c.id,
-        ],
+        [c.id],
       );
-
 
     if (
       !updatedChallenge.rowCount
@@ -1861,18 +1904,15 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(409)
         .json({
           message:
             "El desafío cambió de estado antes de poder aceptarlo.",
-
           reason:
             "challenge_state_changed",
         });
     }
-
 
     const match =
       await client.query(
@@ -1906,7 +1946,6 @@ export const acceptChallenge = async (
         ],
       );
 
-
     await client.query(
       `
       INSERT INTO audit_events (
@@ -1936,15 +1975,27 @@ export const acceptChallenge = async (
 
           scheduled_at:
             c.scheduled_at,
+
+          challenger_provisional:
+            Number(
+              challengerUser
+                .matches_played,
+            ) <
+            PLACEMENT_MATCHES,
+
+          challenged_provisional:
+            Number(
+              challengedUser
+                .matches_played,
+            ) <
+            PLACEMENT_MATCHES,
         }),
       ],
     );
 
-
     await client.query(
       "COMMIT",
     );
-
 
     res.json({
       message:
@@ -1961,7 +2012,6 @@ export const acceptChallenge = async (
     } catch {
       // Se libera en finally.
     }
-
 
     next(error);
   } finally {
@@ -1989,7 +2039,6 @@ export const rejectChallenge = async (
       "BEGIN",
     );
 
-
     const user =
       await client.query(
         `
@@ -1997,7 +2046,8 @@ export const rejectChallenge = async (
           id,
           role,
           verification_status,
-          rating
+          rating,
+          matches_played
 
         FROM users
 
@@ -2005,19 +2055,13 @@ export const rejectChallenge = async (
 
         FOR UPDATE
         `,
-        [
-          req.userId,
-        ],
+        [req.userId],
       );
 
-
-    if (
-      !user.rowCount
-    ) {
+    if (!user.rowCount) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(404)
@@ -2027,34 +2071,35 @@ export const rejectChallenge = async (
         });
     }
 
+    const currentUser =
+      user.rows[0];
 
     if (
-      user.rows[0].role !==
-      "player"
+      currentUser.role !==
+      "player" ||
+      currentUser
+        .verification_status !==
+        "verified"
     ) {
       await client.query(
         "ROLLBACK",
       );
 
-
       return res
         .status(403)
         .json({
           message:
-            "Solo los jugadores pueden rechazar desafíos.",
-
+            "Tu cuenta debe estar verificada para rechazar desafíos.",
           reason:
-            "invalid_role",
+            "not_verified",
         });
     }
-
 
     const rotation =
       await getRotationState(
         client,
         req.userId,
       );
-
 
     if (
       rotation
@@ -2064,18 +2109,15 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(409)
         .json({
           message:
             `Primero tenés que jugar el partido ya confirmado contra ${rotation.activeChallenge.challenger_name}.`,
-
           reason:
             "active_match",
         });
     }
-
 
     if (
       !rotation
@@ -2085,7 +2127,6 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(404)
         .json({
@@ -2094,11 +2135,8 @@ export const rejectChallenge = async (
         });
     }
 
-
     if (
-      Number(
-        req.params.id,
-      ) !==
+      Number(req.params.id) !==
       Number(
         rotation
           .currentChallenge
@@ -2109,28 +2147,23 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(409)
         .json({
           message:
             `Antes tenés que resolver el desafío de ${rotation.currentChallenge.challenger_name}.`,
-
           reason:
             "rotation_blocked",
-
           current_challenge_id:
             rotation
               .currentChallenge
               .id,
-
           current_opponent:
             rotation
               .currentChallenge
               .challenger_name,
         });
     }
-
 
     const challenge =
       await client.query(
@@ -2139,12 +2172,10 @@ export const rejectChallenge = async (
 
         FROM challenges
 
-        WHERE id = $1
-
+        WHERE
+          id = $1
           AND challenged_id = $2
-
-          AND status =
-            'pending'
+          AND status = 'pending'
 
         FOR UPDATE
         `,
@@ -2154,68 +2185,88 @@ export const rejectChallenge = async (
         ],
       );
 
-
-    if (
-      !challenge.rowCount
-    ) {
+    if (!challenge.rowCount) {
       await client.query(
         "ROLLBACK",
       );
-
 
       return res
         .status(409)
         .json({
           message:
             "El desafío ya fue resuelto o no existe.",
-
           reason:
             "challenge_already_resolved",
         });
     }
 
-
     const beforeRating =
       Number(
-        user.rows[0].rating,
+        currentUser.rating,
       );
 
+    const matchesPlayed =
+      Number(
+        currentUser
+          .matches_played,
+      );
 
     if (
       !Number.isFinite(
         beforeRating,
-      )
+      ) ||
+      !Number.isInteger(
+        matchesPlayed,
+      ) ||
+      matchesPlayed < 0
     ) {
       await client.query(
         "ROLLBACK",
       );
 
-
       return res
         .status(409)
         .json({
           message:
-            "El Elo actual del jugador es inválido.",
-
+            "Los datos de ranking del jugador son inválidos.",
           reason:
             "invalid_rating",
         });
     }
 
+    const provisional =
+      matchesPlayed <
+      PLACEMENT_MATCHES;
+
+    /*
+      IMPORTANTE:
+
+      Un provisional puede tener Elo 0.
+
+      La versión anterior usaba piso 100
+      y rechazar con Elo 0 podía terminar
+      SUBIÉNDOLO a 100.
+
+      Eso queda corregido.
+
+      Provisional: piso 0.
+      Establecido: piso 100.
+    */
+    const ratingFloor =
+      provisional
+        ? 0
+        : 100;
 
     const afterRating =
       Math.max(
-        100,
-
+        ratingFloor,
         beforeRating -
           REJECTION_ELO_PENALTY,
       );
 
-
     const realPenalty =
       beforeRating -
       afterRating;
-
 
     const updatedChallenge =
       await client.query(
@@ -2223,24 +2274,17 @@ export const rejectChallenge = async (
         UPDATE challenges
 
         SET
-          status =
-            'rejected',
-
+          status = 'rejected',
           rejected_at =
             CURRENT_TIMESTAMP,
-
           resolved_at =
             CURRENT_TIMESTAMP,
+          rejection_elo_penalty = $1
 
-          rejection_elo_penalty =
-            $1
-
-        WHERE id = $2
-
+        WHERE
+          id = $2
           AND challenged_id = $3
-
-          AND status =
-            'pending'
+          AND status = 'pending'
 
         RETURNING *
         `,
@@ -2251,7 +2295,6 @@ export const rejectChallenge = async (
         ],
       );
 
-
     if (
       !updatedChallenge.rowCount
     ) {
@@ -2259,18 +2302,15 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
-
       return res
         .status(409)
         .json({
           message:
             "El desafío ya fue resuelto.",
-
           reason:
             "challenge_already_resolved",
         });
     }
-
 
     await client.query(
       `
@@ -2278,7 +2318,6 @@ export const rejectChallenge = async (
 
       SET
         rating = $1,
-
         updated_at =
           CURRENT_TIMESTAMP
 
@@ -2289,7 +2328,6 @@ export const rejectChallenge = async (
         req.userId,
       ],
     );
-
 
     await client.query(
       `
@@ -2324,7 +2362,6 @@ export const rejectChallenge = async (
       ],
     );
 
-
     await client.query(
       `
       INSERT INTO audit_events (
@@ -2355,21 +2392,23 @@ export const rejectChallenge = async (
           elo_after:
             afterRating,
 
+          provisional,
+
           cooldown_days:
             REJECTION_COOLDOWN_DAYS,
         }),
       ],
     );
 
-
     await client.query(
       "COMMIT",
     );
 
-
     res.json({
       message:
-        `Desafío rechazado. Se descontaron ${realPenalty} puntos Elo.`,
+        realPenalty > 0
+          ? `Desafío rechazado. Se descontaron ${realPenalty} puntos Elo.`
+          : "Desafío rechazado. Tu Elo ya estaba en el mínimo permitido.",
 
       elo_change:
         -realPenalty,
@@ -2391,7 +2430,6 @@ export const rejectChallenge = async (
     } catch {
       // Se libera en finally.
     }
-
 
     next(error);
   } finally {
