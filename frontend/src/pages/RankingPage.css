@@ -1,6 +1,5 @@
 .ranking-player-link {
   color: inherit;
-
   text-decoration: none;
 
   transition:
@@ -14,7 +13,7 @@
 
 
 /* =========================================================
-   SELECTOR DE LIGA — RANKING
+   SELECTOR DE LIGA
    ========================================================= */
 
 .page-heading .league-switch {
@@ -52,11 +51,9 @@ button {
   padding:
     0 18px;
 
-  border:
-    0;
+  border: 0;
 
-  border-radius:
-    8px;
+  border-radius: 8px;
 
   background:
     transparent;
@@ -64,20 +61,14 @@ button {
   color:
     #60483c;
 
-  font-size:
-    12px;
+  font-size: 12px;
+  font-weight: 800;
 
-  font-weight:
-    800;
+  cursor: pointer;
 
-  cursor:
-    pointer;
+  opacity: 1;
 
-  opacity:
-    1;
-
-  box-shadow:
-    none;
+  box-shadow: none;
 
   transition:
     background 0.18s ease,
@@ -111,8 +102,7 @@ button.active {
       #c8673d 100%
     );
 
-  color:
-    #ffffff;
+  color: #ffffff;
 
   box-shadow:
     0 5px 12px
@@ -133,8 +123,7 @@ button.active:hover {
       #ca673d 100%
     );
 
-  color:
-    #ffffff;
+  color: #ffffff;
 }
 
 
@@ -145,8 +134,292 @@ button:focus-visible {
     2px solid
     rgba(201, 104, 67, 0.38);
 
-  outline-offset:
-    2px;
+  outline-offset: 2px;
+}
+
+
+/* =========================================================
+   ELO HISTÓRICO
+   ========================================================= */
+
+.historical-elo-section {
+  margin-bottom: 30px;
+}
+
+
+.historical-elo-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+
+  gap: 24px;
+
+  margin-bottom: 16px;
+}
+
+
+.historical-elo-heading span {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: #bc6742;
+
+  font-size: 11px;
+  font-weight: 900;
+
+  letter-spacing: 0.16em;
+}
+
+
+.historical-elo-heading h2 {
+  margin: 0;
+
+  color: #4d3428;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      27px,
+      4vw,
+      39px
+    );
+
+  line-height: 1;
+}
+
+
+.historical-elo-heading p {
+  max-width: 420px;
+
+  margin: 0;
+
+  color: #765f53;
+
+  font-size: 13px;
+  line-height: 1.55;
+
+  text-align: right;
+}
+
+
+.historical-elo-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+
+  gap: 14px;
+}
+
+
+.historical-elo-card {
+  position: relative;
+
+  overflow: hidden;
+
+  min-height: 220px;
+
+  padding: 22px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(
+        255,
+        253,
+        248,
+        0.93
+      ),
+      rgba(
+        247,
+        230,
+        216,
+        0.86
+      )
+    );
+
+  border:
+    1px solid
+    rgba(
+      194,
+      126,
+      88,
+      0.3
+    );
+
+  border-radius: 16px;
+
+  box-shadow:
+    0 14px 34px
+    rgba(
+      76,
+      43,
+      25,
+      0.12
+    );
+
+  backdrop-filter:
+    blur(8px);
+}
+
+
+.historical-elo-card::after {
+  content: "";
+
+  position: absolute;
+
+  width: 120px;
+  height: 120px;
+
+  right: -50px;
+  bottom: -55px;
+
+  border:
+    24px solid
+    rgba(
+      201,
+      104,
+      63,
+      0.07
+    );
+
+  border-radius: 50%;
+}
+
+
+.historical-medal {
+  margin-bottom: 12px;
+
+  font-size: 29px;
+  line-height: 1;
+}
+
+
+.historical-position {
+  display: block;
+
+  margin-bottom: 7px;
+
+  color: #a85a39;
+
+  font-size: 10px;
+  font-weight: 900;
+
+  letter-spacing: 0.13em;
+}
+
+
+.historical-player-name {
+  display: block;
+
+  overflow: hidden;
+
+  color: #4a3328;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 20px;
+  font-weight: 700;
+
+  text-decoration: none;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.historical-player-name:hover {
+  color: #c6683f;
+}
+
+
+.historical-record-number {
+  display: flex;
+  align-items: baseline;
+
+  gap: 6px;
+
+  margin-top: 16px;
+
+  color: #bd6038;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+
+.historical-record-number small {
+  color: #876759;
+
+  font-family:
+    Arial,
+    sans-serif;
+
+  font-size: 10px;
+  font-weight: 900;
+
+  letter-spacing: 0.12em;
+}
+
+
+.historical-record-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+
+  margin-top: 19px;
+  padding-top: 13px;
+
+  border-top:
+    1px solid
+    rgba(
+      112,
+      76,
+      57,
+      0.13
+    );
+
+  color: #806a5e;
+
+  font-size: 11px;
+}
+
+
+.historical-record-meta strong {
+  color: #594137;
+}
+
+
+.historical-current {
+  margin-top: 8px;
+
+  color: #806a5e;
+
+  font-size: 11px;
+}
+
+
+.historical-current strong {
+  color: #4d382f;
 }
 
 
@@ -165,13 +438,6 @@ button:focus-visible {
   cursor: help;
 }
 
-
-/*
-  No usamos pointer-events: none en
-  el wrapper porque necesitamos que
-  reciba hover/touch para mostrar
-  la explicación.
-*/
 
 .ranking-challenge-button {
   min-width: 92px;
@@ -193,7 +459,8 @@ button:focus-visible {
   position: absolute;
 
   left: 50%;
-  bottom: calc(100% + 10px);
+  bottom:
+    calc(100% + 10px);
 
   z-index: 100;
 
@@ -207,26 +474,25 @@ button:focus-visible {
     translateY(5px);
 
   background:
-    rgba(255, 253, 249, 0.97);
+    rgba(
+      255,
+      253,
+      249,
+      0.97
+    );
 
   border:
     1px solid
     #c6683f;
 
-  border-radius:
-    8px;
+  border-radius: 8px;
 
-  color:
-    #4f392e;
+  color: #4f392e;
 
-  font-size:
-    12px;
-
-  line-height:
-    1.5;
+  font-size: 12px;
+  line-height: 1.5;
 
   opacity: 0;
-
   visibility: hidden;
 
   pointer-events: none;
@@ -253,8 +519,7 @@ button:focus-visible {
     translateX(-50%);
 
   border:
-    6px solid
-    transparent;
+    6px solid transparent;
 
   border-top-color:
     #c6683f;
@@ -268,7 +533,6 @@ button:focus-visible {
 .ranking-action-wrap.disabled:focus-within
 .ranking-tooltip {
   opacity: 1;
-
   visibility: visible;
 
   transform:
@@ -281,9 +545,22 @@ button:focus-visible {
    RESPONSIVE
    ========================================================= */
 
-@media (max-width: 700px) {
+@media (max-width: 850px) {
+  .historical-elo-grid {
+    grid-template-columns:
+      1fr;
+  }
 
-  .page-heading .league-switch {
+
+  .historical-elo-card {
+    min-height: 0;
+  }
+}
+
+
+@media (max-width: 700px) {
+  .page-heading
+  .league-switch {
     width: 100%;
   }
 
@@ -300,6 +577,22 @@ button:focus-visible {
   }
 
 
+  .historical-elo-heading {
+    align-items:
+      flex-start;
+
+    flex-direction:
+      column;
+
+    gap: 10px;
+  }
+
+
+  .historical-elo-heading p {
+    text-align: left;
+  }
+
+
   .ranking-tooltip {
     left: auto;
     right: 0;
@@ -307,7 +600,9 @@ button:focus-visible {
     width:
       min(
         260px,
-        calc(100vw - 40px)
+        calc(
+          100vw - 40px
+        )
       );
 
     transform:

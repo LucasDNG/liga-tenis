@@ -9,6 +9,31 @@ import {
 const PLACEMENT_MATCHES = 5;
 
 
+/*
+  ============================================================
+  VALIDAR LIGA
+  ============================================================
+*/
+
+const getLeague = (req) => {
+  const gender =
+    req.query.gender ||
+    "male";
+
+  return LEAGUES.includes(
+    gender,
+  )
+    ? gender
+    : null;
+};
+
+
+/*
+  ============================================================
+  RANKING ACTUAL
+  ============================================================
+*/
+
 export const getRanking = async (
   req,
   res,
@@ -16,15 +41,9 @@ export const getRanking = async (
 ) => {
   try {
     const gender =
-      req.query.gender ||
-      "male";
+      getLeague(req);
 
-
-    if (
-      !LEAGUES.includes(
-        gender,
-      )
-    ) {
+    if (!gender) {
       return res
         .status(400)
         .json({
@@ -33,23 +52,15 @@ export const getRanking = async (
         });
     }
 
-
     /*
-      ========================================================
       RANKING OFICIAL
-      ========================================================
 
-      Solo jugadores:
-
-      - player
+      Solo:
+      - jugadores
       - verificados
       - misma ciudad/liga
-      - 5 o más partidos
-
-      Los jugadores provisionales NO consumen
-      posiciones oficiales.
+      - 5+ partidos
     */
-
     const officialResult =
       await pool.query(
         `
@@ -69,21 +80,16 @@ export const getRanking = async (
               rating DESC,
               matches_played DESC,
               id ASC
-          )::int
-            AS rank_position
+          )::int AS rank_position
 
         FROM users
 
-        WHERE city = $1
-
+        WHERE
+          city = $1
           AND gender = $2
-
-          AND role =
-            'player'
-
+          AND role = 'player'
           AND verification_status =
             'verified'
-
           AND matches_played >= $3
 
         ORDER BY
@@ -98,20 +104,14 @@ export const getRanking = async (
         ],
       );
 
-
     /*
-      ========================================================
-      JUGADORES PROVISIONALES
-      ========================================================
+      PROVISIONALES
 
-      Conservan y acumulan su Elo real.
+      Son públicos y visibles desde que
+      están verificados.
 
-      Pero mientras tengan menos de 5 partidos:
-      - no reciben posición oficial
-      - no pueden aparecer #1, #2, etc.
-      - se muestran después del ranking oficial
+      No consumen una posición oficial.
     */
-
     const provisionalResult =
       await pool.query(
         `
@@ -126,21 +126,16 @@ export const getRanking = async (
 
           true AS provisional,
 
-          NULL::int
-            AS rank_position
+          NULL::int AS rank_position
 
         FROM users
 
-        WHERE city = $1
-
+        WHERE
+          city = $1
           AND gender = $2
-
-          AND role =
-            'player'
-
+          AND role = 'player'
           AND verification_status =
             'verified'
-
           AND matches_played < $3
 
         ORDER BY
@@ -154,7 +149,6 @@ export const getRanking = async (
           PLACEMENT_MATCHES,
         ],
       );
-
 
     res.json({
       league:
@@ -176,6 +170,191 @@ export const getRanking = async (
         ...officialResult.rows,
         ...provisionalResult.rows,
       ],
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+/*
+  ============================================================
+  TOP 3 ELO HISTÓRICO
+  ============================================================
+
+  Regla:
+
+  - un solo récord por jugador
+  - toma el Elo máximo válido conseguido
+  - movimientos revertidos/anulados NO cuentan
+  - una caída posterior no borra el récord
+  - devuelve los 3 jugadores con mayor pico histórico
+
+  También incluimos el rating actual como respaldo para
+  datos viejos que pudieran existir antes de elo_events.
+
+  Después del reset final de producción, todo quedará
+  naturalmente registrado por eventos desde Elo 0.
+  ============================================================
+*/
+
+export const getHistoricalElo = async (
+  req,
+  res,
+  next,
+) => {
+  try {
+    const gender =
+      getLeague(req);
+
+    if (!gender) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Liga inválida",
+        });
+    }
+
+    const result =
+      await pool.query(
+        `
+        WITH eligible_players AS (
+          SELECT
+            id,
+            name,
+            first_name,
+            last_name,
+            gender,
+            rating,
+            matches_played
+
+          FROM users
+
+          WHERE
+            city = $1
+            AND gender = $2
+            AND role = 'player'
+            AND verification_status =
+              'verified'
+        ),
+
+        event_peaks AS (
+          SELECT DISTINCT ON (
+            ee.user_id
+          )
+            ee.user_id,
+
+            ee.elo_after
+              AS peak_elo,
+
+            ee.created_at
+              AS peak_reached_at,
+
+            ee.id
+              AS peak_event_id
+
+          FROM elo_events ee
+
+          JOIN eligible_players ep
+            ON ep.id =
+               ee.user_id
+
+          WHERE
+            ee.reversed_at IS NULL
+
+          ORDER BY
+            ee.user_id,
+            ee.elo_after DESC,
+            ee.created_at ASC,
+            ee.id ASC
+        ),
+
+        personal_peaks AS (
+          SELECT
+            ep.id,
+            ep.name,
+            ep.first_name,
+            ep.last_name,
+            ep.gender,
+            ep.rating
+              AS current_elo,
+            ep.matches_played,
+
+            CASE
+              WHEN ev.peak_elo IS NULL
+                THEN ep.rating
+
+              WHEN ep.rating >
+                   ev.peak_elo
+                THEN ep.rating
+
+              ELSE ev.peak_elo
+            END::int
+              AS peak_elo,
+
+            CASE
+              WHEN ev.peak_elo IS NULL
+                THEN NULL
+
+              WHEN ep.rating >
+                   ev.peak_elo
+                THEN NULL
+
+              ELSE ev.peak_reached_at
+            END
+              AS peak_reached_at
+
+          FROM eligible_players ep
+
+          LEFT JOIN event_peaks ev
+            ON ev.user_id =
+               ep.id
+        )
+
+        SELECT
+          id,
+          name,
+          first_name,
+          last_name,
+          gender,
+          current_elo,
+          matches_played,
+          peak_elo,
+          peak_reached_at,
+
+          ROW_NUMBER() OVER (
+            ORDER BY
+              peak_elo DESC,
+              matches_played DESC,
+              id ASC
+          )::int
+            AS historical_position
+
+        FROM personal_peaks
+
+        ORDER BY
+          peak_elo DESC,
+          matches_played DESC,
+          id ASC
+
+        LIMIT 3
+        `,
+        [
+          LEAGUE_CITY,
+          gender,
+        ],
+      );
+
+    res.json({
+      league:
+        gender,
+
+      city:
+        LEAGUE_CITY,
+
+      records:
+        result.rows,
     });
   } catch (error) {
     next(error);
