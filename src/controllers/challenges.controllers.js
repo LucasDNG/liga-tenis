@@ -1,7 +1,10 @@
 import { pool } from "../db.js";
 
+
 const REJECTION_ELO_PENALTY = 8;
 const REJECTION_COOLDOWN_DAYS = 7;
+
+const PLACEMENT_MATCHES = 5;
 
 
 /*
@@ -9,14 +12,31 @@ const REJECTION_COOLDOWN_DAYS = 7;
   JUGADOR + POSICIÓN COMPETITIVA
   ============================================================
 
-  La posición se calcula solamente entre:
-  - jugadores
-  - con liga elegida
+  IMPORTANTE:
+
+  Esta posición debe ser EXACTAMENTE
+  compatible con challengeAvailability.
+
+  Solo participan:
+  - role = player
+  - liga elegida
   - verificados
 
-  Pero igualmente devolvemos la cuenta si
-  todavía está pendiente/rechazada para poder
-  mostrar el error correcto.
+  Orden competitivo:
+
+  1. establecidos: 5+ partidos
+  2. provisionales: menos de 5 partidos
+
+  Dentro de cada grupo:
+  - Elo DESC
+  - partidos DESC
+  - id ASC
+
+  El ranking PÚBLICO oficial es distinto:
+  los provisionales no reciben número oficial.
+
+  Pero para poder completar sus 5 partidos
+  necesitan una posición competitiva interna.
 */
 
 const getRankedPlayer = async (
@@ -30,12 +50,21 @@ const getRankedPlayer = async (
         SELECT
           id,
 
+          matches_played < $2
+            AS provisional,
+
           ROW_NUMBER() OVER (
             PARTITION BY
               city,
               gender
 
             ORDER BY
+              CASE
+                WHEN matches_played >= $2
+                  THEN 0
+                ELSE 1
+              END ASC,
+
               rating DESC,
               matches_played DESC,
               id ASC
@@ -65,6 +94,7 @@ const getRankedPlayer = async (
         u.verification_status,
         u.role,
 
+        ranked.provisional,
         ranked.rank_position
 
       FROM users u
@@ -74,13 +104,16 @@ const getRankedPlayer = async (
            u.id
 
       WHERE u.id = $1
+
         AND u.role =
           'player'
       `,
       [
         id,
+        PLACEMENT_MATCHES,
       ],
     );
+
 
   return result.rows[0];
 };
@@ -132,6 +165,7 @@ const getHistoricalMeetings = async (
       ],
     );
 
+
   return result.rows[0].total;
 };
 
@@ -177,7 +211,6 @@ const getRotationState = async (
           NULLS LAST,
 
         c.created_at ASC,
-
         c.id ASC
 
       LIMIT 1
@@ -452,6 +485,7 @@ export const createChallenge = async (
         req.userId,
       );
 
+
     const challengedId =
       Number(
         req.body.challenged_id,
@@ -523,6 +557,7 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(404)
         .json({
@@ -547,6 +582,7 @@ export const createChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(403)
@@ -577,6 +613,7 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(400)
         .json({
@@ -600,6 +637,7 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(400)
         .json({
@@ -618,6 +656,7 @@ export const createChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(400)
@@ -643,6 +682,7 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(400)
         .json({
@@ -667,6 +707,7 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(400)
         .json({
@@ -680,11 +721,7 @@ export const createChallenge = async (
 
 
     /*
-      Ambos deberían tener posición
-      porque ya comprobamos:
-      - role player
-      - verified
-      - gender
+      POSICIONES COMPETITIVAS
     */
 
     if (
@@ -698,6 +735,7 @@ export const createChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(409)
@@ -729,6 +767,7 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(400)
         .json({
@@ -757,6 +796,7 @@ export const createChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(429)
@@ -827,6 +867,7 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(409)
         .json({
@@ -857,6 +898,7 @@ export const createChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(409)
@@ -941,11 +983,21 @@ export const createChallenge = async (
           challenged_id:
             challengedId,
 
-          challenger_rank:
+          challenger_competitive_position:
             challenger.rank_position,
 
-          challenged_rank:
+          challenged_competitive_position:
             challenged.rank_position,
+
+          challenger_provisional:
+            Boolean(
+              challenger.provisional,
+            ),
+
+          challenged_provisional:
+            Boolean(
+              challenged.provisional,
+            ),
 
           historical_meetings:
             historicalMeetings,
@@ -994,6 +1046,7 @@ export const createChallenge = async (
     } catch {
       // Se libera en finally.
     }
+
 
     next(error);
   } finally {
@@ -1097,8 +1150,12 @@ export const getMyChallenges = async (
           challenge,
         ) => {
           const incoming =
-            challenge.challenged_id ===
-            req.userId;
+            Number(
+              challenge.challenged_id,
+            ) ===
+            Number(
+              req.userId,
+            );
 
 
           let canAccept =
@@ -1123,8 +1180,12 @@ export const getMyChallenges = async (
               rotationMessage =
                 `Primero tenés que jugar el partido ya confirmado contra ${rotation.activeChallenge.challenger_name}.`;
             } else if (
-              challenge.id ===
-              currentId
+              Number(
+                challenge.id,
+              ) ===
+              Number(
+                currentId,
+              )
             ) {
               canAccept =
                 true;
@@ -1312,6 +1373,7 @@ export const scheduleChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(404)
         .json({
@@ -1376,6 +1438,7 @@ export const scheduleChallenge = async (
       // Se libera en finally.
     }
 
+
     next(error);
   } finally {
     client.release();
@@ -1402,11 +1465,6 @@ export const acceptChallenge = async (
       "BEGIN",
     );
 
-
-    /*
-      Bloqueamos al jugador desafiado.
-      Esto serializa decisiones simultáneas.
-    */
 
     const currentUser =
       await client.query(
@@ -1437,6 +1495,7 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(404)
         .json({
@@ -1460,6 +1519,7 @@ export const acceptChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(403)
@@ -1488,6 +1548,7 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(409)
         .json({
@@ -1508,6 +1569,7 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(404)
         .json({
@@ -1524,13 +1586,16 @@ export const acceptChallenge = async (
       Number(
         req.params.id,
       ) !==
-      rotation
-        .currentChallenge
-        .id
+      Number(
+        rotation
+          .currentChallenge
+          .id,
+      )
     ) {
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(409)
@@ -1584,6 +1649,7 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(404)
         .json({
@@ -1604,6 +1670,7 @@ export const acceptChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(400)
@@ -1633,6 +1700,7 @@ export const acceptChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(400)
@@ -1675,6 +1743,7 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(400)
         .json({
@@ -1706,6 +1775,7 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(400)
         .json({
@@ -1718,11 +1788,6 @@ export const acceptChallenge = async (
     }
 
 
-    /*
-      No puede existir otro match
-      del mismo challenge.
-    */
-
     const existingMatch =
       await client.query(
         `
@@ -1732,6 +1797,7 @@ export const acceptChallenge = async (
         FROM matches
 
         WHERE challenge_id = $1
+
           AND annulled_at
             IS NULL
 
@@ -1749,6 +1815,7 @@ export const acceptChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(409)
@@ -1793,6 +1860,7 @@ export const acceptChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(409)
@@ -1894,6 +1962,7 @@ export const acceptChallenge = async (
       // Se libera en finally.
     }
 
+
     next(error);
   } finally {
     client.release();
@@ -1920,14 +1989,6 @@ export const rejectChallenge = async (
       "BEGIN",
     );
 
-
-    /*
-      Bloqueamos primero al usuario.
-
-      Dos rechazos simultáneos del mismo
-      jugador no pueden avanzar al mismo
-      tiempo por la rueda.
-    */
 
     const user =
       await client.query(
@@ -1957,6 +2018,7 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(404)
         .json({
@@ -1973,6 +2035,7 @@ export const rejectChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(403)
@@ -2001,6 +2064,7 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(409)
         .json({
@@ -2021,6 +2085,7 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(404)
         .json({
@@ -2034,13 +2099,16 @@ export const rejectChallenge = async (
       Number(
         req.params.id,
       ) !==
-      rotation
-        .currentChallenge
-        .id
+      Number(
+        rotation
+          .currentChallenge
+          .id,
+      )
     ) {
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(409)
@@ -2094,6 +2162,7 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
+
       return res
         .status(409)
         .json({
@@ -2120,6 +2189,7 @@ export const rejectChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(409)
@@ -2188,6 +2258,7 @@ export const rejectChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
 
       return res
         .status(409)
@@ -2320,6 +2391,7 @@ export const rejectChallenge = async (
     } catch {
       // Se libera en finally.
     }
+
 
     next(error);
   } finally {
