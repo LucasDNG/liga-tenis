@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "seed": "node database/seed-test-users.js"
+    "seed": "node database/seed-test-users.js",
+    "simulate:elo": "node scripts/simulate-elo.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

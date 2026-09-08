@@ -31,9 +31,9 @@ export const getPendingUsers = async (
 
         FROM users
 
-        WHERE verification_status =
-          'pending_verification'
-
+        WHERE
+          verification_status =
+            'pending_verification'
           AND role =
             'player'
 
@@ -87,14 +87,12 @@ export const getPendingUserById =
 
           FROM users
 
-          WHERE id = $1
-
+          WHERE
+            id = $1
             AND role =
               'player'
           `,
-          [
-            id,
-          ],
+          [id],
         );
 
       if (
@@ -221,11 +219,10 @@ export const approveUser =
             updated_at =
               CURRENT_TIMESTAMP
 
-          WHERE id = $1
-
+          WHERE
+            id = $1
             AND role =
               'player'
-
             AND verification_status =
               'pending_verification'
 
@@ -236,9 +233,7 @@ export const approveUser =
             verification_status,
             verified_at
           `,
-          [
-            id,
-          ],
+          [id],
         );
 
       if (
@@ -296,11 +291,10 @@ export const rejectUser =
             updated_at =
               CURRENT_TIMESTAMP
 
-          WHERE id = $1
-
+          WHERE
+            id = $1
             AND role =
               'player'
-
             AND verification_status =
               'pending_verification'
 
@@ -310,9 +304,7 @@ export const rejectUser =
             email,
             verification_status
           `,
-          [
-            id,
-          ],
+          [id],
         );
 
       if (
@@ -481,7 +473,8 @@ export const getAuditMatchById =
             ON winner.id =
                m.winner_id
 
-          WHERE m.id = $1
+          WHERE
+            m.id = $1
           `,
           [
             req.params.id,
@@ -510,8 +503,10 @@ export const getAuditMatchById =
             f.resolved,
             f.resolved_at,
             f.resolved_by,
+
             resolver.name AS
               resolved_by_name,
+
             f.created_at
 
           FROM match_audit_flags f
@@ -520,13 +515,12 @@ export const getAuditMatchById =
             ON resolver.id =
                f.resolved_by
 
-          WHERE f.match_id = $1
+          WHERE
+            f.match_id = $1
 
           ORDER BY
             f.resolved ASC,
-
             f.created_at DESC,
-
             f.id DESC
           `,
           [
@@ -556,7 +550,8 @@ export const getAuditMatchById =
             ON reverser.id =
                e.reversed_by
 
-          WHERE e.match_id = $1
+          WHERE
+            e.match_id = $1
 
           ORDER BY
             e.created_at ASC,
@@ -582,7 +577,8 @@ export const getAuditMatchById =
             ON u.id =
                a.user_id
 
-          WHERE a.match_id = $1
+          WHERE
+            a.match_id = $1
 
           ORDER BY
             a.created_at DESC,
@@ -640,8 +636,8 @@ export const resolveAuditFlag =
             resolved_by =
               $1
 
-          WHERE id = $2
-
+          WHERE
+            id = $2
             AND resolved =
               FALSE
 
@@ -679,7 +675,30 @@ export const resolveAuditFlag =
 
 /*
   ============================================================
-  ANULAR PARTIDO + REVERTIR ELO
+  ANULAR PARTIDO
+
+  REGLA DE INTEGRIDAD:
+
+  Una anulación directa solamente es
+  segura cuando el partido no tiene
+  historia deportiva posterior que
+  dependa matemáticamente de su Elo.
+
+  Si existen partidos posteriores de
+  la misma liga, se necesita replay
+  cronológico y se bloquea la operación.
+
+  También se bloquea si alguno de los
+  participantes tiene un movimiento
+  Elo posterior al partido.
+
+  Cuando es seguro:
+  - restauramos Elo exacto pre-partido
+  - restamos 1 match
+  - revertimos match_result
+  - revertimos placement_completed
+    si existió
+  - agregamos admin_reversal
   ============================================================
 */
 
@@ -711,21 +730,12 @@ export const annulMatch =
           });
       }
 
-
       await client.query(
         "BEGIN",
       );
 
-
       /*
-        Primero bloqueamos el partido.
-
-        Es el mismo orden utilizado
-        durante la confirmación:
-        partido -> jugadores.
-
-        Eso disminuye el riesgo
-        de deadlocks.
+        BLOQUEAR PARTIDO
       */
 
       const found =
@@ -735,7 +745,8 @@ export const annulMatch =
 
           FROM matches
 
-          WHERE id = $1
+          WHERE
+            id = $1
 
           FOR UPDATE
           `,
@@ -743,7 +754,6 @@ export const annulMatch =
             req.params.id,
           ],
         );
-
 
       if (
         !found.rowCount
@@ -760,10 +770,8 @@ export const annulMatch =
           });
       }
 
-
       const match =
         found.rows[0];
-
 
       if (
         match.annulled_at
@@ -779,7 +787,6 @@ export const annulMatch =
               "Este partido ya fue anulado.",
           });
       }
-
 
       if (
         match.status !==
@@ -797,7 +804,6 @@ export const annulMatch =
           });
       }
 
-
       if (
         !match.player1_id ||
         !match.player2_id
@@ -814,13 +820,26 @@ export const annulMatch =
           });
       }
 
+      if (
+        !match.completed_at
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El partido no posee fecha de finalización válida.",
+
+            reason:
+              "invalid_completed_at",
+          });
+      }
 
       /*
-        Bloqueamos los dos jugadores
-        en orden estable.
-
-        confirmMatchResult también
-        los bloquea por id ASC.
+        BLOQUEAR JUGADORES
       */
 
       const players =
@@ -828,8 +847,11 @@ export const annulMatch =
           `
           SELECT
             id,
+            name,
             rating,
-            matches_played
+            matches_played,
+            city,
+            gender
 
           FROM users
 
@@ -849,7 +871,6 @@ export const annulMatch =
           ],
         );
 
-
       if (
         players.rowCount !== 2
       ) {
@@ -865,52 +886,27 @@ export const annulMatch =
           });
       }
 
-
-      /*
-        Buscamos exactamente los
-        movimientos Elo originales
-        de este partido.
-      */
-
-      const eloEvents =
-        await client.query(
-          `
-          SELECT *
-
-          FROM elo_events
-
-          WHERE match_id = $1
-
-            AND event_type =
-              'match_result'
-
-            AND reversed_at
-              IS NULL
-
-          ORDER BY
-            user_id ASC,
-            id ASC
-
-          FOR UPDATE
-          `,
-          [
-            match.id,
-          ],
+      const player1 =
+        players.rows.find(
+          (player) =>
+            Number(player.id) ===
+            Number(
+              match.player1_id,
+            ),
         );
 
-
-      /*
-        Un partido confirmado normal
-        debe tener exactamente:
-        - un movimiento para ganador
-        - un movimiento para perdedor
-
-        Si falta alguno, no anulamos
-        parcialmente.
-      */
+      const player2 =
+        players.rows.find(
+          (player) =>
+            Number(player.id) ===
+            Number(
+              match.player2_id,
+            ),
+        );
 
       if (
-        eloEvents.rowCount !== 2
+        !player1 ||
+        !player2
       ) {
         await client.query(
           "ROLLBACK",
@@ -920,13 +916,217 @@ export const annulMatch =
           .status(409)
           .json({
             message:
-              "El historial Elo de este partido está incompleto. No se puede anular automáticamente.",
+              "Los jugadores del partido no son válidos.",
+          });
+      }
+
+      if (
+        player1.city !==
+          player2.city ||
+        player1.gender !==
+          player2.gender
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Los jugadores del partido no pertenecen a la misma liga.",
+
+            reason:
+              "league_mismatch",
+          });
+      }
+
+      /*
+        ========================================================
+        PROTECCIÓN CONTRA ANULACIÓN HISTÓRICA
+
+        Si hubo otro partido completado
+        posteriormente en esta misma liga,
+        el resultado pudo afectar:
+
+        - Elo de otros jugadores
+        - posición del #1
+        - posición del #2
+        - condición provisional/oficial
+        - fórmula de partidos siguientes
+
+        No hacemos una compensación falsa.
+        ========================================================
+      */
+
+      const laterLeagueMatch =
+        await client.query(
+          `
+          SELECT
+            m.id,
+            m.completed_at
+
+          FROM matches m
+
+          JOIN users league_player
+            ON league_player.id =
+               m.player1_id
+
+          WHERE
+            m.status = 'completed'
+            AND m.annulled_at IS NULL
+            AND m.id <> $1
+            AND league_player.city = $2
+            AND league_player.gender = $3
+            AND (
+              m.completed_at > $4
+              OR (
+                m.completed_at = $4
+                AND m.id > $1
+              )
+            )
+
+          ORDER BY
+            m.completed_at ASC,
+            m.id ASC
+
+          LIMIT 1
+          `,
+          [
+            match.id,
+            player1.city,
+            player1.gender,
+            match.completed_at,
+          ],
+        );
+
+      if (
+        laterLeagueMatch.rowCount
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Este partido tiene partidos posteriores en la misma liga. Para anularlo se necesita recalcular cronológicamente el Elo posterior.",
+
+            reason:
+              "historical_replay_required",
+
+            first_later_match_id:
+              laterLeagueMatch
+                .rows[0]
+                .id,
+
+            first_later_match_completed_at:
+              laterLeagueMatch
+                .rows[0]
+                .completed_at,
+          });
+      }
+
+      /*
+        ========================================================
+        EVENTOS ACTIVOS DEL PARTIDO
+
+        Ahora puede haber:
+        - 2 match_result
+        - 0..2 placement_completed
+        ========================================================
+      */
+
+      const eloEvents =
+        await client.query(
+          `
+          SELECT *
+
+          FROM elo_events
+
+          WHERE
+            match_id = $1
+            AND reversed_at
+              IS NULL
+
+          ORDER BY
+            created_at ASC,
+            id ASC
+
+          FOR UPDATE
+          `,
+          [
+            match.id,
+          ],
+        );
+
+      const matchResultEvents =
+        eloEvents.rows.filter(
+          (event) =>
+            event.event_type ===
+            "match_result",
+        );
+
+      if (
+        matchResultEvents.length !==
+        2
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El historial Elo de este partido no contiene exactamente dos movimientos match_result activos.",
 
             reason:
               "invalid_elo_history",
           });
       }
 
+      const unsupportedEvents =
+        eloEvents.rows.filter(
+          (event) =>
+            event.event_type !==
+              "match_result" &&
+            event.event_type !==
+              "placement_completed",
+        );
+
+      if (
+        unsupportedEvents.length
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El partido posee movimientos Elo activos que requieren revisión manual antes de anularlo.",
+
+            reason:
+              "unsupported_match_elo_events",
+
+            event_types: [
+              ...new Set(
+                unsupportedEvents.map(
+                  (event) =>
+                    event.event_type,
+                ),
+              ),
+            ],
+          });
+      }
+
+      /*
+        VALIDAR JUGADORES DE LOS
+        DOS MATCH_RESULT
+      */
 
       const expectedPlayerIds =
         new Set([
@@ -939,10 +1139,9 @@ export const annulMatch =
           ),
         ]);
 
-
-      const eloPlayerIds =
+      const resultPlayerIds =
         new Set(
-          eloEvents.rows.map(
+          matchResultEvents.map(
             (event) =>
               Number(
                 event.user_id,
@@ -950,14 +1149,13 @@ export const annulMatch =
           ),
         );
 
-
       if (
-        eloPlayerIds.size !== 2 ||
+        resultPlayerIds.size !== 2 ||
         ![
           ...expectedPlayerIds,
         ].every(
           (id) =>
-            eloPlayerIds.has(
+            resultPlayerIds.has(
               id,
             ),
         )
@@ -970,85 +1168,161 @@ export const annulMatch =
           .status(409)
           .json({
             message:
-              "Los movimientos Elo no corresponden a los jugadores de este partido.",
+              "Los movimientos Elo no corresponden a los jugadores del partido.",
 
             reason:
               "elo_players_mismatch",
           });
       }
 
+      /*
+        ========================================================
+        MOVIMIENTOS ELO POSTERIORES DE
+        LOS PARTICIPANTES
 
-      const playerMap =
-        new Map(
-          players.rows.map(
-            (player) => [
-              Number(
-                player.id,
-              ),
+        Aunque no haya otro partido,
+        podría existir por ejemplo una
+        penalización posterior.
 
-              player,
-            ],
-          ),
+        Restaurar directamente el Elo
+        anterior al partido borraría
+        matemáticamente ese movimiento.
+
+        Por eso también bloqueamos.
+        ========================================================
+      */
+
+      const laterPlayerElo =
+        await client.query(
+          `
+          SELECT
+            id,
+            user_id,
+            event_type,
+            created_at
+
+          FROM elo_events
+
+          WHERE
+            user_id IN (
+              $1,
+              $2
+            )
+
+            AND match_id IS DISTINCT
+              FROM $3
+
+            AND reversed_at
+              IS NULL
+
+            AND created_at >
+              $4
+
+          ORDER BY
+            created_at ASC,
+            id ASC
+
+          LIMIT 1
+          `,
+          [
+            match.player1_id,
+            match.player2_id,
+            match.id,
+            match.completed_at,
+          ],
         );
 
+      if (
+        laterPlayerElo.rowCount
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Uno de los jugadores tiene movimientos Elo posteriores a este partido. Se necesita replay cronológico para anularlo sin perder esos movimientos.",
+
+            reason:
+              "historical_replay_required",
+
+            first_later_elo_event: {
+              id:
+                laterPlayerElo
+                  .rows[0]
+                  .id,
+
+              user_id:
+                laterPlayerElo
+                  .rows[0]
+                  .user_id,
+
+              event_type:
+                laterPlayerElo
+                  .rows[0]
+                  .event_type,
+
+              created_at:
+                laterPlayerElo
+                  .rows[0]
+                  .created_at,
+            },
+          });
+      }
 
       /*
-        Aplicamos una reversión
-        compensatoria sobre el Elo actual.
+        ========================================================
+        ESTADO PRE-PARTIDO EXACTO
 
-        También marcamos como revertido
-        el evento original y generamos
-        un nuevo evento administrativo.
+        Los elo_before de match_result
+        son la fuente histórica correcta.
+        ========================================================
       */
+
+      const originalByPlayer =
+        new Map();
 
       for (
         const event of
-        eloEvents.rows
+        matchResultEvents
       ) {
-        const player =
-          playerMap.get(
-            Number(
-              event.user_id,
-            ),
-          );
-
-
-        if (!player) {
-          await client.query(
-            "ROLLBACK",
-          );
-
-          return res
-            .status(409)
-            .json({
-              message:
-                "No se encontró uno de los jugadores del historial Elo.",
-
-              reason:
-                "elo_player_not_found",
-            });
-        }
-
-
-        const before =
+        const userId =
           Number(
-            player.rating,
+            event.user_id,
           );
 
+        const eloBefore =
+          Number(
+            event.elo_before,
+          );
 
-        const eventDelta =
+        const eloChange =
           Number(
             event.elo_change,
           );
 
+        const eloAfter =
+          Number(
+            event.elo_after,
+          );
 
         if (
-          !Number.isFinite(
-            before,
+          !Number.isInteger(
+            eloBefore,
           ) ||
-          !Number.isFinite(
-            eventDelta,
-          )
+          !Number.isInteger(
+            eloChange,
+          ) ||
+          !Number.isInteger(
+            eloAfter,
+          ) ||
+          eloBefore < 0 ||
+          eloAfter < 0 ||
+          eloBefore +
+            eloChange !==
+            eloAfter
         ) {
           await client.query(
             "ROLLBACK",
@@ -1058,65 +1332,205 @@ export const annulMatch =
             .status(409)
             .json({
               message:
-                "El historial Elo contiene valores inválidos.",
+                "El historial Elo original contiene valores inválidos.",
 
               reason:
                 "invalid_elo_values",
             });
         }
 
+        originalByPlayer.set(
+          userId,
+          {
+            event,
+            eloBefore,
+          },
+        );
+      }
 
-        const reversal =
-          -eventDelta;
-
-
-        const after =
-          Math.max(
-            100,
-            before +
-              reversal,
-          );
-
-
-        const realReversal =
-          after -
-          before;
-
-
-        await client.query(
-          `
-          UPDATE users
-
-          SET
-            rating = $1,
-
-            matches_played =
-              GREATEST(
-                0,
-                matches_played - 1
+      const playerMap =
+        new Map(
+          players.rows.map(
+            (player) => [
+              Number(
+                player.id,
               ),
-
-            updated_at =
-              CURRENT_TIMESTAMP
-
-          WHERE id = $2
-          `,
-          [
-            after,
-            event.user_id,
-          ],
+              player,
+            ],
+          ),
         );
 
+      /*
+        ========================================================
+        RESTAURAR JUGADORES
 
-        /*
-          Actualizamos nuestro mapa
-          también, por seguridad.
-        */
+        No usamos:
+          Elo actual - delta viejo
 
-        player.rating =
-          after;
+        Usamos:
+          Elo = elo_before original
 
+        Es exacto porque ya verificamos
+        que no existe historia posterior.
+        ========================================================
+      */
 
+      const reversals = [];
+
+      for (
+        const playerId of
+        expectedPlayerIds
+      ) {
+        const player =
+          playerMap.get(
+            playerId,
+          );
+
+        const original =
+          originalByPlayer.get(
+            playerId,
+          );
+
+        if (
+          !player ||
+          !original
+        ) {
+          await client.query(
+            "ROLLBACK",
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "No se pudo reconstruir el estado previo de uno de los jugadores.",
+
+              reason:
+                "pre_match_state_missing",
+            });
+        }
+
+        const currentRating =
+          Number(
+            player.rating,
+          );
+
+        const currentMatches =
+          Number(
+            player.matches_played,
+          );
+
+        if (
+          !Number.isInteger(
+            currentRating,
+          ) ||
+          currentRating < 0 ||
+          !Number.isInteger(
+            currentMatches,
+          ) ||
+          currentMatches < 1
+        ) {
+          await client.query(
+            "ROLLBACK",
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "El estado actual de uno de los jugadores no permite una anulación automática segura.",
+
+              reason:
+                "invalid_current_player_state",
+
+              player_id:
+                playerId,
+            });
+        }
+
+        const restoredRating =
+          original.eloBefore;
+
+        const restoredMatches =
+          currentMatches - 1;
+
+        const realReversal =
+          restoredRating -
+          currentRating;
+
+        const updated =
+          await client.query(
+            `
+            UPDATE users
+
+            SET
+              rating = $1,
+
+              matches_played = $2,
+
+              updated_at =
+                CURRENT_TIMESTAMP
+
+            WHERE
+              id = $3
+              AND rating = $4
+              AND matches_played = $5
+
+            RETURNING
+              id,
+              rating,
+              matches_played
+            `,
+            [
+              restoredRating,
+              restoredMatches,
+              playerId,
+              currentRating,
+              currentMatches,
+            ],
+          );
+
+        if (
+          updated.rowCount !==
+          1
+        ) {
+          await client.query(
+            "ROLLBACK",
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "El estado de un jugador cambió durante la anulación.",
+
+              reason:
+                "player_state_changed",
+            });
+        }
+
+        reversals.push({
+          playerId,
+          currentRating,
+          restoredRating,
+          realReversal,
+          restoredMatches,
+        });
+      }
+
+      /*
+        ========================================================
+        MARCAR COMO REVERTIDOS TODOS
+        LOS EVENTOS ORIGINALES ACTIVOS
+
+        Incluye placement_completed.
+        ========================================================
+      */
+
+      for (
+        const event of
+        eloEvents.rows
+      ) {
         const reversed =
           await client.query(
             `
@@ -1129,8 +1543,8 @@ export const annulMatch =
               reversed_by =
                 $1
 
-            WHERE id = $2
-
+            WHERE
+              id = $2
               AND reversed_at
                 IS NULL
 
@@ -1142,9 +1556,9 @@ export const annulMatch =
             ],
           );
 
-
         if (
-          !reversed.rowCount
+          reversed.rowCount !==
+          1
         ) {
           await client.query(
             "ROLLBACK",
@@ -1154,14 +1568,22 @@ export const annulMatch =
             .status(409)
             .json({
               message:
-                "Uno de los movimientos Elo ya había sido revertido.",
+                "Uno de los movimientos Elo cambió durante la anulación.",
 
               reason:
-                "elo_already_reversed",
+                "elo_state_changed",
             });
         }
+      }
 
+      /*
+        EVENTOS ADMINISTRATIVOS
+      */
 
+      for (
+        const reversal of
+        reversals
+      ) {
         await client.query(
           `
           INSERT INTO elo_events (
@@ -1187,22 +1609,21 @@ export const annulMatch =
           )
           `,
           [
-            event.user_id,
+            reversal.playerId,
             match.id,
             match.challenge_id,
 
-            before,
-            realReversal,
-            after,
+            reversal.currentRating,
+            reversal.realReversal,
+            reversal.restoredRating,
 
-            `Reversión por anulación administrativa del partido #${match.id}`,
+            `Restauración exacta por anulación administrativa del partido #${match.id}`,
           ],
         );
       }
 
-
       /*
-        Marcamos partido como anulado.
+        MARCAR PARTIDO ANULADO
       */
 
       const annulled =
@@ -1223,11 +1644,10 @@ export const annulMatch =
             status =
               'annulled'
 
-          WHERE id = $3
-
+          WHERE
+            id = $3
             AND status =
               'completed'
-
             AND annulled_at
               IS NULL
 
@@ -1239,7 +1659,6 @@ export const annulMatch =
             match.id,
           ],
         );
-
 
       if (
         !annulled.rowCount
@@ -1259,12 +1678,8 @@ export const annulMatch =
           });
       }
 
-
       /*
-        Cerramos el desafío relacionado.
-
-        No tocamos desafíos en otro
-        estado inesperado.
+        DESAFÍO ASOCIADO
       */
 
       if (
@@ -1282,8 +1697,8 @@ export const annulMatch =
               resolved_at =
                 CURRENT_TIMESTAMP
 
-            WHERE id = $1
-
+            WHERE
+              id = $1
               AND status =
                 'completed'
 
@@ -1293,7 +1708,6 @@ export const annulMatch =
               match.challenge_id,
             ],
           );
-
 
         if (
           !challenge.rowCount
@@ -1314,10 +1728,8 @@ export const annulMatch =
         }
       }
 
-
       /*
-        Marcamos alertas pendientes
-        como resueltas.
+        RESOLVER ALERTAS
       */
 
       await client.query(
@@ -1334,8 +1746,8 @@ export const annulMatch =
           resolved_by =
             $1
 
-        WHERE match_id = $2
-
+        WHERE
+          match_id = $2
           AND resolved =
             FALSE
         `,
@@ -1345,9 +1757,8 @@ export const annulMatch =
         ],
       );
 
-
       /*
-        Auditoría permanente.
+        AUDITORÍA PERMANENTE
       */
 
       await client.query(
@@ -1376,24 +1787,76 @@ export const annulMatch =
           JSON.stringify({
             reason,
 
+            reversal_mode:
+              "exact_pre_match_restore",
+
             original_winner_id:
               match.winner_id,
 
             original_score:
               match.score,
+
+            reversed_elo_event_ids:
+              eloEvents.rows.map(
+                (event) =>
+                  Number(
+                    event.id,
+                  ),
+              ),
+
+            players:
+              reversals.map(
+                (reversal) => ({
+                  user_id:
+                    reversal.playerId,
+
+                  elo_before_annulment:
+                    reversal.currentRating,
+
+                  restored_elo:
+                    reversal.restoredRating,
+
+                  elo_change:
+                    reversal.realReversal,
+
+                  restored_matches_played:
+                    reversal.restoredMatches,
+                }),
+              ),
           }),
         ],
       );
-
 
       await client.query(
         "COMMIT",
       );
 
-
       res.json({
         message:
-          "Partido anulado y Elo revertido correctamente.",
+          "Partido anulado y estado Elo previo restaurado correctamente.",
+
+        reversal_mode:
+          "exact_pre_match_restore",
+
+        players:
+          reversals.map(
+            (reversal) => ({
+              user_id:
+                reversal.playerId,
+
+              rating_before_annulment:
+                reversal.currentRating,
+
+              rating_after_annulment:
+                reversal.restoredRating,
+
+              elo_change:
+                reversal.realReversal,
+
+              matches_played_after:
+                reversal.restoredMatches,
+            }),
+          ),
       });
     } catch (error) {
       try {
@@ -1401,7 +1864,7 @@ export const annulMatch =
           "ROLLBACK",
         );
       } catch {
-        // La conexión se libera abajo.
+        // conexión liberada abajo
       }
 
       next(error);
