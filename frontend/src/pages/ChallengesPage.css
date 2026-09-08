@@ -1,46 +1,167 @@
-.challenge-sections {
-  display: grid;
-  gap: 58px;
+/* =========================================================
+   LA RED — DESAFÍOS
+   REFERENCIA VISUAL: MIS PARTIDOS / RANKING / PERFIL
+   ========================================================= */
+
+
+/* =========================================================
+   CONTENEDOR GENERAL
+   ========================================================= */
+
+.page-dark .challenge-sections,
+.page-dark .rotation-summary {
+  width:
+    min(
+      100%,
+      1040px
+    );
+
+  margin-left:
+    auto;
+
+  margin-right:
+    auto;
 }
 
-.challenge-section-heading {
-  margin-bottom: 24px;
+
+.challenge-sections {
+  display:
+    grid;
+
+  gap:
+    46px;
 }
+
+
+/* =========================================================
+   CABECERAS
+   ========================================================= */
+
+.challenge-section-heading {
+  margin-bottom:
+    18px;
+
+  padding:
+    22px
+    24px;
+
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.95
+    );
+
+  border:
+    1px solid
+    #ddc8ba;
+
+  border-top:
+    4px solid
+    #c6683f;
+
+  border-radius:
+    9px;
+
+  box-shadow:
+    0
+    9px
+    22px
+    rgba(
+      80,
+      48,
+      30,
+      0.08
+    );
+
+  backdrop-filter:
+    blur(
+      7px
+    );
+}
+
 
 .challenge-section-heading > span,
 .rotation-summary > span,
 .challenge-kicker {
-  color: #bd5731;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  color:
+    #b65d38;
+
+  font-size:
+    9px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.14em;
+
+  text-transform:
+    uppercase;
 }
+
 
 .challenge-section-heading h2 {
-  margin: 7px 0 8px;
+  margin:
+    7px
+    0
+    9px;
 
-  color: #3d291f;
+  color:
+    #332720;
 
-  font-family: Georgia, serif;
-  font-size: 34px;
-  font-weight: 600;
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      28px,
+      4vw,
+      38px
+    );
+
+  font-weight:
+    700;
+
+  line-height:
+    1.05;
 }
+
 
 .challenge-section-heading p {
-  margin: 0;
+  max-width:
+    650px;
 
-  max-width: 650px;
+  margin:
+    0;
 
-  color: #5d473b;
+  color:
+    #67574e;
 
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.65;
+  font-size:
+    14px;
+
+  font-weight:
+    600;
+
+  line-height:
+    1.6;
 }
 
+
+/* =========================================================
+   LISTA
+   ========================================================= */
+
 .challenge-list {
-  display: grid;
-  gap: 24px;
+  display:
+    grid;
+
+  gap:
+    22px;
 }
 
 
@@ -49,149 +170,297 @@
    ========================================================= */
 
 .challenge-card {
-  padding: 26px;
+  padding:
+    26px;
 
   background:
-    linear-gradient(
-      180deg,
-      #fffdf9,
-      #fff9f4
+    rgba(
+      255,
+      253,
+      249,
+      0.97
     );
 
   border:
-    1px solid #dfbea9;
+    1px solid
+    #ddc8ba;
 
   border-top:
-    5px solid #c6683f;
+    4px solid
+    #c6683f;
 
-  border-radius: 8px;
+  border-radius:
+    9px;
 
   box-shadow:
-    0 12px 28px
+    0
+    10px
+    26px
     rgba(
-      90,
-      50,
+      80,
+      48,
       30,
-      0.1
+      0.09
+    );
+
+  backdrop-filter:
+    blur(
+      7px
     );
 }
 
+
 .challenge-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  display:
+    flex;
 
-  gap: 20px;
+  justify-content:
+    space-between;
 
-  margin-bottom: 22px;
+  align-items:
+    flex-start;
+
+  gap:
+    22px;
+
+  margin-bottom:
+    22px;
+
+  padding-bottom:
+    20px;
+
+  border-bottom:
+    1px solid
+    #eaded6;
 }
 
+
 .challenge-card-top h2 {
-  margin: 7px 0 0;
+  margin:
+    7px
+    0
+    0;
 
-  color: #38261d;
+  color:
+    #30251f;
 
-  font-family: Georgia, serif;
-  font-size: 30px;
-  font-weight: 600;
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      26px,
+      4vw,
+      34px
+    );
+
+  font-weight:
+    700;
+
+  line-height:
+    1.05;
 }
 
 
 /* =========================================================
-   ESTADO
+   ESTADOS
    ========================================================= */
 
 .challenge-status {
-  padding: 8px 12px;
+  flex:
+    0
+    0
+    auto;
 
-  background: #f5e8de;
+  min-height:
+    30px;
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  padding:
+    0
+    11px;
+
+  background:
+    #f5e8de;
 
   border:
-    1px solid #d7b299;
+    1px solid
+    #d7b299;
 
-  border-radius: 999px;
+  border-radius:
+    999px;
 
-  color: #8a5e47;
+  color:
+    #8a5e47;
 
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-size:
+    9px;
 
-  text-transform: uppercase;
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.07em;
+
+  text-transform:
+    uppercase;
 }
+
 
 .challenge-status.pending {
-  background: #f8e8dc;
-  border-color: #dcad8d;
-  color: #b65d39;
+  background:
+    #fff1e7;
+
+  border-color:
+    #e5b291;
+
+  color:
+    #ad5633;
 }
+
 
 .challenge-status.accepted {
-  background: #e9f0e8;
-  border-color: #91aa90;
-  color: #416a4b;
+  background:
+    #e9f3eb;
+
+  border-color:
+    #b7d3be;
+
+  color:
+    #39734a;
 }
+
 
 .challenge-status.completed {
-  background: #edf1e9;
-  border-color: #a0b496;
-  color: #46694b;
+  background:
+    #edf4ee;
+
+  border-color:
+    #bfd4c1;
+
+  color:
+    #426e4a;
 }
 
+
 .challenge-status.rejected {
-  background: #f7e9e7;
-  border-color: #d6a09a;
-  color: #a74d46;
+  background:
+    #faece9;
+
+  border-color:
+    #ddb0aa;
+
+  color:
+    #a44d43;
+}
+
+
+.challenge-status.cancelled {
+  background:
+    #faece9;
+
+  border-color:
+    #d9aaa3;
+
+  color:
+    #9e463c;
 }
 
 
 /* =========================================================
-   INFO
+   INFO SUPERIOR
    ========================================================= */
 
 .challenge-info-grid {
-  display: grid;
+  display:
+    grid;
 
   grid-template-columns:
     repeat(
       2,
       minmax(
         0,
-        230px
+        220px
       )
     );
 
-  gap: 12px;
+  gap:
+    12px;
 
-  margin-bottom: 20px;
+  margin-bottom:
+    22px;
 }
+
 
 .challenge-info-grid > div {
-  padding: 15px;
+  min-height:
+    78px;
 
-  background: #f7ede5;
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  justify-content:
+    center;
+
+  padding:
+    14px
+    16px;
+
+  background:
+    #f8f0ea;
 
   border:
-    1px solid #e0c4b0;
+    1px solid
+    #e1cbbd;
 
-  border-radius: 6px;
+  border-radius:
+    7px;
 }
+
 
 .challenge-info-grid small {
-  display: block;
+  display:
+    block;
 
-  margin-bottom: 7px;
+  margin-bottom:
+    8px;
 
-  color: #81695b;
+  color:
+    #806d62;
 
-  font-size: 11px;
-  font-weight: 600;
+  font-size:
+    9px;
+
+  font-weight:
+    800;
+
+  letter-spacing:
+    0.04em;
 }
 
-.challenge-info-grid strong {
-  color: #3b291f;
 
-  font-size: 17px;
+.challenge-info-grid strong {
+  color:
+    #342820;
+
+  font-size:
+    17px;
+
+  font-weight:
+    900;
 }
 
 
@@ -199,40 +468,101 @@
    RUEDA
    ========================================================= */
 
-.rotation-summary,
-.rotation-notice {
-  margin-bottom: 22px;
+.rotation-summary {
+  margin-bottom:
+    24px;
 
-  padding: 16px 18px;
+  padding:
+    18px
+    20px;
 
   background:
-    linear-gradient(
-      90deg,
-      #f6e7db,
-      #fbf3ec
+    rgba(
+      255,
+      249,
+      244,
+      0.96
     );
 
   border:
-    1px solid #dfbea7;
+    1px solid
+    #dfc4b3;
 
   border-left:
-    4px solid #c6683f;
+    4px solid
+    #c6683f;
 
-  border-radius: 5px;
+  border-radius:
+    7px;
+
+  box-shadow:
+    0
+    7px
+    18px
+    rgba(
+      80,
+      48,
+      30,
+      0.07
+    );
 }
+
+
+.rotation-notice {
+  margin:
+    18px
+    0;
+
+  padding:
+    16px
+    18px;
+
+  background:
+    #fff5ed;
+
+  border:
+    1px solid
+    #e1c3af;
+
+  border-left:
+    4px solid
+    #c6683f;
+
+  border-radius:
+    7px;
+}
+
 
 .rotation-summary p,
 .rotation-notice p {
-  margin: 7px 0 0;
+  margin:
+    7px
+    0
+    0;
 
-  color: #523c31;
+  color:
+    #58473e;
 
-  font-weight: 500;
-  line-height: 1.6;
+  font-size:
+    13px;
+
+  font-weight:
+    600;
+
+  line-height:
+    1.6;
 }
 
+
+.rotation-summary strong {
+  color:
+    #382b24;
+}
+
+
 .rotation-notice strong {
-  color: #ad4e29;
+  color:
+    #a85130;
 }
 
 
@@ -241,45 +571,70 @@
    ========================================================= */
 
 .challenge-step {
-  display: grid;
+  display:
+    grid;
 
   grid-template-columns:
-    42px 1fr;
+    42px
+    minmax(
+      0,
+      1fr
+    );
 
-  gap: 15px;
+  gap:
+    16px;
 
-  align-items: start;
+  align-items:
+    start;
 
-  margin-top: 26px;
+  margin-top:
+    28px;
 
-  padding-top: 22px;
+  padding-top:
+    24px;
 
   border-top:
-    1px solid #ead2c1;
+    1px solid
+    #eaded6;
 }
 
-.step-number {
-  width: 34px;
-  height: 34px;
 
-  display: grid;
-  place-items: center;
+.step-number {
+  width:
+    36px;
+
+  height:
+    36px;
+
+  display:
+    grid;
+
+  place-items:
+    center;
 
   background:
     #c6683f;
 
   border:
-    1px solid #b65531;
+    1px solid
+    #b75935;
 
-  border-radius: 50%;
+  border-radius:
+    50%;
 
-  color: #fff;
+  color:
+    #ffffff;
 
-  font-size: 13px;
-  font-weight: 800;
+  font-size:
+    12px;
+
+  font-weight:
+    900;
 
   box-shadow:
-    0 4px 10px
+    0
+    4px
+    10px
     rgba(
       100,
       48,
@@ -288,90 +643,177 @@
     );
 }
 
+
 .challenge-step h3 {
-  margin: 2px 0 5px;
+  margin:
+    2px
+    0
+    6px;
 
-  color: #3b291f;
+  color:
+    #332720;
 
-  font-size: 16px;
-  font-weight: 800;
+  font-size:
+    16px;
+
+  font-weight:
+    900;
 }
 
+
 .challenge-step p {
-  margin: 0;
+  max-width:
+    700px;
 
-  color: #5d483d;
+  margin:
+    0;
 
-  font-weight: 500;
-  line-height: 1.55;
+  color:
+    #66564d;
+
+  font-size:
+    13px;
+
+  font-weight:
+    600;
+
+  line-height:
+    1.6;
 }
 
 
 /* =========================================================
-   WHATSAPP
+   CONTACTO
    ========================================================= */
 
 .contact-box {
-  margin-top: 16px;
+  margin-top:
+    17px;
 
-  padding: 17px;
+  padding:
+    17px
+    18px;
 
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display:
+    flex;
 
-  gap: 18px;
+  align-items:
+    center;
 
-  background: #faf2eb;
+  justify-content:
+    space-between;
+
+  gap:
+    18px;
+
+  background:
+    #fffaf6;
 
   border:
-    1px solid #e0c5b2;
+    1px solid
+    #dfcabb;
 
-  border-radius: 6px;
+  border-radius:
+    7px;
 }
+
 
 .contact-box > div {
-  display: grid;
-  gap: 4px;
+  display:
+    grid;
+
+  gap:
+    5px;
 }
+
 
 .contact-box small {
-  color: #826b5e;
+  color:
+    #806d62;
 
-  font-size: 11px;
-  font-weight: 600;
+  font-size:
+    9px;
+
+  font-weight:
+    800;
+
+  letter-spacing:
+    0.06em;
 }
+
 
 .contact-box strong {
-  color: #3b281f;
+  color:
+    #332720;
 
-  font-size: 17px;
+  font-size:
+    17px;
+
+  font-weight:
+    900;
 }
+
 
 .contact-box span {
-  color: #685045;
+  color:
+    #67564d;
 
-  font-weight: 500;
+  font-size:
+    13px;
+
+  font-weight:
+    600;
 }
 
-.whatsapp-button {
-  padding: 11px 17px;
 
-  background: #416a4b;
+/* WhatsApp conserva su identidad verde porque es su marca */
+
+.whatsapp-button {
+  min-height:
+    42px;
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  padding:
+    0
+    18px;
+
+  background:
+    #39734a;
 
   border:
-    1px solid #365b40;
+    1px solid
+    #316540;
 
-  border-radius: 5px;
+  border-radius:
+    5px;
 
-  color: #fff;
+  color:
+    #ffffff;
 
-  font-weight: 700;
+  font-size:
+    12px;
 
-  white-space: nowrap;
+  font-weight:
+    900;
+
+  text-decoration:
+    none;
+
+  white-space:
+    nowrap;
 
   box-shadow:
-    0 5px 12px
+    0
+    5px
+    12px
     rgba(
       43,
       88,
@@ -380,24 +822,31 @@
     );
 
   transition:
-    transform 0.15s ease,
-    background 0.15s ease;
+    transform
+    0.15s ease,
+    background
+    0.15s ease;
 }
 
+
 .whatsapp-button:hover {
-  background: #355c3f;
+  background:
+    #2f633f;
 
   transform:
-    translateY(-1px);
+    translateY(
+      -1px
+    );
 }
 
 
 /* =========================================================
-   TURNO
+   TURNO / FORMULARIO
    ========================================================= */
 
 .schedule-grid {
-  display: grid;
+  display:
+    grid;
 
   grid-template-columns:
     minmax(
@@ -406,58 +855,108 @@
     )
     minmax(
       220px,
-      0.7fr
+      0.75fr
     )
     auto;
 
-  gap: 14px;
+  gap:
+    14px;
 
-  align-items: end;
+  align-items:
+    end;
 
-  margin-top: 16px;
-}
-
-.schedule-grid label {
-  display: grid;
-  gap: 7px;
-}
-
-.schedule-grid label > span {
-  color: #624b3f;
-
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.schedule-grid input {
-  width: 100%;
-
-  min-height: 46px;
+  margin-top:
+    17px;
 
   padding:
-    0 12px;
+    18px;
 
-  background: #fffdf9;
+  background:
+    #faf4ef;
 
   border:
-    1px solid #d5ad92;
+    1px solid
+    #e2cdc0;
 
-  border-radius: 5px;
-
-  color: #3d291f;
+  border-radius:
+    7px;
 }
+
+
+.schedule-grid label {
+  display:
+    grid;
+
+  gap:
+    8px;
+}
+
+
+.schedule-grid label > span {
+  color:
+    #624f45;
+
+  font-size:
+    10px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.04em;
+}
+
+
+.schedule-grid input {
+  width:
+    100%;
+
+  min-height:
+    46px;
+
+  padding:
+    0
+    12px;
+
+  background:
+    #ffffff;
+
+  border:
+    1px solid
+    #d6b8a4;
+
+  border-radius:
+    5px;
+
+  color:
+    #382b24;
+
+  font-size:
+    13px;
+
+  font-weight:
+    600;
+}
+
+
+.schedule-grid input::placeholder {
+  color:
+    #9a8980;
+}
+
 
 .schedule-grid input:focus {
   outline:
-    2px solid
+    3px solid
     rgba(
       198,
       104,
       63,
-      0.14
+      0.1
     );
 
-  border-color: #c6683f;
+  border-color:
+    #c6683f;
 }
 
 
@@ -466,38 +965,58 @@
    ========================================================= */
 
 .challenge-action {
-  min-height: 46px;
+  min-height:
+    44px;
 
   padding:
-    0 18px;
+    0
+    18px;
 
-  background: #fffaf6;
+  background:
+    #fffaf6;
 
   border:
-    1px solid #c6683f;
+    1px solid
+    #c6683f;
 
-  border-radius: 5px;
+  border-radius:
+    5px;
 
-  color: #a94c29;
+  color:
+    #a94c29;
 
-  font-weight: 800;
+  font-size:
+    11px;
 
-  cursor: pointer;
+  font-weight:
+    900;
+
+  cursor:
+    pointer;
 
   transition:
-    transform 0.15s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease;
+    transform
+    0.15s ease,
+    background
+    0.15s ease,
+    box-shadow
+    0.15s ease;
 }
 
+
 .challenge-action:hover:not(:disabled) {
-  background: #fff3e9;
+  background:
+    #fff0e6;
 
   transform:
-    translateY(-1px);
+    translateY(
+      -1px
+    );
 
   box-shadow:
-    0 5px 12px
+    0
+    5px
+    12px
     rgba(
       110,
       58,
@@ -506,178 +1025,408 @@
     );
 }
 
+
 .challenge-action.primary {
   background:
-    linear-gradient(
-      135deg,
-      #cf693b,
-      #b95028
-    );
+    #c6683f;
 
-  border-color: #ad4823;
+  border-color:
+    #b75935;
 
-  color: #fff;
+  color:
+    #ffffff;
 }
+
 
 .challenge-action.primary:hover:not(:disabled) {
   background:
-    linear-gradient(
-      135deg,
-      #d47445,
-      #c0572d
-    );
+    #ad512f;
 }
+
 
 .challenge-action.danger {
-  background: #fff9f8;
+  background:
+    #fff8f7;
 
-  color: #a84840;
+  border-color:
+    #c86c63;
 
-  border-color: #c86961;
+  color:
+    #a84840;
 }
+
 
 .challenge-action.danger:hover:not(:disabled) {
-  background: #fbecea;
+  background:
+    #fbeae8;
 }
+
 
 .challenge-action:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
+  background:
+    #e7e1dd;
+
+  border-color:
+    #d5cec9;
+
+  color:
+    #8b817c;
+
+  opacity:
+    1;
+
+  cursor:
+    not-allowed;
+
+  box-shadow:
+    none;
 }
 
+
 .challenge-buttons {
-  display: flex;
+  display:
+    flex;
 
-  gap: 12px;
+  flex-wrap:
+    wrap;
 
-  margin-top: 16px;
+  gap:
+    12px;
+
+  margin-top:
+    18px;
 }
 
 
 /* =========================================================
-   TURNO REGISTRADO / CONFIRMADO
+   TURNO REGISTRADO
    ========================================================= */
 
 .scheduled-summary,
 .confirmed-match {
-  display: grid;
+  display:
+    grid;
 
-  gap: 6px;
+  gap:
+    7px;
 
-  margin-top: 18px;
+  margin-top:
+    18px;
 
-  padding: 17px;
+  padding:
+    18px;
 
   background:
-    linear-gradient(
-      90deg,
-      #f5e5d9,
-      #fbf4ed
-    );
+    #fff5ed;
 
   border:
-    1px solid #dfbea7;
+    1px solid
+    #dfc2af;
 
   border-left:
-    4px solid #c6683f;
+    4px solid
+    #c6683f;
 
-  border-radius: 5px;
+  border-radius:
+    7px;
 }
+
 
 .scheduled-summary > span,
 .confirmed-match > span {
-  color: #b4532f;
+  color:
+    #ac5331;
 
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.13em;
+  font-size:
+    9px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.13em;
 }
+
 
 .scheduled-summary strong,
 .confirmed-match strong {
-  color: #39271e;
+  color:
+    #332720;
 
-  font-size: 18px;
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    20px;
+
+  font-weight:
+    700;
 }
+
 
 .scheduled-summary p,
 .confirmed-match p {
-  margin: 0;
+  margin:
+    0;
 
-  color: #594238;
+  color:
+    #58473e;
 
-  font-weight: 500;
+  font-size:
+    13px;
+
+  font-weight:
+    700;
 }
+
 
 .scheduled-summary small,
 .confirmed-match small {
-  color: #80685b;
+  color:
+    #826f64;
+
+  font-size:
+    11px;
 }
 
 
 /* =========================================================
-   ESTADOS FINALES
+   GESTIÓN DEL PARTIDO ACEPTADO
+   Compatible con el link local a Mis partidos
+   ========================================================= */
+
+.confirmed-match-actions {
+  display:
+    flex;
+
+  flex-wrap:
+    wrap;
+
+  gap:
+    10px;
+
+  margin-top:
+    14px;
+}
+
+
+.manage-match {
+  min-height:
+    42px;
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  padding:
+    0
+    17px;
+
+  background:
+    #c6683f;
+
+  border:
+    1px solid
+    #b75935;
+
+  border-radius:
+    5px;
+
+  color:
+    #ffffff;
+
+  font-size:
+    11px;
+
+  font-weight:
+    900;
+
+  text-decoration:
+    none;
+
+  transition:
+    background
+    0.15s ease,
+    transform
+    0.15s ease;
+}
+
+
+.manage-match:hover {
+  background:
+    #ad512f;
+
+  transform:
+    translateY(
+      -1px
+    );
+}
+
+
+/* =========================================================
+   NOTAS / ESTADOS FINALES
    ========================================================= */
 
 .waiting-note,
 .completed-challenge,
 .rejected-challenge {
-  margin-top: 20px;
+  margin-top:
+    20px;
 
-  padding: 15px 16px;
+  padding:
+    17px
+    18px;
 
-  background: #faf1e9;
+  background:
+    #faf3ee;
 
   border:
-    1px solid #e0c3af;
+    1px solid
+    #e0c8b8;
 
-  border-radius: 5px;
+  border-radius:
+    7px;
 
-  color: #584239;
+  color:
+    #58483f;
 
-  font-weight: 500;
-  line-height: 1.55;
+  font-size:
+    13px;
+
+  font-weight:
+    600;
+
+  line-height:
+    1.6;
 }
+
+
+.waiting-note {
+  border-left:
+    4px solid
+    #c6683f;
+}
+
 
 .completed-challenge {
+  background:
+    #f3f8f4;
+
+  border-color:
+    #c3d8c7;
+
   border-left:
-    4px solid #5e825f;
+    4px solid
+    #4c7b58;
 }
+
 
 .rejected-challenge {
-  background: #faefed;
+  background:
+    #fff4f2;
+
+  border-color:
+    #dfbbb4;
 
   border-left:
-    4px solid #b9574e;
+    4px solid
+    #b9574e;
 }
+
 
 .rejected-challenge strong {
-  color: #a34b43;
+  color:
+    #a34b43;
 }
+
 
 .rejected-challenge p {
-  margin: 6px 0;
+  margin:
+    7px
+    0;
 }
 
+
+/* =========================================================
+   CANCELADOS
+   Para mantener coherencia con Mis partidos
+   ========================================================= */
+
+.cancelled-challenge,
+.challenge-cancelled {
+  margin-top:
+    20px;
+
+  padding:
+    17px
+    18px;
+
+  background:
+    #fff4f2;
+
+  border:
+    1px solid
+    #dfbbb4;
+
+  border-left:
+    4px solid
+    #b9574e;
+
+  border-radius:
+    7px;
+
+  color:
+    #654b46;
+
+  font-size:
+    13px;
+
+  line-height:
+    1.6;
+}
+
+
+/* =========================================================
+   VACÍOS
+   ========================================================= */
+
 .challenge-empty {
-  padding: 24px;
+  padding:
+    24px;
 
   background:
     rgba(
       255,
       253,
       249,
-      0.55
+      0.94
     );
 
-  color: #745d50;
-
   border:
-    1px dashed #d5ae94;
+    1px dashed
+    #d5ae94;
 
-  border-radius: 6px;
+  border-radius:
+    7px;
 
-  font-weight: 500;
+  color:
+    #745d50;
+
+  font-size:
+    13px;
+
+  font-weight:
+    600;
+
+  line-height:
+    1.6;
 }
 
 
@@ -686,51 +1435,77 @@
    ========================================================= */
 
 .tooltip-wrap {
-  position: relative;
+  position:
+    relative;
 
   display:
     inline-flex;
 }
 
+
 .tooltip-wrap.disabled {
-  cursor: help;
+  cursor:
+    help;
 }
 
-.challenge-tooltip {
-  position: absolute;
 
-  left: 50%;
+.challenge-tooltip {
+  position:
+    absolute;
+
+  left:
+    50%;
+
   bottom:
     calc(
-      100% + 10px
+      100% +
+      10px
     );
 
-  z-index: 100;
+  z-index:
+    100;
 
-  width: 290px;
+  width:
+    290px;
 
   padding:
-    12px 14px;
+    12px
+    14px;
 
   transform:
-    translateX(-50%)
-    translateY(5px);
+    translateX(
+      -50%
+    )
+    translateY(
+      5px
+    );
 
-  background: #fffdf9;
+  background:
+    #fffdf9;
 
   border:
-    1px solid #c6683f;
+    1px solid
+    #c6683f;
 
-  border-radius: 6px;
+  border-radius:
+    7px;
 
-  color: #443027;
+  color:
+    #443027;
 
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.5;
+  font-size:
+    12px;
+
+  font-weight:
+    600;
+
+  line-height:
+    1.5;
 
   box-shadow:
-    0 12px 25px
+    0
+    12px
+    25px
     rgba(
       90,
       48,
@@ -738,44 +1513,100 @@
       0.16
     );
 
-  opacity: 0;
-  visibility: hidden;
+  opacity:
+    0;
 
-  pointer-events: none;
+  visibility:
+    hidden;
+
+  pointer-events:
+    none;
 
   transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
+    opacity
+    0.15s ease,
+    transform
+    0.15s ease;
 }
 
+
 .challenge-tooltip::after {
-  content: "";
+  content:
+    "";
 
-  position: absolute;
+  position:
+    absolute;
 
-  left: 50%;
-  top: 100%;
+  left:
+    50%;
+
+  top:
+    100%;
 
   transform:
-    translateX(-50%);
+    translateX(
+      -50%
+    );
 
   border:
-    6px solid transparent;
+    6px solid
+    transparent;
 
   border-top-color:
     #c6683f;
 }
 
+
 .tooltip-wrap.disabled:hover
 .challenge-tooltip,
 .tooltip-wrap.disabled:focus-within
 .challenge-tooltip {
-  opacity: 1;
-  visibility: visible;
+  opacity:
+    1;
+
+  visibility:
+    visible;
 
   transform:
-    translateX(-50%)
-    translateY(0);
+    translateX(
+      -50%
+    )
+    translateY(
+      0
+    );
+}
+
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (
+  max-width:
+    850px
+) {
+  .page-dark .challenge-sections,
+  .page-dark .rotation-summary {
+    width:
+      100%;
+  }
+
+
+  .schedule-grid {
+    grid-template-columns:
+      1fr
+      1fr;
+  }
+
+
+  .schedule-grid
+  .challenge-action {
+    grid-column:
+      1 / -1;
+
+    width:
+      100%;
+  }
 }
 
 
@@ -783,89 +1614,207 @@
    MOBILE
    ========================================================= */
 
-@media (max-width: 760px) {
-
+@media (
+  max-width:
+    760px
+) {
   .challenge-sections {
-    gap: 42px;
+    gap:
+      36px;
   }
+
+
+  .challenge-section-heading {
+    padding:
+      20px
+      18px;
+  }
+
 
   .challenge-section-heading h2 {
-    font-size: 29px;
+    font-size:
+      29px;
   }
+
+
+  .challenge-section-heading p {
+    font-size:
+      13px;
+  }
+
 
   .challenge-card {
-    padding: 18px;
+    padding:
+      20px
+      18px;
   }
+
 
   .challenge-card-top {
-    flex-direction: column;
+    align-items:
+      flex-start;
+
+    flex-direction:
+      column;
   }
+
 
   .challenge-info-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns:
+      1fr;
   }
+
 
   .contact-box {
-    align-items: stretch;
+    align-items:
+      stretch;
 
-    flex-direction: column;
+    flex-direction:
+      column;
   }
+
 
   .whatsapp-button {
-    text-align: center;
+    width:
+      100%;
   }
+
 
   .schedule-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns:
+      1fr;
   }
 
-  .challenge-buttons {
-    flex-direction: column;
+
+  .schedule-grid
+  .challenge-action {
+    grid-column:
+      auto;
   }
+
+
+  .challenge-buttons {
+    flex-direction:
+      column;
+  }
+
 
   .challenge-buttons
   .challenge-action {
-    width: 100%;
+    width:
+      100%;
   }
 
+
   .tooltip-wrap {
-    width: 100%;
+    width:
+      100%;
   }
+
 
   .tooltip-wrap
   .challenge-action {
-    width: 100%;
+    width:
+      100%;
   }
 
+
   .challenge-tooltip {
-    left: 0;
+    left:
+      0;
 
     bottom:
       calc(
-        100% + 8px
+        100% +
+        8px
       );
 
     width:
       min(
         290px,
         calc(
-          100vw - 48px
+          100vw -
+          48px
         )
-      );guitarra electrica
+      );
 
     transform:
-      translateY(5px);
+      translateY(
+        5px
+      );
   }
+
 
   .tooltip-wrap.disabled:hover
   .challenge-tooltip,
   .tooltip-wrap.disabled:focus-within
   .challenge-tooltip {
     transform:
-      translateY(0);
+      translateY(
+        0
+      );
   }
 
+
   .challenge-tooltip::after {
-    left: 22px;
+    left:
+      22px;
+  }
+}
+
+
+/* =========================================================
+   MOBILE CHICO
+   ========================================================= */
+
+@media (
+  max-width:
+    480px
+) {
+  .challenge-card {
+    padding:
+      18px
+      15px;
+  }
+
+
+  .challenge-card-top h2 {
+    font-size:
+      27px;
+  }
+
+
+  .challenge-step {
+    grid-template-columns:
+      36px
+      minmax(
+        0,
+        1fr
+      );
+
+    gap:
+      12px;
+  }
+
+
+  .step-number {
+    width:
+      32px;
+
+    height:
+      32px;
+  }
+
+
+  .schedule-grid {
+    padding:
+      15px;
+  }
+
+
+  .rotation-summary,
+  .rotation-notice {
+    padding:
+      15px;
   }
 }

@@ -1,10 +1,24 @@
 import { pool } from "../db.js";
 
-const REJECTION_ELO_PENALTY = 8;
+import {
+  CHALLENGE_REJECTION_PENALTY,
+  PLACEMENT_MATCHES,
+  calculateChallengeRejectionElo,
+} from "../services/eloMatch.service.js";
+
+import {
+  applyPendingInactivityDecay,
+} from "../services/playerActivity.service.js";
+
+import {
+  MAX_ACTIVE_CHALLENGE_TARGETS,
+  getSportEligibleOpponents,
+  validateChallengeSportEligibility,
+} from "../services/challengeEligibility.service.js";
+
+
 const REJECTION_COOLDOWN_DAYS = 7;
 
-const PLACEMENT_MATCHES = 5;
-const MAX_RANKED_CHALLENGE_DISTANCE = 3;
 
 /*
   ============================================================
@@ -16,431 +30,7 @@ const getPlayer = async (
   client,
   id,
 ) => {
-  const result = await client.query(
-    `
-    SELECT
-      id,
-      name,
-      phone,
-      city,
-      gender,
-      rating,
-      matches_played,
-      verification_status,
-      role,
-      matches_played < $2
-        AS provisional
-
-    FROM users
-
-    WHERE id = $1
-      AND role = 'player'
-    `,
-    [
-      id,
-      PLACEMENT_MATCHES,
-    ],
-  );
-
-  return result.rows[0];
-};
-
-/*
-  ============================================================
-  RANKING OFICIAL
-  ============================================================
-*/
-
-const getOfficialRanking = async (
-  client,
-  city,
-  gender,
-) => {
-  const result = await client.query(
-    `
-    SELECT
-      id,
-      name,
-      rating,
-      matches_played,
-
-      ROW_NUMBER() OVER (
-        ORDER BY
-          rating DESC,
-          matches_played DESC,
-          id ASC
-      )::int AS official_position
-
-    FROM users
-
-    WHERE
-      role = 'player'
-      AND verification_status = 'verified'
-      AND city = $1
-      AND gender = $2
-      AND matches_played >= $3
-
-    ORDER BY
-      official_position ASC
-    `,
-    [
-      city,
-      gender,
-      PLACEMENT_MATCHES,
-    ],
-  );
-
-  return result.rows.map(
-    (player) => ({
-      ...player,
-      id: Number(player.id),
-      rating: Number(player.rating),
-      matches_played:
-        Number(player.matches_played),
-      official_position:
-        Number(player.official_position),
-    }),
-  );
-};
-
-const getOfficialPositionFromRanking = (
-  player,
-  officialRanking,
-) => {
-  if (
-    !player ||
-    Number(player.matches_played) <
-      PLACEMENT_MATCHES
-  ) {
-    return null;
-  }
-
-  const row = officialRanking.find(
-    (item) =>
-      Number(item.id) ===
-      Number(player.id),
-  );
-
-  return row
-    ? Number(row.official_position)
-    : null;
-};
-
-/*
-  ============================================================
-  POSICIÓN VIRTUAL DEL PROVISIONAL
-
-  El provisional se inserta virtualmente
-  dentro del ranking oficial usando:
-
-  1. Elo
-  2. partidos jugados
-  3. id
-
-  No obtiene puesto oficial.
-
-  Esta posición solamente sirve para
-  calcular qué rivales puede desafiar.
-
-  Ejemplo:
-  si virtualmente quedaría #18,
-  podrá desafiar #17, #16 o #15.
-
-  Así un jugador nuevo con Elo 0
-  no puede entrar y desafiar al #1.
-  ============================================================
-*/
-
-const getVirtualPositionFromRanking = (
-  player,
-  officialRanking,
-) => {
-  if (!player) {
-    return null;
-  }
-
-  const playerRating =
-    Number(player.rating);
-
-  const playerMatches =
-    Number(player.matches_played);
-
-  const playerId =
-    Number(player.id);
-
-  if (
-    !Number.isFinite(playerRating) ||
-    !Number.isInteger(playerMatches) ||
-    playerMatches < 0 ||
-    !Number.isInteger(playerId)
-  ) {
-    return null;
-  }
-
-  let playersAbove = 0;
-
-  for (const official of officialRanking) {
-    const officialRating =
-      Number(official.rating);
-
-    const officialMatches =
-      Number(official.matches_played);
-
-    const officialId =
-      Number(official.id);
-
-    const isAbove =
-      officialRating > playerRating ||
-      (
-        officialRating === playerRating &&
-        officialMatches > playerMatches
-      ) ||
-      (
-        officialRating === playerRating &&
-        officialMatches === playerMatches &&
-        officialId < playerId
-      );
-
-    if (isAbove) {
-      playersAbove += 1;
-    }
-  }
-
-  return playersAbove + 1;
-};
-
-const getCompetitivePosition = (
-  player,
-  officialRanking,
-) => {
-  if (!player) {
-    return null;
-  }
-
-  const provisional =
-    Number(player.matches_played) <
-    PLACEMENT_MATCHES;
-
-  if (provisional) {
-    return getVirtualPositionFromRanking(
-      player,
-      officialRanking,
-    );
-  }
-
-  return getOfficialPositionFromRanking(
-    player,
-    officialRanking,
-  );
-};
-
-/*
-  ============================================================
-  REGLA DEPORTIVA
-
-  PROVISIONAL vs PROVISIONAL:
-  permitido.
-
-  CUALQUIER OTRO CRUCE:
-  el desafiante solamente puede ir
-  hasta 3 posiciones competitivas
-  hacia arriba.
-
-  Oficial:
-  usa posición oficial.
-
-  Provisional:
-  usa posición virtual.
-  ============================================================
-*/
-
-const validateSportEligibility = async (
-  client,
-  challenger,
-  challenged,
-) => {
-  const officialRanking =
-    await getOfficialRanking(
-      client,
-      challenger.city,
-      challenger.gender,
-    );
-
-  const challengerProvisional =
-    Number(challenger.matches_played) <
-    PLACEMENT_MATCHES;
-
-  const challengedProvisional =
-    Number(challenged.matches_played) <
-    PLACEMENT_MATCHES;
-
-  const challengerOfficialPosition =
-    getOfficialPositionFromRanking(
-      challenger,
-      officialRanking,
-    );
-
-  const challengedOfficialPosition =
-    getOfficialPositionFromRanking(
-      challenged,
-      officialRanking,
-    );
-
-  const challengerCompetitivePosition =
-    getCompetitivePosition(
-      challenger,
-      officialRanking,
-    );
-
-  const challengedCompetitivePosition =
-    getCompetitivePosition(
-      challenged,
-      officialRanking,
-    );
-
-  if (
-    challengerProvisional &&
-    challengedProvisional
-  ) {
-    return {
-      allowed: true,
-
-      challengerPosition:
-        challengerOfficialPosition,
-
-      challengedPosition:
-        challengedOfficialPosition,
-
-      challengerCompetitivePosition,
-
-      challengedCompetitivePosition,
-
-      challengerVirtualPosition:
-        challengerCompetitivePosition,
-
-      challengedVirtualPosition:
-        challengedCompetitivePosition,
-
-      officialRanking,
-    };
-  }
-
-  if (
-    !challengerCompetitivePosition ||
-    !challengedCompetitivePosition
-  ) {
-    return {
-      allowed: false,
-
-      reason:
-        "competitive_position_unavailable",
-
-      message:
-        "No se pudo determinar la posición competitiva de alguno de los jugadores.",
-
-      officialRanking,
-    };
-  }
-
-  const difference =
-    challengerCompetitivePosition -
-    challengedCompetitivePosition;
-
-  if (
-    difference < 1 ||
-    difference >
-      MAX_RANKED_CHALLENGE_DISTANCE
-  ) {
-    return {
-      allowed: false,
-
-      reason:
-        "ranking_distance",
-
-      message:
-        challengerProvisional
-          ? "Durante la colocación solo podés desafiar rivales ubicados hasta 3 posiciones competitivas por encima de tu posición virtual."
-          : "Solo podés desafiar hasta 3 posiciones competitivas por encima.",
-
-      challengerPosition:
-        challengerOfficialPosition,
-
-      challengedPosition:
-        challengedOfficialPosition,
-
-      challengerCompetitivePosition,
-
-      challengedCompetitivePosition,
-
-      challengerVirtualPosition:
-        challengerProvisional
-          ? challengerCompetitivePosition
-          : null,
-
-      challengedVirtualPosition:
-        challengedProvisional
-          ? challengedCompetitivePosition
-          : null,
-
-      officialRanking,
-    };
-  }
-
-  return {
-    allowed: true,
-
-    challengerPosition:
-      challengerOfficialPosition,
-
-    challengedPosition:
-      challengedOfficialPosition,
-
-    challengerCompetitivePosition,
-
-    challengedCompetitivePosition,
-
-    challengerVirtualPosition:
-      challengerProvisional
-        ? challengerCompetitivePosition
-        : null,
-
-    challengedVirtualPosition:
-      challengedProvisional
-        ? challengedCompetitivePosition
-        : null,
-
-    officialRanking,
-  };
-};
-
-/*
-  ============================================================
-  RIVALES HABILITADOS POR REGLA DEPORTIVA
-  ============================================================
-*/
-
-const getSportEligibleOpponents = async (
-  client,
-  challenger,
-) => {
-  const officialRanking =
-    await getOfficialRanking(
-      client,
-      challenger.city,
-      challenger.gender,
-    );
-
-  const challengerProvisional =
-    Number(challenger.matches_played) <
-    PLACEMENT_MATCHES;
-
-  const challengerCompetitivePosition =
-    getCompetitivePosition(
-      challenger,
-      officialRanking,
-    );
-
-  const playersResult =
+  const result =
     await client.query(
       `
       SELECT
@@ -453,80 +43,28 @@ const getSportEligibleOpponents = async (
         matches_played,
         verification_status,
         role,
-        matches_played < $4
+
+        matches_played < $2
           AS provisional
 
       FROM users
 
       WHERE
-        role = 'player'
-        AND verification_status = 'verified'
-        AND city = $1
-        AND gender = $2
-        AND id <> $3
+        id = $1
+        AND role = 'player'
       `,
       [
-        challenger.city,
-        challenger.gender,
-        challenger.id,
+        id,
         PLACEMENT_MATCHES,
       ],
     );
 
-  const eligible = [];
-
-  for (const opponent of playersResult.rows) {
-    const opponentProvisional =
-      Number(opponent.matches_played) <
-      PLACEMENT_MATCHES;
-
-    const opponentCompetitivePosition =
-      getCompetitivePosition(
-        opponent,
-        officialRanking,
-      );
-
-    if (
-      challengerProvisional &&
-      opponentProvisional
-    ) {
-      eligible.push({
-        ...opponent,
-
-        competitive_position:
-          opponentCompetitivePosition,
-      });
-
-      continue;
-    }
-
-    if (
-      !challengerCompetitivePosition ||
-      !opponentCompetitivePosition
-    ) {
-      continue;
-    }
-
-    const difference =
-      challengerCompetitivePosition -
-      opponentCompetitivePosition;
-
-    if (
-      difference >= 1 &&
-      difference <=
-        MAX_RANKED_CHALLENGE_DISTANCE
-    ) {
-      eligible.push({
-        ...opponent,
-
-        competitive_position:
-          opponentCompetitivePosition,
-      });
-    }
-  }
-
-  return eligible;
+  return (
+    result.rows[0] ||
+    null
+  );
 };
+
 
 /*
   ============================================================
@@ -539,51 +77,62 @@ const getHistoricalMeetings = async (
   player1Id,
   player2Id,
 ) => {
-  const result = await client.query(
-    `
-    SELECT
-      COUNT(*)::int AS total
+  const result =
+    await client.query(
+      `
+      SELECT
+        COUNT(*)::int
+          AS total
 
-    FROM matches
+      FROM matches
 
-    WHERE
-      status = 'completed'
-      AND annulled_at IS NULL
-      AND (
-        (
-          player1_id = $1
-          AND player2_id = $2
+      WHERE
+        status = 'completed'
+
+        AND annulled_at
+          IS NULL
+
+        AND (
+          (
+            player1_id = $1
+            AND player2_id = $2
+          )
+
+          OR
+
+          (
+            player1_id = $2
+            AND player2_id = $1
+          )
         )
-        OR
-        (
-          player1_id = $2
-          AND player2_id = $1
-        )
-      )
-    `,
-    [
-      player1Id,
-      player2Id,
-    ],
-  );
+      `,
+      [
+        player1Id,
+        player2Id,
+      ],
+    );
 
   return Number(
     result.rows[0].total,
   );
 };
 
+
 /*
   ============================================================
   MÍNIMO DE ENFRENTAMIENTOS DE LA RUEDA
+  ============================================================
 
-  Se calcula únicamente entre rivales
-  habilitados por la regla deportiva.
+  Solamente se comparan rivales que
+  HOY son deportivamente habilitados.
 
-  Esto evita dos problemas:
+  Esto ahora incluye:
 
-  - repetir siempre contra un amigo;
-  - que un rival imposible de desafiar
-    bloquee artificialmente la rueda.
+  - hasta 3 jugadores ACTIVOS hacia arriba;
+  - todos los INACTIVOS encontrados antes
+    de llegar al tercer activo;
+  - provisional vs provisional, conservando
+    la regla previa.
   ============================================================
 */
 
@@ -592,19 +141,25 @@ const getRotationMinimumMeetings =
     client,
     challenger,
   ) => {
-    const eligible =
+    const eligibleOpponents =
       await getSportEligibleOpponents(
         client,
         challenger,
       );
 
-    if (!eligible.length) {
+    if (
+      !eligibleOpponents.length
+    ) {
       return null;
     }
 
-    let minimumMeetings = null;
+    let minimumMeetings =
+      null;
 
-    for (const opponent of eligible) {
+    for (
+      const opponent of
+      eligibleOpponents
+    ) {
       const meetings =
         await getHistoricalMeetings(
           client,
@@ -613,15 +168,19 @@ const getRotationMinimumMeetings =
         );
 
       if (
-        minimumMeetings === null ||
-        meetings < minimumMeetings
+        minimumMeetings ===
+          null ||
+        meetings <
+          minimumMeetings
       ) {
-        minimumMeetings = meetings;
+        minimumMeetings =
+          meetings;
       }
     }
 
     return minimumMeetings;
   };
+
 
 /*
   ============================================================
@@ -644,8 +203,11 @@ const hasOlderPendingRivals = async (
 
       WHERE
         challenger_id = $1
+
         AND challenged_id = $2
-        AND resolved_at IS NOT NULL
+
+        AND resolved_at
+          IS NOT NULL
 
       ORDER BY
         resolved_at DESC,
@@ -659,12 +221,15 @@ const hasOlderPendingRivals = async (
       ],
     );
 
-  if (!lastResolved.rowCount) {
+  if (
+    !lastResolved.rowCount
+  ) {
     return false;
   }
 
   const resolvedAt =
-    lastResolved.rows[0]
+    lastResolved
+      .rows[0]
       .resolved_at;
 
   const waiting =
@@ -677,8 +242,11 @@ const hasOlderPendingRivals = async (
 
       WHERE
         challenged_id = $1
+
         AND challenger_id <> $2
+
         AND status = 'pending'
+
         AND created_at <= $3
 
       ORDER BY
@@ -700,9 +268,10 @@ const hasOlderPendingRivals = async (
   );
 };
 
+
 /*
   ============================================================
-  COOLDOWN
+  COOLDOWN POR RECHAZO
   ============================================================
 */
 
@@ -725,9 +294,14 @@ const getRejectionCooldown = async (
 
       WHERE
         challenger_id = $1
+
         AND challenged_id = $2
-        AND status = 'rejected'
-        AND rejected_at IS NOT NULL
+
+        AND status =
+          'rejected'
+
+        AND rejected_at
+          IS NOT NULL
 
       ORDER BY
         rejected_at DESC,
@@ -741,7 +315,9 @@ const getRejectionCooldown = async (
       ],
     );
 
-  if (!result.rowCount) {
+  if (
+    !result.rowCount
+  ) {
     return null;
   }
 
@@ -772,6 +348,7 @@ const getRejectionCooldown = async (
   };
 };
 
+
 /*
   ============================================================
   RUEDA DE DESAFÍOS RECIBIDOS
@@ -786,10 +363,13 @@ const getRotationState = async (
     await client.query(
       `
       SELECT
-        c.id AS challenge_id,
+        c.id
+          AS challenge_id,
+
         c.challenger_id,
 
-        u.name AS challenger_name,
+        u.name
+          AS challenger_name,
 
         c.venue,
         c.scheduled_at
@@ -802,26 +382,40 @@ const getRotationState = async (
 
       WHERE
         c.challenged_id = $1
-        AND c.status = 'accepted'
+
+        AND c.status =
+          'accepted'
 
       ORDER BY
         c.accepted_at ASC
           NULLS LAST,
+
         c.created_at ASC,
+
         c.id ASC
 
       LIMIT 1
       `,
-      [userId],
+      [
+        userId,
+      ],
     );
 
-  if (activeMatch.rowCount) {
+  if (
+    activeMatch.rowCount
+  ) {
     return {
-      blockedByActiveMatch: true,
+      blockedByActiveMatch:
+        true,
+
       activeChallenge:
         activeMatch.rows[0],
-      currentChallenge: null,
-      pendingChallenges: [],
+
+      currentChallenge:
+        null,
+
+      pendingChallenges:
+        [],
     };
   }
 
@@ -835,7 +429,8 @@ const getRotationState = async (
         c.historical_meetings_at_creation,
         c.created_at,
 
-        u.name AS challenger_name,
+        u.name
+          AS challenger_name,
 
         u.matches_played < $2
           AS challenger_provisional
@@ -848,7 +443,9 @@ const getRotationState = async (
 
       WHERE
         c.challenged_id = $1
-        AND c.status = 'pending'
+
+        AND c.status =
+          'pending'
 
       ORDER BY
         c.historical_meetings_at_creation ASC,
@@ -862,18 +459,39 @@ const getRotationState = async (
     );
 
   return {
-    blockedByActiveMatch: false,
-    activeChallenge: null,
+    blockedByActiveMatch:
+      false,
+
+    activeChallenge:
+      null,
+
     currentChallenge:
-      pending.rows[0] || null,
+      pending.rows[0] ||
+      null,
+
     pendingChallenges:
       pending.rows,
   };
 };
 
+
 /*
   ============================================================
   CREAR DESAFÍO
+  ============================================================
+
+  Esta validación es la protección REAL
+  del backend.
+
+  No depende del botón del frontend.
+
+  Antes de calcular ranking:
+  - aplica decay pendiente en toda la liga;
+  - vuelve a cargar ratings;
+  - calcula ventana dinámica;
+  - valida rueda;
+  - valida cooldown;
+  - valida duplicados.
   ============================================================
 */
 
@@ -885,13 +503,19 @@ export const createChallenge = async (
   const client =
     await pool.connect();
 
+  let transactionStarted =
+    false;
+
   try {
     const challengerId =
-      Number(req.userId);
+      Number(
+        req.userId,
+      );
 
     const challengedId =
       Number(
-        req.body.challenged_id,
+        req.body
+          ?.challenged_id,
       );
 
     if (
@@ -905,6 +529,7 @@ export const createChallenge = async (
         .json({
           message:
             "Sesión inválida",
+
           reason:
             "invalid_session",
         });
@@ -923,6 +548,7 @@ export const createChallenge = async (
         .json({
           message:
             "Rival inválido",
+
           reason:
             "invalid_opponent",
         });
@@ -932,13 +558,21 @@ export const createChallenge = async (
       "BEGIN",
     );
 
-    const challenger =
+    transactionStarted =
+      true;
+
+    /*
+      Primera carga para conocer
+      ciudad y liga.
+    */
+
+    let challenger =
       await getPlayer(
         client,
         challengerId,
       );
 
-    const challenged =
+    let challenged =
       await getPlayer(
         client,
         challengedId,
@@ -952,11 +586,15 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(404)
         .json({
           message:
             "Jugador no encontrado",
+
           reason:
             "player_not_found",
         });
@@ -971,11 +609,15 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(403)
         .json({
           message:
             "Tu identidad debe estar verificada para crear desafíos.",
+
           reason:
             "challenger_not_verified",
         });
@@ -990,11 +632,15 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(400)
         .json({
           message:
             "Ese jugador todavía no está habilitado para competir.",
+
           reason:
             "challenged_not_verified",
         });
@@ -1008,11 +654,15 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(400)
         .json({
           message:
             "Ambos jugadores deben tener una liga seleccionada.",
+
           reason:
             "league_not_selected",
         });
@@ -1026,11 +676,15 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(400)
         .json({
           message:
             "Solo podés desafiar jugadores de tu misma liga.",
+
           reason:
             "different_league",
         });
@@ -1044,18 +698,97 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(400)
         .json({
           message:
             "Solo podés desafiar jugadores de tu misma ciudad.",
+
           reason:
             "different_city",
         });
     }
 
+    /*
+      ========================================================
+      APLICAR INACTIVIDAD PENDIENTE DE LA LIGA
+      ========================================================
+
+      Esto es necesario porque un decay
+      puede modificar:
+      - Elo;
+      - ranking oficial;
+      - posición virtual;
+      - ventana de desafíos.
+    */
+
+    await applyPendingInactivityDecay(
+      client,
+      {
+        city:
+          challenger.city,
+
+        gender:
+          challenger.gender,
+      },
+    );
+
+    /*
+      Recargamos después del decay.
+    */
+
+    challenger =
+      await getPlayer(
+        client,
+        challengerId,
+      );
+
+    challenged =
+      await getPlayer(
+        client,
+        challengedId,
+      );
+
+    if (
+      !challenger ||
+      !challenged
+    ) {
+      await client.query(
+        "ROLLBACK",
+      );
+
+      transactionStarted =
+        false;
+
+      return res
+        .status(404)
+        .json({
+          message:
+            "Jugador no encontrado",
+
+          reason:
+            "player_not_found",
+        });
+    }
+
+    /*
+      ========================================================
+      REGLA DEPORTIVA CENTRAL
+      ========================================================
+
+      Hasta el tercer ACTIVO hacia arriba,
+      incluyendo todos los INACTIVOS
+      encontrados en el recorrido.
+
+      Provisional vs provisional sigue
+      permitido.
+    */
+
     const sportEligibility =
-      await validateSportEligibility(
+      await validateChallengeSportEligibility(
         client,
         challenger,
         challenged,
@@ -1067,6 +800,9 @@ export const createChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(400)
@@ -1086,8 +822,27 @@ export const createChallenge = async (
             sportEligibility
               .challengedCompetitivePosition ??
             null,
+
+          challenged_active:
+            sportEligibility
+              .challengedActive ??
+            null,
+
+          challenged_inactive:
+            sportEligibility
+              .challengedInactive ??
+            null,
+
+          active_target_limit:
+            MAX_ACTIVE_CHALLENGE_TARGETS,
         });
     }
+
+    /*
+      ========================================================
+      HISTORIAL + RUEDA
+      ========================================================
+    */
 
     const historicalMeetings =
       await getHistoricalMeetings(
@@ -1111,6 +866,9 @@ export const createChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(409)
         .json({
@@ -1128,6 +886,12 @@ export const createChallenge = async (
         });
     }
 
+    /*
+      ========================================================
+      COOLDOWN
+      ========================================================
+    */
+
     const cooldown =
       await getRejectionCooldown(
         client,
@@ -1139,6 +903,9 @@ export const createChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(429)
@@ -1157,6 +924,12 @@ export const createChallenge = async (
         });
     }
 
+    /*
+      ========================================================
+      YA EXISTE DESAFÍO ACTIVO ENTRE EL PAR
+      ========================================================
+    */
+
     const active =
       await client.query(
         `
@@ -1171,12 +944,15 @@ export const createChallenge = async (
             'pending',
             'accepted'
           )
+
           AND (
             (
               challenger_id = $1
               AND challenged_id = $2
             )
+
             OR
+
             (
               challenger_id = $2
               AND challenged_id = $1
@@ -1191,20 +967,32 @@ export const createChallenge = async (
         ],
       );
 
-    if (active.rowCount) {
+    if (
+      active.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(409)
         .json({
           message:
             "Ya existe un desafío o partido activo entre ustedes.",
+
           reason:
             "active_challenge",
         });
     }
+
+    /*
+      ========================================================
+      RUEDA DEL RECEPTOR
+      ========================================================
+    */
 
     const mustWaitForOthers =
       await hasOlderPendingRivals(
@@ -1213,20 +1001,32 @@ export const createChallenge = async (
         challengedId,
       );
 
-    if (mustWaitForOthers) {
+    if (
+      mustWaitForOthers
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(409)
         .json({
           message:
             "Este jugador todavía tiene otros rivales anteriores esperando en su rueda.",
+
           reason:
             "rotation_wait",
         });
     }
+
+    /*
+      ========================================================
+      CREAR
+      ========================================================
+    */
 
     const created =
       await client.query(
@@ -1253,6 +1053,12 @@ export const createChallenge = async (
           historicalMeetings,
         ],
       );
+
+    /*
+      ========================================================
+      AUDITORÍA
+      ========================================================
+    */
 
     await client.query(
       `
@@ -1290,27 +1096,71 @@ export const createChallenge = async (
 
           challenger_official_position:
             sportEligibility
-              .challengerPosition,
+              .challengerPosition ??
+            null,
 
           challenged_official_position:
             sportEligibility
-              .challengedPosition,
+              .challengedPosition ??
+            null,
 
           challenger_competitive_position:
             sportEligibility
-              .challengerCompetitivePosition,
+              .challengerCompetitivePosition ??
+            null,
 
           challenged_competitive_position:
             sportEligibility
-              .challengedCompetitivePosition,
+              .challengedCompetitivePosition ??
+            null,
 
           challenger_virtual_position:
             sportEligibility
-              .challengerVirtualPosition,
+              .challengerVirtualPosition ??
+            null,
 
           challenged_virtual_position:
             sportEligibility
-              .challengedVirtualPosition,
+              .challengedVirtualPosition ??
+            null,
+
+          challenged_active:
+            sportEligibility
+              .challengedActive ??
+            null,
+
+          challenged_inactive:
+            sportEligibility
+              .challengedInactive ??
+            null,
+
+          counts_as_active_target:
+            sportEligibility
+              .countsAsActiveTarget ??
+            false,
+
+          inactive_in_path:
+            sportEligibility
+              .inactiveInPath ??
+            false,
+
+          provisional_vs_provisional:
+            sportEligibility
+              .provisionalVsProvisional ??
+            false,
+
+          active_targets_found:
+            sportEligibility
+              .activeTargetsFound ??
+            null,
+
+          active_target_limit:
+            MAX_ACTIVE_CHALLENGE_TARGETS,
+
+          cutoff_competitive_position:
+            sportEligibility
+              .cutoffCompetitivePosition ??
+            null,
 
           historical_meetings:
             historicalMeetings,
@@ -1320,9 +1170,6 @@ export const createChallenge = async (
 
           placement_matches:
             PLACEMENT_MATCHES,
-
-          max_challenge_distance:
-            MAX_RANKED_CHALLENGE_DISTANCE,
         }),
       ],
     );
@@ -1331,7 +1178,10 @@ export const createChallenge = async (
       "COMMIT",
     );
 
-    res
+    transactionStarted =
+      false;
+
+    return res
       .status(201)
       .json({
         message:
@@ -1340,10 +1190,36 @@ export const createChallenge = async (
         challenge:
           created.rows[0],
 
+        eligibility: {
+          challenged_active:
+            sportEligibility
+              .challengedActive ??
+            null,
+
+          challenged_inactive:
+            sportEligibility
+              .challengedInactive ??
+            null,
+
+          counts_as_active_target:
+            sportEligibility
+              .countsAsActiveTarget ??
+            false,
+
+          inactive_in_path:
+            sportEligibility
+              .inactiveInPath ??
+            false,
+
+          active_target_limit:
+            MAX_ACTIVE_CHALLENGE_TARGETS,
+        },
+
         contact: {
           challenger: {
             name:
               challenger.name,
+
             phone:
               challenger.phone,
           },
@@ -1351,18 +1227,23 @@ export const createChallenge = async (
           challenged: {
             name:
               challenged.name,
+
             phone:
               challenged.phone,
           },
         },
       });
   } catch (error) {
-    try {
-      await client.query(
-        "ROLLBACK",
-      );
-    } catch {
-      // Se libera en finally.
+    if (
+      transactionStarted
+    ) {
+      try {
+        await client.query(
+          "ROLLBACK",
+        );
+      } catch {
+        // La conexión se libera abajo.
+      }
     }
 
     next(error);
@@ -1370,6 +1251,7 @@ export const createChallenge = async (
     client.release();
   }
 };
+
 
 /*
   ============================================================
@@ -1389,17 +1271,17 @@ export const getMyChallenges = async (
         SELECT
           c.*,
 
-          u1.name AS
-            challenger_name,
+          u1.name
+            AS challenger_name,
 
-          u2.name AS
-            challenged_name,
+          u2.name
+            AS challenged_name,
 
-          u1.phone AS
-            challenger_phone,
+          u1.phone
+            AS challenger_phone,
 
-          u2.phone AS
-            challenged_phone,
+          u2.phone
+            AS challenged_phone,
 
           u1.matches_played < $2
             AS challenger_provisional,
@@ -1407,8 +1289,8 @@ export const getMyChallenges = async (
           u2.matches_played < $2
             AS challenged_provisional,
 
-          updater.name AS
-            schedule_updated_by_name
+          updater.name
+            AS schedule_updated_by_name
 
         FROM challenges c
 
@@ -1426,7 +1308,9 @@ export const getMyChallenges = async (
 
         WHERE
           c.challenger_id = $1
+
           OR
+
           c.challenged_id = $1
 
         ORDER BY
@@ -1457,7 +1341,8 @@ export const getMyChallenges = async (
     const currentId =
       rotation
         .currentChallenge
-        ?.id || null;
+        ?.id ||
+      null;
 
     const challenges =
       result.rows.map(
@@ -1466,10 +1351,16 @@ export const getMyChallenges = async (
             Number(
               challenge.challenged_id,
             ) ===
-            Number(req.userId);
+            Number(
+              req.userId,
+            );
 
-          let canAccept = false;
-          let canReject = false;
+          let canAccept =
+            false;
+
+          let canReject =
+            false;
+
           let rotationMessage =
             null;
 
@@ -1485,11 +1376,18 @@ export const getMyChallenges = async (
               rotationMessage =
                 `Primero tenés que jugar el partido ya confirmado contra ${rotation.activeChallenge.challenger_name}.`;
             } else if (
-              Number(challenge.id) ===
-              Number(currentId)
+              Number(
+                challenge.id,
+              ) ===
+              Number(
+                currentId,
+              )
             ) {
-              canAccept = true;
-              canReject = true;
+              canAccept =
+                true;
+
+              canReject =
+                true;
             } else if (
               rotation
                 .currentChallenge
@@ -1514,7 +1412,7 @@ export const getMyChallenges = async (
         },
       );
 
-    res.json({
+    return res.json({
       challenges,
 
       rotation: {
@@ -1546,6 +1444,7 @@ export const getMyChallenges = async (
   }
 };
 
+
 /*
   ============================================================
   PROGRAMAR DESAFÍO
@@ -1560,15 +1459,20 @@ export const scheduleChallenge = async (
   const client =
     await pool.connect();
 
+  let transactionStarted =
+    false;
+
   try {
     const {
       venue,
       scheduled_at,
-    } = req.body;
+    } =
+      req.body;
 
     const cleanVenue =
       String(
-        venue || "",
+        venue ||
+        "",
       ).trim();
 
     if (
@@ -1580,13 +1484,16 @@ export const scheduleChallenge = async (
         .json({
           message:
             "Ingresá un lugar válido para jugar.",
+
           reason:
             "invalid_venue",
         });
     }
 
     const scheduledDate =
-      new Date(scheduled_at);
+      new Date(
+        scheduled_at,
+      );
 
     if (
       !scheduled_at ||
@@ -1599,6 +1506,7 @@ export const scheduleChallenge = async (
         .json({
           message:
             "Ingresá una fecha y hora válidas.",
+
           reason:
             "invalid_schedule",
         });
@@ -1613,6 +1521,7 @@ export const scheduleChallenge = async (
         .json({
           message:
             "El partido debe programarse para una fecha futura.",
+
           reason:
             "schedule_in_past",
         });
@@ -1622,6 +1531,9 @@ export const scheduleChallenge = async (
       "BEGIN",
     );
 
+    transactionStarted =
+      true;
+
     const result =
       await client.query(
         `
@@ -1629,37 +1541,55 @@ export const scheduleChallenge = async (
 
         SET
           venue = $1,
+
           scheduled_at = $2,
+
           schedule_updated_by = $3
 
         WHERE
           id = $4
-          AND status = 'pending'
+
+          AND status =
+            'pending'
+
           AND (
             challenger_id = $3
-            OR challenged_id = $3
+
+            OR
+
+            challenged_id = $3
           )
 
         RETURNING *
         `,
         [
           cleanVenue,
-          scheduledDate.toISOString(),
+
+          scheduledDate
+            .toISOString(),
+
           req.userId,
+
           req.params.id,
         ],
       );
 
-    if (!result.rowCount) {
+    if (
+      !result.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(404)
         .json({
           message:
             "Desafío pendiente no encontrado.",
+
           reason:
             "challenge_not_found",
         });
@@ -1683,6 +1613,7 @@ export const scheduleChallenge = async (
       `,
       [
         req.userId,
+
         result.rows[0].id,
 
         JSON.stringify({
@@ -1700,7 +1631,10 @@ export const scheduleChallenge = async (
       "COMMIT",
     );
 
-    res.json({
+    transactionStarted =
+      false;
+
+    return res.json({
       message:
         "Lugar, fecha y hora guardados correctamente.",
 
@@ -1708,12 +1642,16 @@ export const scheduleChallenge = async (
         result.rows[0],
     });
   } catch (error) {
-    try {
-      await client.query(
-        "ROLLBACK",
-      );
-    } catch {
-      // Se libera en finally.
+    if (
+      transactionStarted
+    ) {
+      try {
+        await client.query(
+          "ROLLBACK",
+        );
+      } catch {
+        // Se libera abajo.
+      }
     }
 
     next(error);
@@ -1722,9 +1660,18 @@ export const scheduleChallenge = async (
   }
 };
 
+
 /*
   ============================================================
   ACEPTAR DESAFÍO
+  ============================================================
+
+  Un desafío ya creado NO se cancela
+  porque alguno de sus jugadores haya
+  pasado a inactivo.
+
+  La actividad solamente cambia la
+  ventana para NUEVOS desafíos.
   ============================================================
 */
 
@@ -1736,10 +1683,16 @@ export const acceptChallenge = async (
   const client =
     await pool.connect();
 
+  let transactionStarted =
+    false;
+
   try {
     await client.query(
       "BEGIN",
     );
+
+    transactionStarted =
+      true;
 
     const currentUser =
       await client.query(
@@ -1754,17 +1707,25 @@ export const acceptChallenge = async (
 
         FROM users
 
-        WHERE id = $1
+        WHERE
+          id = $1
 
         FOR UPDATE
         `,
-        [req.userId],
+        [
+          req.userId,
+        ],
       );
 
-    if (!currentUser.rowCount) {
+    if (
+      !currentUser.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(404)
@@ -1788,11 +1749,15 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(403)
         .json({
           message:
             "Tu cuenta debe estar verificada para aceptar desafíos.",
+
           reason:
             "not_verified",
         });
@@ -1812,11 +1777,15 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(409)
         .json({
           message:
             `Primero tenés que jugar el partido ya confirmado contra ${rotation.activeChallenge.challenger_name}.`,
+
           reason:
             "active_match",
         });
@@ -1830,18 +1799,24 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(404)
         .json({
           message:
             "No tenés desafíos pendientes para aceptar.",
+
           reason:
             "no_pending_challenges",
         });
     }
 
     if (
-      Number(req.params.id) !==
+      Number(
+        req.params.id,
+      ) !==
       Number(
         rotation
           .currentChallenge
@@ -1851,6 +1826,9 @@ export const acceptChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(409)
@@ -1876,14 +1854,18 @@ export const acceptChallenge = async (
     const challenge =
       await client.query(
         `
-        SELECT *
+        SELECT
+          *
 
         FROM challenges
 
         WHERE
           id = $1
+
           AND challenged_id = $2
-          AND status = 'pending'
+
+          AND status =
+            'pending'
 
         FOR UPDATE
         `,
@@ -1893,10 +1875,15 @@ export const acceptChallenge = async (
         ],
       );
 
-    if (!challenge.rowCount) {
+    if (
+      !challenge.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(404)
@@ -1917,11 +1904,15 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(400)
         .json({
           message:
             "Antes de aceptar tienen que cargar el lugar, la fecha y la hora del partido.",
+
           reason:
             "schedule_required",
         });
@@ -1943,11 +1934,15 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(400)
         .json({
           message:
             "El horario cargado ya pasó. Actualicen el turno antes de aceptar.",
+
           reason:
             "schedule_expired",
         });
@@ -1966,23 +1961,32 @@ export const acceptChallenge = async (
 
         FROM users
 
-        WHERE id = $1
+        WHERE
+          id = $1
 
         FOR UPDATE
         `,
-        [c.challenger_id],
+        [
+          c.challenger_id,
+        ],
       );
 
-    if (!challenger.rowCount) {
+    if (
+      !challenger.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(400)
         .json({
           message:
             "El jugador que creó este desafío ya no está habilitado para competir.",
+
           reason:
             "challenger_not_verified",
         });
@@ -2006,42 +2010,65 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(400)
         .json({
           message:
             "El jugador que creó este desafío ya no está habilitado para competir en esta liga.",
+
           reason:
             "challenger_not_eligible",
         });
     }
 
+    /*
+      El desafío sigue siendo válido
+      aunque alguno haya pasado a INACTIVO.
+
+      No volvemos a evaluar la ventana
+      competitiva al aceptar.
+    */
+
     const existingMatch =
       await client.query(
         `
-        SELECT id
+        SELECT
+          id
 
         FROM matches
 
         WHERE
           challenge_id = $1
-          AND annulled_at IS NULL
+
+          AND annulled_at
+            IS NULL
 
         LIMIT 1
         `,
-        [c.id],
+        [
+          c.id,
+        ],
       );
 
-    if (existingMatch.rowCount) {
+    if (
+      existingMatch.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(409)
         .json({
           message:
             "Este desafío ya tiene un partido asociado.",
+
           reason:
             "match_already_exists",
         });
@@ -2053,17 +2080,23 @@ export const acceptChallenge = async (
         UPDATE challenges
 
         SET
-          status = 'accepted',
+          status =
+            'accepted',
+
           accepted_at =
             CURRENT_TIMESTAMP
 
         WHERE
           id = $1
-          AND status = 'pending'
+
+          AND status =
+            'pending'
 
         RETURNING id
         `,
-        [c.id],
+        [
+          c.id,
+        ],
       );
 
     if (
@@ -2073,11 +2106,15 @@ export const acceptChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(409)
         .json({
           message:
             "El desafío cambió de estado antes de poder aceptarlo.",
+
           reason:
             "challenge_state_changed",
         });
@@ -2166,7 +2203,10 @@ export const acceptChallenge = async (
       "COMMIT",
     );
 
-    res.json({
+    transactionStarted =
+      false;
+
+    return res.json({
       message:
         "Desafío aceptado. El partido quedó programado.",
 
@@ -2174,12 +2214,16 @@ export const acceptChallenge = async (
         match.rows[0],
     });
   } catch (error) {
-    try {
-      await client.query(
-        "ROLLBACK",
-      );
-    } catch {
-      // Se libera en finally.
+    if (
+      transactionStarted
+    ) {
+      try {
+        await client.query(
+          "ROLLBACK",
+        );
+      } catch {
+        // Se libera abajo.
+      }
     }
 
     next(error);
@@ -2188,9 +2232,30 @@ export const acceptChallenge = async (
   }
 };
 
+
 /*
   ============================================================
   RECHAZAR DESAFÍO
+  ============================================================
+
+  Antes del rechazo aplicamos cualquier
+  decay de inactividad pendiente del
+  jugador.
+
+  Después usamos el motor Elo central.
+
+  Esto conserva:
+
+  -8 Elo normal.
+
+  Piso:
+  - provisional: 0
+  - oficial normal: 100
+
+  Excepción:
+  si un oficial ya estaba debajo de 100
+  por la regla extrema del #1,
+  la penalización nunca le regala Elo.
   ============================================================
 */
 
@@ -2202,9 +2267,34 @@ export const rejectChallenge = async (
   const client =
     await pool.connect();
 
+  let transactionStarted =
+    false;
+
   try {
     await client.query(
       "BEGIN",
+    );
+
+    transactionStarted =
+      true;
+
+    /*
+      Aplicamos solamente los decays
+      pendientes de este jugador.
+
+      Es importante que ocurran antes
+      del evento challenge_rejection.
+    */
+
+    await applyPendingInactivityDecay(
+      client,
+      {
+        userIds: [
+          Number(
+            req.userId,
+          ),
+        ],
+      },
     );
 
     const user =
@@ -2219,17 +2309,25 @@ export const rejectChallenge = async (
 
         FROM users
 
-        WHERE id = $1
+        WHERE
+          id = $1
 
         FOR UPDATE
         `,
-        [req.userId],
+        [
+          req.userId,
+        ],
       );
 
-    if (!user.rowCount) {
+    if (
+      !user.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(404)
@@ -2244,7 +2342,7 @@ export const rejectChallenge = async (
 
     if (
       currentUser.role !==
-      "player" ||
+        "player" ||
       currentUser
         .verification_status !==
         "verified"
@@ -2253,11 +2351,15 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(403)
         .json({
           message:
             "Tu cuenta debe estar verificada para rechazar desafíos.",
+
           reason:
             "not_verified",
         });
@@ -2277,11 +2379,15 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(409)
         .json({
           message:
             `Primero tenés que jugar el partido ya confirmado contra ${rotation.activeChallenge.challenger_name}.`,
+
           reason:
             "active_match",
         });
@@ -2295,16 +2401,24 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(404)
         .json({
           message:
             "No tenés desafíos pendientes para rechazar.",
+
+          reason:
+            "no_pending_challenges",
         });
     }
 
     if (
-      Number(req.params.id) !==
+      Number(
+        req.params.id,
+      ) !==
       Number(
         rotation
           .currentChallenge
@@ -2314,6 +2428,9 @@ export const rejectChallenge = async (
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(409)
@@ -2339,14 +2456,18 @@ export const rejectChallenge = async (
     const challenge =
       await client.query(
         `
-        SELECT *
+        SELECT
+          *
 
         FROM challenges
 
         WHERE
           id = $1
+
           AND challenged_id = $2
-          AND status = 'pending'
+
+          AND status =
+            'pending'
 
         FOR UPDATE
         `,
@@ -2356,74 +2477,64 @@ export const rejectChallenge = async (
         ],
       );
 
-    if (!challenge.rowCount) {
+    if (
+      !challenge.rowCount
+    ) {
       await client.query(
         "ROLLBACK",
       );
+
+      transactionStarted =
+        false;
 
       return res
         .status(409)
         .json({
           message:
             "El desafío ya fue resuelto o no existe.",
+
           reason:
             "challenge_already_resolved",
         });
     }
 
+    /*
+      ========================================================
+      MOTOR ELO CENTRAL
+      ========================================================
+    */
+
+    const rejectionElo =
+      calculateChallengeRejectionElo({
+        rating:
+          currentUser.rating,
+
+        matchesPlayed:
+          currentUser
+            .matches_played,
+      });
+
     const beforeRating =
-      Number(
-        currentUser.rating,
-      );
-
-    const matchesPlayed =
-      Number(
-        currentUser
-          .matches_played,
-      );
-
-    if (
-      !Number.isFinite(
-        beforeRating,
-      ) ||
-      !Number.isInteger(
-        matchesPlayed,
-      ) ||
-      matchesPlayed < 0
-    ) {
-      await client.query(
-        "ROLLBACK",
-      );
-
-      return res
-        .status(409)
-        .json({
-          message:
-            "Los datos de ranking del jugador son inválidos.",
-          reason:
-            "invalid_rating",
-        });
-    }
-
-    const provisional =
-      matchesPlayed <
-      PLACEMENT_MATCHES;
-
-    const ratingFloor =
-      provisional
-        ? 0
-        : 100;
+      rejectionElo
+        .elo_before;
 
     const afterRating =
-      Math.max(
-        ratingFloor,
-        beforeRating -
-          REJECTION_ELO_PENALTY,
-      );
+      rejectionElo
+        .elo_after;
 
     const realPenalty =
-      beforeRating -
-      afterRating;
+      rejectionElo
+        .effective_penalty;
+
+    const provisional =
+      rejectionElo
+        .provisional;
+
+    /*
+      ========================================================
+      ACTUALIZAR DESAFÍO
+      ========================================================
+    */
 
     const updatedChallenge =
       await client.query(
@@ -2431,17 +2542,24 @@ export const rejectChallenge = async (
         UPDATE challenges
 
         SET
-          status = 'rejected',
+          status =
+            'rejected',
+
           rejected_at =
             CURRENT_TIMESTAMP,
+
           resolved_at =
             CURRENT_TIMESTAMP,
+
           rejection_elo_penalty = $1
 
         WHERE
           id = $2
+
           AND challenged_id = $3
-          AND status = 'pending'
+
+          AND status =
+            'pending'
 
         RETURNING *
         `,
@@ -2459,15 +2577,25 @@ export const rejectChallenge = async (
         "ROLLBACK",
       );
 
+      transactionStarted =
+        false;
+
       return res
         .status(409)
         .json({
           message:
             "El desafío ya fue resuelto.",
+
           reason:
             "challenge_already_resolved",
         });
     }
+
+    /*
+      ========================================================
+      ACTUALIZAR ELO
+      ========================================================
+    */
 
     await client.query(
       `
@@ -2475,16 +2603,24 @@ export const rejectChallenge = async (
 
       SET
         rating = $1,
+
         updated_at =
           CURRENT_TIMESTAMP
 
-      WHERE id = $2
+      WHERE
+        id = $2
       `,
       [
         afterRating,
         req.userId,
       ],
     );
+
+    /*
+      ========================================================
+      EVENTO ELO
+      ========================================================
+    */
 
     await client.query(
       `
@@ -2510,14 +2646,27 @@ export const rejectChallenge = async (
       `,
       [
         req.userId,
-        updatedChallenge.rows[0].id,
+
+        updatedChallenge
+          .rows[0]
+          .id,
+
         beforeRating,
-        -realPenalty,
+
+        rejectionElo
+          .elo_change,
+
         afterRating,
 
         `Penalización por rechazar un desafío: -${realPenalty} Elo`,
       ],
     );
+
+    /*
+      ========================================================
+      AUDITORÍA
+      ========================================================
+    */
 
     await client.query(
       `
@@ -2537,7 +2686,10 @@ export const rejectChallenge = async (
       `,
       [
         req.userId,
-        updatedChallenge.rows[0].id,
+
+        updatedChallenge
+          .rows[0]
+          .id,
 
         JSON.stringify({
           elo_before:
@@ -2551,6 +2703,9 @@ export const rejectChallenge = async (
 
           provisional,
 
+          configured_penalty:
+            CHALLENGE_REJECTION_PENALTY,
+
           cooldown_days:
             REJECTION_COOLDOWN_DAYS,
         }),
@@ -2561,14 +2716,18 @@ export const rejectChallenge = async (
       "COMMIT",
     );
 
-    res.json({
+    transactionStarted =
+      false;
+
+    return res.json({
       message:
         realPenalty > 0
           ? `Desafío rechazado. Se descontaron ${realPenalty} puntos Elo.`
           : "Desafío rechazado. Tu Elo ya estaba en el mínimo permitido.",
 
       elo_change:
-        -realPenalty,
+        rejectionElo
+          .elo_change,
 
       rating:
         afterRating,
@@ -2580,12 +2739,16 @@ export const rejectChallenge = async (
         true,
     });
   } catch (error) {
-    try {
-      await client.query(
-        "ROLLBACK",
-      );
-    } catch {
-      // Se libera en finally.
+    if (
+      transactionStarted
+    ) {
+      try {
+        await client.query(
+          "ROLLBACK",
+        );
+      } catch {
+        // Se libera abajo.
+      }
     }
 
     next(error);

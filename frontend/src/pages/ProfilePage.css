@@ -1,178 +1,1319 @@
+/* =========================================================
+   LA RED — MI PERFIL
+   REFERENCIA VISUAL: MIS PARTIDOS / RANKING
+   ========================================================= */
+
 .profile-page {
-  min-height: calc(100vh - 72px);
+  min-height:
+    calc(
+      100vh -
+      72px
+    );
+
+  color:
+    #342720;
 }
 
-.profile-page-heading {
-  margin-bottom: 22px;
+
+.profile-page
+.page-content {
+  width:
+    min(
+      100%,
+      1040px
+    );
+
+  margin-left:
+    auto;
+
+  margin-right:
+    auto;
+
+  padding-left:
+    22px;
+
+  padding-right:
+    22px;
 }
+
+
+/* =========================================================
+   HERO
+   ========================================================= */
+
+.profile-hero {
+  display:
+    flex;
+
+  align-items:
+    flex-end;
+
+  justify-content:
+    space-between;
+
+  gap:
+    30px;
+
+  margin-bottom:
+    24px;
+
+  padding:
+    30px;
+
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.96
+    );
+
+  border:
+    1px solid
+    #ddc8ba;
+
+  border-top:
+    4px solid
+    #c6683f;
+
+  border-radius:
+    9px;
+
+  box-shadow:
+    0
+    12px
+    28px
+    rgba(
+      80,
+      48,
+      30,
+      0.1
+    );
+
+  backdrop-filter:
+    blur(
+      8px
+    );
+}
+
+
+.profile-brand-tags {
+  display:
+    flex;
+
+  flex-wrap:
+    wrap;
+
+  gap:
+    7px;
+
+  margin-bottom:
+    18px;
+}
+
+
+.profile-brand-tags
+span {
+  min-height:
+    26px;
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  padding:
+    0
+    9px;
+
+  background:
+    #fff4eb;
+
+  border:
+    1px solid
+    #e0b99f;
+
+  border-radius:
+    999px;
+
+  color:
+    #a95632;
+
+  font-size:
+    9px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.12em;
+}
+
+
+.profile-kicker {
+  display:
+    block;
+
+  margin-bottom:
+    7px;
+
+  color:
+    #b65d38;
+
+  font-size:
+    11px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.14em;
+}
+
+
+.profile-hero
+h1 {
+  margin:
+    0;
+
+  color:
+    #2f251f;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      42px,
+      5vw,
+      60px
+    );
+
+  line-height:
+    0.98;
+
+  letter-spacing:
+    -0.035em;
+}
+
+
+.profile-hero
+p {
+  max-width:
+    500px;
+
+  margin:
+    15px
+    0
+    0;
+
+  color:
+    #625249;
+
+  font-size:
+    15px;
+
+  font-weight:
+    600;
+
+  line-height:
+    1.6;
+}
+
+
+/* =========================================================
+   BADGE VERIFICACIÓN HERO
+   ========================================================= */
+
+.profile-verification-badge {
+  min-width:
+    145px;
+
+  padding:
+    15px
+    18px;
+
+  background:
+    #f5eee9;
+
+  border:
+    1px solid
+    #dacbc2;
+
+  border-radius:
+    7px;
+}
+
+
+.profile-verification-badge
+small {
+  display:
+    block;
+
+  margin-bottom:
+    6px;
+
+  color:
+    #817067;
+
+  font-size:
+    8px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.12em;
+}
+
+
+.profile-verification-badge
+strong {
+  display:
+    block;
+
+  color:
+    #47372f;
+
+  font-size:
+    14px;
+
+  font-weight:
+    900;
+}
+
+
+.profile-verification-badge.verified {
+  background:
+    #edf6ef;
+
+  border-color:
+    #b9d4c0;
+}
+
+
+.profile-verification-badge.verified
+strong {
+  color:
+    #2f7045;
+}
+
+
+.profile-verification-badge.pending {
+  background:
+    #fff6e9;
+
+  border-color:
+    #e3c8a2;
+}
+
+
+.profile-verification-badge.pending
+strong {
+  color:
+    #96631f;
+}
+
+
+.profile-verification-badge.rejected {
+  background:
+    #fbedeb;
+
+  border-color:
+    #dcb2aa;
+}
+
+
+.profile-verification-badge.rejected
+strong {
+  color:
+    #9b4033;
+}
+
+
+/* =========================================================
+   TARJETA PRINCIPAL
+   ========================================================= */
 
 .profile-overview {
-  width: 100%;
-  padding: 30px;
-  border: 1px solid rgba(92, 54, 34, 0.18);
-  border-radius: 18px;
-  background: rgba(250, 242, 225, 0.9);
-  box-shadow: 0 18px 45px rgba(50, 29, 18, 0.14);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  width:
+    100%;
+
+  padding:
+    26px;
+
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.96
+    );
+
+  border:
+    1px solid
+    #ddc8ba;
+
+  border-top:
+    4px solid
+    #c6683f;
+
+  border-radius:
+    9px;
+
+  box-shadow:
+    0
+    10px
+    26px
+    rgba(
+      80,
+      48,
+      30,
+      0.09
+    );
+
+  backdrop-filter:
+    blur(
+      8px
+    );
 }
+
+
+/* =========================================================
+   JUGADOR
+   ========================================================= */
 
 .profile-player {
-  padding-bottom: 24px;
-  border-bottom: 1px solid rgba(92, 54, 34, 0.15);
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    space-between;
+
+  gap:
+    24px;
+
+  padding:
+    4px
+    0
+    24px;
+
+  border-bottom:
+    1px solid
+    #eaded6;
 }
+
+
+.profile-player-main {
+  min-width:
+    0;
+}
+
 
 .profile-eyebrow {
-  display: block;
-  margin-bottom: 7px;
-  color: #b95632;
-  font-size: 0.73rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
+  display:
+    block;
+
+  margin-bottom:
+    8px;
+
+  color:
+    #b65d38;
+
+  font-size:
+    9px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.14em;
 }
 
-.profile-player h2 {
-  margin: 0;
-  color: #3d281c;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.8rem, 4vw, 2.65rem);
-  line-height: 1.05;
+
+.profile-player
+h2 {
+  margin:
+    0;
+
+  color:
+    #332720;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      30px,
+      4vw,
+      43px
+    );
+
+  font-weight:
+    700;
+
+  line-height:
+    1.05;
 }
+
 
 .profile-league {
-  margin: 8px 0 0;
-  color: #756253;
-  font-size: 1rem;
+  margin:
+    10px
+    0
+    0;
+
+  color:
+    #746158;
+
+  font-size:
+    14px;
+
+  font-weight:
+    600;
 }
+
+
+/* =========================================================
+   MARCA LR
+   ========================================================= */
+
+.profile-player-mark {
+  width:
+    74px;
+
+  height:
+    74px;
+
+  flex:
+    0
+    0
+    74px;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  background:
+    #fff1e7;
+
+  border:
+    1px solid
+    #e0b394;
+
+  border-radius:
+    50%;
+}
+
+
+.profile-player-mark
+strong {
+  color:
+    #b65d38;
+
+  font-family:
+    Georgia,
+    serif;
+
+  font-size:
+    22px;
+
+  line-height:
+    1;
+}
+
+
+.profile-player-mark
+span {
+  margin-top:
+    5px;
+
+  color:
+    #8e5940;
+
+  font-size:
+    7px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.12em;
+}
+
+
+/* =========================================================
+   STATS
+   ========================================================= */
 
 .profile-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin: 24px 0;
+  display:
+    grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(
+        0,
+        1fr
+      )
+    );
+
+  gap:
+    14px;
+
+  margin:
+    24px
+    0;
 }
+
 
 .profile-stat {
-  min-width: 0;
-  padding: 18px;
-  border: 1px solid rgba(92, 54, 34, 0.13);
-  border-radius: 13px;
-  background: rgba(255, 250, 240, 0.68);
+  min-width:
+    0;
+
+  min-height:
+    116px;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    space-between;
+
+  gap:
+    16px;
+
+  padding:
+    20px;
+
+  background:
+    #fffaf6;
+
+  border:
+    1px solid
+    #dfcabc;
+
+  border-top:
+    3px solid
+    #c6683f;
+
+  border-radius:
+    7px;
 }
 
-.profile-stat small {
-  display: block;
-  margin-bottom: 7px;
-  color: #857163;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+
+.profile-stat
+small {
+  display:
+    block;
+
+  margin-bottom:
+    8px;
+
+  color:
+    #877469;
+
+  font-size:
+    8px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.12em;
 }
 
-.profile-stat strong {
-  display: block;
-  overflow-wrap: anywhere;
-  color: #3d281c;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.45rem;
+
+.profile-stat
+strong {
+  display:
+    block;
+
+  overflow-wrap:
+    anywhere;
+
+  color:
+    #332720;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    27px;
+
+  line-height:
+    1;
 }
 
-.profile-notice,
-.profile-choose-league,
-.profile-message {
-  margin-top: 18px;
-  padding: 20px;
-  border: 1px solid rgba(92, 54, 34, 0.13);
-  border-radius: 13px;
-  background: rgba(255, 250, 240, 0.72);
+
+.profile-stat
+> span {
+  width:
+    38px;
+
+  height:
+    38px;
+
+  flex:
+    0
+    0
+    38px;
+
+  display:
+    grid;
+
+  place-items:
+    center;
+
+  background:
+    #f5e7de;
+
+  border-radius:
+    50%;
+
+  color:
+    #b65d38;
+
+  font-size:
+    10px;
+
+  font-weight:
+    900;
 }
 
-.profile-notice strong {
-  display: block;
-  margin-bottom: 8px;
-  color: #3d281c;
-  font-size: 1rem;
+
+.profile-stat-verification.verified {
+  border-top-color:
+    #39764d;
 }
 
-.profile-notice p,
-.profile-choose-league p {
-  margin: 6px 0 0;
-  color: #68584c;
-  line-height: 1.6;
+
+.profile-stat-verification.verified
+> span {
+  background:
+    #e5f2e9;
+
+  color:
+    #39764d;
 }
 
-.profile-notice-danger {
-  border-color: rgba(150, 55, 40, 0.22);
+
+.profile-stat-verification.pending {
+  border-top-color:
+    #b27a28;
 }
 
-.profile-notice-danger strong {
-  color: #8e392a;
+
+.profile-stat-verification.pending
+> span {
+  background:
+    #fff1d9;
+
+  color:
+    #946420;
 }
 
-.profile-choose-league h3 {
-  margin: 0;
-  color: #3d281c;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.45rem;
+
+.profile-stat-verification.rejected {
+  border-top-color:
+    #aa493b;
 }
+
+
+.profile-stat-verification.rejected
+> span {
+  background:
+    #f8e5e2;
+
+  color:
+    #aa493b;
+}
+
+
+/* =========================================================
+   ESTADO DE CUENTA
+   ========================================================= */
+
+.profile-notice {
+  display:
+    grid;
+
+  grid-template-columns:
+    52px
+    minmax(
+      0,
+      1fr
+    );
+
+  gap:
+    18px;
+
+  margin-top:
+    18px;
+
+  padding:
+    20px;
+
+  background:
+    #fffaf6;
+
+  border:
+    1px solid
+    #dfcabc;
+
+  border-left:
+    4px solid
+    #c6683f;
+
+  border-radius:
+    7px;
+}
+
+
+.profile-notice-icon {
+  width:
+    44px;
+
+  height:
+    44px;
+
+  display:
+    grid;
+
+  place-items:
+    center;
+
+  background:
+    #f5e7de;
+
+  border-radius:
+    50%;
+
+  color:
+    #b65d38;
+
+  font-size:
+    18px;
+
+  font-weight:
+    900;
+}
+
+
+.profile-notice
+h3 {
+  margin:
+    0
+    0
+    9px;
+
+  color:
+    #342820;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    20px;
+}
+
+
+.profile-notice
+p {
+  margin:
+    5px
+    0
+    0;
+
+  color:
+    #66564d;
+
+  font-size:
+    13px;
+
+  line-height:
+    1.6;
+}
+
+
+.profile-notice.verified {
+  background:
+    #f5faf6;
+
+  border-color:
+    #c6dccb;
+
+  border-left-color:
+    #39764d;
+}
+
+
+.profile-notice.verified
+.profile-notice-icon {
+  background:
+    #e4f1e7;
+
+  color:
+    #39764d;
+}
+
+
+.profile-notice.pending {
+  background:
+    #fffaf1;
+
+  border-color:
+    #e6d0ae;
+
+  border-left-color:
+    #b27a28;
+}
+
+
+.profile-notice.pending
+.profile-notice-icon {
+  background:
+    #fff0d7;
+
+  color:
+    #986823;
+}
+
+
+.profile-notice.rejected {
+  background:
+    #fff6f4;
+
+  border-color:
+    #dfbbb4;
+
+  border-left-color:
+    #aa493b;
+}
+
+
+.profile-notice.rejected
+.profile-notice-icon {
+  background:
+    #f7e4e1;
+
+  color:
+    #aa493b;
+}
+
+
+/* =========================================================
+   ELECCIÓN DE LIGA
+   ========================================================= */
+
+.profile-choose-league {
+  display:
+    grid;
+
+  grid-template-columns:
+    minmax(
+      0,
+      1fr
+    )
+    minmax(
+      320px,
+      0.9fr
+    );
+
+  gap:
+    30px;
+
+  align-items:
+    center;
+
+  margin-top:
+    20px;
+
+  padding:
+    22px;
+
+  background:
+    #fff7f1;
+
+  border:
+    1px solid
+    #e0c4b3;
+
+  border-left:
+    4px solid
+    #c6683f;
+
+  border-radius:
+    7px;
+}
+
+
+.profile-choose-league
+h3 {
+  margin:
+    0;
+
+  color:
+    #342820;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    25px;
+}
+
+
+.profile-choose-league
+p {
+  max-width:
+    480px;
+
+  margin:
+    9px
+    0
+    0;
+
+  color:
+    #68584f;
+
+  font-size:
+    13px;
+
+  line-height:
+    1.6;
+}
+
 
 .profile-league-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
+  display:
+    grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(
+        0,
+        1fr
+      )
+    );
+
+  gap:
+    10px;
 }
+
+
+.profile-league-button {
+  min-height:
+    76px;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  align-items:
+    flex-start;
+
+  justify-content:
+    center;
+
+  padding:
+    14px
+    16px;
+
+  background:
+    #c6683f;
+
+  border:
+    1px solid
+    #b75b37;
+
+  border-radius:
+    6px;
+
+  color:
+    #ffffff;
+
+  cursor:
+    pointer;
+
+  text-align:
+    left;
+
+  transition:
+    transform
+    0.15s ease,
+    background
+    0.15s ease;
+}
+
+
+.profile-league-button:hover {
+  background:
+    #ad512f;
+
+  transform:
+    translateY(
+      -1px
+    );
+}
+
+
+.profile-league-button
+small {
+  margin-bottom:
+    6px;
+
+  color:
+    rgba(
+      255,
+      255,
+      255,
+      0.76
+    );
+
+  font-size:
+    8px;
+
+  font-weight:
+    900;
+
+  letter-spacing:
+    0.13em;
+}
+
+
+.profile-league-button
+strong {
+  font-size:
+    13px;
+}
+
+
+.profile-league-button.secondary {
+  background:
+    #fffaf6;
+
+  border-color:
+    #c6683f;
+
+  color:
+    #a64f2f;
+}
+
+
+.profile-league-button.secondary
+small {
+  color:
+    #b96a49;
+}
+
+
+.profile-league-button.secondary:hover {
+  background:
+    #fff0e6;
+}
+
+
+/* =========================================================
+   MENSAJE
+   ========================================================= */
 
 .profile-message {
-  color: #3d281c;
-  font-weight: 700;
+  margin-top:
+    18px;
+
+  padding:
+    15px
+    17px;
+
+  background:
+    #fff5ed;
+
+  border:
+    1px solid
+    #e2c3b0;
+
+  border-left:
+    4px solid
+    #c6683f;
+
+  border-radius:
+    7px;
+
+  color:
+    #4b3930;
+
+  font-size:
+    13px;
+
+  font-weight:
+    800;
 }
 
-@media (max-width: 700px) {
-  .profile-overview {
-    padding: 20px;
-    border-radius: 15px;
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (
+  max-width:
+    820px
+) {
+  .profile-choose-league {
+    grid-template-columns:
+      1fr;
   }
+}
+
+
+@media (
+  max-width:
+    700px
+) {
+  .profile-page
+  .page-content {
+    padding-left:
+      16px;
+
+    padding-right:
+      16px;
+  }
+
+
+  .profile-hero {
+    align-items:
+      flex-start;
+
+    flex-direction:
+      column;
+
+    padding:
+      24px;
+  }
+
+
+  .profile-verification-badge {
+    width:
+      100%;
+  }
+
+
+  .profile-overview {
+    padding:
+      20px;
+  }
+
 
   .profile-stats {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    grid-template-columns:
+      1fr;
   }
+
 
   .profile-stat {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 15px;
-    padding: 15px 16px;
-  }
-
-  .profile-stat small {
-    margin: 0;
-  }
-
-  .profile-stat strong {
-    text-align: right;
-    font-size: 1.25rem;
-  }
-
-  .profile-league-actions {
-    flex-direction: column;
-  }
-
-  .profile-league-actions .small-action {
-    width: 100%;
+    min-height:
+      90px;
   }
 }
 
-@media (max-width: 420px) {
-  .profile-overview {
-    padding: 17px;
+
+@media (
+  max-width:
+    520px
+) {
+  .profile-page
+  .page-content {
+    padding-left:
+      12px;
+
+    padding-right:
+      12px;
   }
 
-  .profile-notice,
-  .profile-choose-league,
-  .profile-message {
-    padding: 17px;
+
+  .profile-hero {
+    padding:
+      21px
+      17px;
+  }
+
+
+  .profile-hero
+  h1 {
+    font-size:
+      44px;
+  }
+
+
+  .profile-player {
+    align-items:
+      flex-start;
+  }
+
+
+  .profile-player-mark {
+    width:
+      58px;
+
+    height:
+      58px;
+
+    flex-basis:
+      58px;
+  }
+
+
+  .profile-player-mark
+  strong {
+    font-size:
+      18px;
+  }
+
+
+  .profile-player
+  h2 {
+    font-size:
+      30px;
+  }
+
+
+  .profile-notice {
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .profile-league-actions {
+    grid-template-columns:
+      1fr;
   }
 }

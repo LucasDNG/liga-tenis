@@ -9,52 +9,6 @@ import {
 
 /*
   ============================================================
-  MOTOR DE EJECUCIÓN DE REPLAY HISTÓRICO
-  ============================================================
-
-  OBJETIVO
-
-  Cuando un administrador anula un partido histórico,
-  no alcanza con devolver el delta Elo original.
-
-  Elo es dependiente del camino.
-
-  Por eso:
-
-  1. reconstruimos el estado inmediatamente anterior
-     al partido anulado;
-
-  2. eliminamos matemáticamente ese partido;
-
-  3. reproducimos cronológicamente todos los eventos
-     deportivos posteriores de esa liga;
-
-  4. recalculamos:
-     - Elo
-     - matches_played
-     - provisional / oficial
-     - placement
-     - piso de graduación
-     - regla del #1
-     - penalizaciones por rechazo;
-
-  5. dejamos preparado el nuevo historial Elo.
-
-  ESTE SERVICIO:
-
-  - trabaja dentro de una transacción existente;
-  - NO hace BEGIN;
-  - NO hace COMMIT;
-  - NO hace ROLLBACK.
-
-  El controlador/admin service que lo invoque
-  es dueño de la transacción.
-  ============================================================
-*/
-
-
-/*
-  ============================================================
   ERROR
   ============================================================
 */
@@ -85,295 +39,295 @@ export class EloReplayExecutionError extends Error {
   ============================================================
 */
 
-const asNumber =
-  (
-    value,
-    field,
-  ) => {
-    const number =
-      Number(value);
+const asNumber = (
+  value,
+  field,
+) => {
+  const number =
+    Number(value);
 
-    if (
-      !Number.isFinite(number)
-    ) {
-      throw new EloReplayExecutionError(
-        `Valor numérico inválido en ${field}.`,
-        "invalid_numeric_value",
-        {
-          field,
-          value,
-        },
-      );
-    }
-
-    return number;
-  };
-
-
-const asInteger =
-  (
-    value,
-    field,
-  ) => {
-    const number =
-      asNumber(
-        value,
+  if (
+    !Number.isFinite(number)
+  ) {
+    throw new EloReplayExecutionError(
+      `Valor numérico inválido en ${field}.`,
+      "invalid_numeric_value",
+      {
         field,
-      );
-
-    if (
-      !Number.isInteger(number)
-    ) {
-      throw new EloReplayExecutionError(
-        `Valor entero inválido en ${field}.`,
-        "invalid_integer_value",
-        {
-          field,
-          value,
-        },
-      );
-    }
-
-    return number;
-  };
-
-
-const asNonNegativeInteger =
-  (
-    value,
-    field,
-  ) => {
-    const number =
-      asInteger(
         value,
+      },
+    );
+  }
+
+  return number;
+};
+
+
+const asInteger = (
+  value,
+  field,
+) => {
+  const number =
+    asNumber(
+      value,
+      field,
+    );
+
+  if (
+    !Number.isInteger(number)
+  ) {
+    throw new EloReplayExecutionError(
+      `Valor entero inválido en ${field}.`,
+      "invalid_integer_value",
+      {
         field,
-      );
+        value,
+      },
+    );
+  }
 
-    if (
-      number < 0
-    ) {
-      throw new EloReplayExecutionError(
-        `${field} no puede ser negativo.`,
-        "negative_value",
-        {
-          field,
-          value:
-            number,
-        },
-      );
-    }
-
-    return number;
-  };
+  return number;
+};
 
 
-const cloneState =
-  (
-    state,
-  ) => {
-    const cloned =
-      new Map();
+const asNonNegativeInteger = (
+  value,
+  field,
+) => {
+  const number =
+    asInteger(
+      value,
+      field,
+    );
 
-    for (
-      const [
-        userId,
-        player,
-      ] of state.entries()
-    ) {
-      cloned.set(
-        userId,
-        {
-          ...player,
-        },
-      );
-    }
+  if (
+    number < 0
+  ) {
+    throw new EloReplayExecutionError(
+      `${field} no puede ser negativo.`,
+      "negative_value",
+      {
+        field,
+        value:
+          number,
+      },
+    );
+  }
 
-    return cloned;
-  };
+  return number;
+};
 
 
-const serializeState =
-  (
-    state,
-  ) =>
-    Array.from(
-      state.values(),
+const normalizeDate = (
+  value,
+  field,
+) => {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime(),
     )
-      .map(
-        (player) => ({
-          id:
-            player.id,
+  ) {
+    throw new EloReplayExecutionError(
+      `Fecha inválida en ${field}.`,
+      "invalid_replay_date",
+      {
+        field,
+        value,
+      },
+    );
+  }
 
-          name:
-            player.name,
-
-          rating:
-            player.rating,
-
-          matches_played:
-            player.matches_played,
-
-          city:
-            player.city,
-
-          gender:
-            player.gender,
-
-          role:
-            player.role,
-
-          verification_status:
-            player.verification_status,
-        }),
-      )
-      .sort(
-        (a, b) =>
-          a.id -
-          b.id,
-      );
+  return date;
+};
 
 
-const getPlayer =
-  (
-    state,
-    userId,
-  ) => {
-    const id =
-      asInteger(
-        userId,
-        "userId",
-      );
+const cloneState = (
+  state,
+) => {
+  const cloned =
+    new Map();
 
-    const player =
-      state.get(id);
-
-    if (
-      !player
-    ) {
-      throw new EloReplayExecutionError(
-        `No existe el jugador ${id} en el estado reconstruido.`,
-        "replay_player_missing",
-        {
-          user_id:
-            id,
-        },
-      );
-    }
-
-    return player;
-  };
-
-
-const setPlayer =
-  (
-    state,
-    player,
-  ) => {
-    state.set(
-      player.id,
+  for (
+    const [
+      userId,
+      player,
+    ] of state.entries()
+  ) {
+    cloned.set(
+      userId,
       {
         ...player,
       },
     );
-  };
+  }
+
+  return cloned;
+};
 
 
-const normalizeDate =
-  (
-    value,
-    field,
-  ) => {
-    const date =
-      new Date(value);
+const serializeState = (
+  state,
+) =>
+  Array.from(
+    state.values(),
+  )
+    .map(
+      (player) => ({
+        id:
+          player.id,
 
-    if (
-      Number.isNaN(
-        date.getTime(),
-      )
-    ) {
-      throw new EloReplayExecutionError(
-        `Fecha inválida en ${field}.`,
-        "invalid_replay_date",
-        {
-          field,
-          value,
-        },
-      );
-    }
+        name:
+          player.name,
 
-    return date;
-  };
+        rating:
+          player.rating,
 
+        matches_played:
+          player.matches_played,
 
-const compareChronology =
-  (
-    a,
-    b,
-  ) => {
-    const aTime =
-      normalizeDate(
-        a.occurred_at,
-        "chronology.occurred_at",
-      ).getTime();
+        city:
+          player.city,
 
-    const bTime =
-      normalizeDate(
-        b.occurred_at,
-        "chronology.occurred_at",
-      ).getTime();
+        gender:
+          player.gender,
 
-    if (
-      aTime !==
-      bTime
-    ) {
-      return (
-        aTime -
-        bTime
-      );
-    }
+        role:
+          player.role,
 
-    const typeWeight = {
-      match:
-        1,
-
-      challenge_rejection:
-        2,
-    };
-
-    const aWeight =
-      typeWeight[a.type] ??
-      99;
-
-    const bWeight =
-      typeWeight[b.type] ??
-      99;
-
-    if (
-      aWeight !==
-      bWeight
-    ) {
-      return (
-        aWeight -
-        bWeight
-      );
-    }
-
-    return (
-      asInteger(
-        a.source_id,
-        "chronology.source_id",
-      ) -
-      asInteger(
-        b.source_id,
-        "chronology.source_id",
-      )
+        verification_status:
+          player.verification_status,
+      }),
+    )
+    .sort(
+      (a, b) =>
+        a.id -
+        b.id,
     );
+
+
+const getPlayer = (
+  state,
+  userId,
+) => {
+  const id =
+    asInteger(
+      userId,
+      "userId",
+    );
+
+  const player =
+    state.get(id);
+
+  if (
+    !player
+  ) {
+    throw new EloReplayExecutionError(
+      `No existe el jugador #${id} en el estado reconstruido.`,
+      "replay_player_missing",
+      {
+        user_id:
+          id,
+      },
+    );
+  }
+
+  return player;
+};
+
+
+const setPlayer = (
+  state,
+  player,
+) => {
+  state.set(
+    player.id,
+    {
+      ...player,
+    },
+  );
+};
+
+
+const compareChronology = (
+  a,
+  b,
+) => {
+  const aTime =
+    normalizeDate(
+      a.occurred_at,
+      "chronology.occurred_at",
+    ).getTime();
+
+  const bTime =
+    normalizeDate(
+      b.occurred_at,
+      "chronology.occurred_at",
+    ).getTime();
+
+  if (
+    aTime !==
+    bTime
+  ) {
+    return (
+      aTime -
+      bTime
+    );
+  }
+
+  /*
+    Ante mismo timestamp:
+    1. partido
+    2. rechazo
+
+    Dentro del mismo tipo,
+    ID ascendente.
+  */
+
+  const typeWeight = {
+    match:
+      1,
+
+    challenge_rejection:
+      2,
   };
+
+  const aWeight =
+    typeWeight[a.type] ??
+    99;
+
+  const bWeight =
+    typeWeight[b.type] ??
+    99;
+
+  if (
+    aWeight !==
+    bWeight
+  ) {
+    return (
+      aWeight -
+      bWeight
+    );
+  }
+
+  return (
+    asInteger(
+      a.source_id,
+      "chronology.source_id",
+    ) -
+    asInteger(
+      b.source_id,
+      "chronology.source_id",
+    )
+  );
+};
 
 
 /*
   ============================================================
-  LEER COLUMNAS DE MIGRATION_009
+  INFRAESTRUCTURA
   ============================================================
 */
 
@@ -397,9 +351,12 @@ const assertReplayInfrastructure =
 
             WHERE
               table_schema = 'public'
-              AND table_name = 'elo_events'
-              AND column_name = 'replay_batch_id'
-          ) AS replay_batch_column_exists,
+              AND table_name =
+                'elo_replay_batches'
+              AND column_name =
+                'requested_by'
+          )
+            AS requested_by_exists,
 
           EXISTS (
             SELECT 1
@@ -408,9 +365,68 @@ const assertReplayInfrastructure =
 
             WHERE
               table_schema = 'public'
-              AND table_name = 'elo_events'
-              AND column_name = 'replayed_from_event_id'
-          ) AS replay_source_column_exists
+              AND table_name =
+                'elo_replay_batches'
+              AND column_name =
+                'annulled_match_id'
+          )
+            AS annulled_match_id_exists,
+
+          EXISTS (
+            SELECT 1
+
+            FROM information_schema.columns
+
+            WHERE
+              table_schema = 'public'
+              AND table_name =
+                'elo_replay_batches'
+              AND column_name =
+                'matches_replayed'
+          )
+            AS matches_replayed_exists,
+
+          EXISTS (
+            SELECT 1
+
+            FROM information_schema.columns
+
+            WHERE
+              table_schema = 'public'
+              AND table_name =
+                'elo_replay_batches'
+              AND column_name =
+                'elo_events_replayed'
+          )
+            AS elo_events_replayed_exists,
+
+          EXISTS (
+            SELECT 1
+
+            FROM information_schema.columns
+
+            WHERE
+              table_schema = 'public'
+              AND table_name =
+                'elo_events'
+              AND column_name =
+                'replay_batch_id'
+          )
+            AS replay_batch_column_exists,
+
+          EXISTS (
+            SELECT 1
+
+            FROM information_schema.columns
+
+            WHERE
+              table_schema = 'public'
+              AND table_name =
+                'elo_events'
+              AND column_name =
+                'replayed_from_event_id'
+          )
+            AS replay_source_column_exists
         `,
       );
 
@@ -419,6 +435,10 @@ const assertReplayInfrastructure =
 
     if (
       !row?.replay_table_exists ||
+      !row?.requested_by_exists ||
+      !row?.annulled_match_id_exists ||
+      !row?.matches_replayed_exists ||
+      !row?.elo_events_replayed_exists ||
       !row?.replay_batch_column_exists ||
       !row?.replay_source_column_exists
     ) {
@@ -432,7 +452,7 @@ const assertReplayInfrastructure =
 
 /*
   ============================================================
-  CARGAR PARTIDO OBJETIVO
+  PARTIDO OBJETIVO
   ============================================================
 */
 
@@ -453,11 +473,17 @@ const loadTargetMatch =
         SELECT
           m.*,
 
-          p1.city AS league_city,
-          p1.gender AS league_gender,
+          p1.city AS
+            league_city,
 
-          p1.role AS player1_role,
-          p2.role AS player2_role,
+          p1.gender AS
+            league_gender,
+
+          p1.role AS
+            player1_role,
+
+          p2.role AS
+            player2_role,
 
           p1.verification_status
             AS player1_verification_status,
@@ -502,11 +528,24 @@ const loadTargetMatch =
       result.rows[0];
 
     if (
+      match.annulled_at
+    ) {
+      throw new EloReplayExecutionError(
+        "El partido ya fue anulado.",
+        "match_already_annulled",
+        {
+          match_id:
+            id,
+        },
+      );
+    }
+
+    if (
       match.status !==
       "completed"
     ) {
       throw new EloReplayExecutionError(
-        "Solo puede hacerse replay desde un partido finalizado.",
+        "Solo puede anularse un partido finalizado.",
         "match_not_completed",
         {
           match_id:
@@ -514,19 +553,6 @@ const loadTargetMatch =
 
           status:
             match.status,
-        },
-      );
-    }
-
-    if (
-      match.annulled_at
-    ) {
-      throw new EloReplayExecutionError(
-        "El partido ya está anulado.",
-        "match_already_annulled",
-        {
-          match_id:
-            id,
         },
       );
     }
@@ -577,6 +603,22 @@ const loadTargetMatch =
       );
     }
 
+    if (
+      match.player1_role !==
+        "player" ||
+      match.player2_role !==
+        "player"
+    ) {
+      throw new EloReplayExecutionError(
+        "El partido posee participantes inválidos.",
+        "invalid_match_participants",
+        {
+          match_id:
+            id,
+        },
+      );
+    }
+
     return {
       ...match,
 
@@ -603,13 +645,21 @@ const loadTargetMatch =
           match.winner_id,
           "match.winner_id",
         ),
+
+      challenge_id:
+        match.challenge_id
+          ? asInteger(
+              match.challenge_id,
+              "match.challenge_id",
+            )
+          : null,
     };
   };
 
 
 /*
   ============================================================
-  CARGAR JUGADORES DE LA LIGA
+  JUGADORES DE LA LIGA
   ============================================================
 */
 
@@ -691,7 +741,7 @@ const loadLeaguePlayers =
 
 /*
   ============================================================
-  CARGAR PARTIDOS DESDE EL OBJETIVO
+  PARTIDOS DEL RANGO
   ============================================================
 */
 
@@ -723,21 +773,34 @@ const loadReplayMatches =
              m.player2_id
 
         WHERE
-          m.status = 'completed'
-          AND m.annulled_at IS NULL
+          m.status =
+            'completed'
 
-          AND p1.city = $1
-          AND p1.gender = $2
+          AND m.annulled_at
+            IS NULL
 
-          AND p2.city = $1
-          AND p2.gender = $2
+          AND p1.city =
+            $1
+
+          AND p1.gender =
+            $2
+
+          AND p2.city =
+            $1
+
+          AND p2.gender =
+            $2
 
           AND (
-            m.completed_at > $3
+            m.completed_at >
+              $3
 
             OR (
-              m.completed_at = $3
-              AND m.id >= $4
+              m.completed_at =
+                $3
+
+              AND m.id >=
+                $4
             )
           )
 
@@ -797,7 +860,7 @@ const loadReplayMatches =
 
 /*
   ============================================================
-  EVENTOS ELO ACTIVOS DESDE EL OBJETIVO
+  EVENTOS ELO DEL RANGO
   ============================================================
 */
 
@@ -904,7 +967,7 @@ const loadActiveReplayEvents =
 
 /*
   ============================================================
-  VALIDAR EVENTOS SOPORTADOS
+  VALIDACIONES
   ============================================================
 */
 
@@ -931,7 +994,7 @@ const validateSupportedEvents =
       unsupported.length
     ) {
       throw new EloReplayExecutionError(
-        "Existen movimientos Elo históricos que el replay todavía no puede reconstruir.",
+        "Existen movimientos Elo históricos que el replay no puede reconstruir automáticamente.",
         "unsupported_elo_events",
         {
           events:
@@ -961,12 +1024,6 @@ const validateSupportedEvents =
     }
   };
 
-
-/*
-  ============================================================
-  VALIDAR ARITMÉTICA HISTÓRICA
-  ============================================================
-*/
 
 const validateHistoricalArithmetic =
   (
@@ -1001,12 +1058,6 @@ const validateHistoricalArithmetic =
     }
   };
 
-
-/*
-  ============================================================
-  MAPA DE EVENTOS POR PARTIDO
-  ============================================================
-*/
 
 const buildMatchEventMap =
   (
@@ -1047,12 +1098,6 @@ const buildMatchEventMap =
     return map;
   };
 
-
-/*
-  ============================================================
-  VALIDAR HISTORIAL DE PARTIDOS
-  ============================================================
-*/
 
 const validateMatchHistory =
   (
@@ -1100,6 +1145,9 @@ const validateMatchHistory =
           match.player2_id,
         ]);
 
+      const uniqueUsers =
+        new Set();
+
       for (
         const event of resultEvents
       ) {
@@ -1109,7 +1157,7 @@ const validateMatchHistory =
           )
         ) {
           throw new EloReplayExecutionError(
-            `El partido #${match.id} posee un evento Elo de un jugador ajeno al partido.`,
+            `El partido #${match.id} posee un evento Elo de un jugador ajeno.`,
             "match_event_player_mismatch",
             {
               match_id:
@@ -1123,15 +1171,11 @@ const validateMatchHistory =
             },
           );
         }
-      }
 
-      const uniqueUsers =
-        new Set(
-          resultEvents.map(
-            (event) =>
-              event.user_id,
-          ),
+        uniqueUsers.add(
+          event.user_id,
         );
+      }
 
       if (
         uniqueUsers.size !==
@@ -1146,13 +1190,80 @@ const validateMatchHistory =
           },
         );
       }
+
+      const placementEvents =
+        events.filter(
+          (event) =>
+            event.event_type ===
+            "placement_completed",
+        );
+
+      for (
+        const event of placementEvents
+      ) {
+        if (
+          !participants.has(
+            event.user_id,
+          )
+        ) {
+          throw new EloReplayExecutionError(
+            `El placement_completed #${event.id} no pertenece a un participante del partido #${match.id}.`,
+            "placement_event_player_mismatch",
+            {
+              event_id:
+                event.id,
+
+              match_id:
+                match.id,
+
+              user_id:
+                event.user_id,
+            },
+          );
+        }
+      }
+
+      const placementByUser =
+        new Map();
+
+      for (
+        const event of placementEvents
+      ) {
+        const count =
+          (
+            placementByUser.get(
+              event.user_id,
+            ) || 0
+          ) + 1;
+
+        placementByUser.set(
+          event.user_id,
+          count,
+        );
+
+        if (
+          count > 1
+        ) {
+          throw new EloReplayExecutionError(
+            `El jugador #${event.user_id} posee más de un placement_completed activo en el partido #${match.id}.`,
+            "duplicate_placement_event",
+            {
+              match_id:
+                match.id,
+
+              user_id:
+                event.user_id,
+            },
+          );
+        }
+      }
     }
   };
 
 
 /*
   ============================================================
-  CALCULAR BASELINE
+  BASELINE
   ============================================================
 */
 
@@ -1278,7 +1389,7 @@ const buildBaselineState =
 
 /*
   ============================================================
-  CONSTRUIR CRONOLOGÍA
+  CRONOLOGÍA
   ============================================================
 */
 
@@ -1290,6 +1401,11 @@ const buildChronology =
   }) => {
     const chronology =
       [];
+
+    /*
+      El target se elimina matemáticamente.
+      Los partidos posteriores sí se reproducen.
+    */
 
     for (
       const match of replayMatches
@@ -1314,6 +1430,13 @@ const buildChronology =
         match,
       });
     }
+
+    /*
+      match_result y placement_completed
+      se regeneran al reproducir el partido.
+
+      challenge_rejection es independiente.
+    */
 
     for (
       const event of events
@@ -1349,7 +1472,7 @@ const buildChronology =
 
 /*
   ============================================================
-  CREAR BATCH
+  BATCH
   ============================================================
 */
 
@@ -1360,132 +1483,148 @@ const createReplayBatch =
       target,
       adminUserId,
       reason,
+      replayMatches,
+      events,
     },
   ) => {
-    const columnsResult =
-      await client.query(
-        `
-        SELECT
-          column_name
-
-        FROM information_schema.columns
-
-        WHERE
-          table_schema = 'public'
-          AND table_name =
-            'elo_replay_batches'
-        `,
-      );
-
-    const columns =
-      new Set(
-        columnsResult.rows.map(
-          (row) =>
-            row.column_name,
-        ),
-      );
-
-    const names =
-      [];
-
-    const values =
-      [];
-
-    const params =
-      [];
-
-    const push =
-      (
-        column,
-        value,
-      ) => {
-        if (
-          !columns.has(
-            column,
-          )
-        ) {
-          return;
-        }
-
-        names.push(
-          column,
-        );
-
-        values.push(
-          `$${values.length + 1}`,
-        );
-
-        params.push(
-          value,
-        );
-      };
-
-    push(
-      "annulled_match_id",
-      target.id,
-    );
-
-    push(
-      "requested_by",
-      adminUserId,
-    );
-
-    push(
-      "created_by",
-      adminUserId,
-    );
-
-    push(
-      "admin_user_id",
-      adminUserId,
-    );
-
-    push(
-      "reason",
+    const details = {
       reason,
-    );
 
-    push(
-      "status",
-      "running",
-    );
+      target_match_id:
+        target.id,
 
-    push(
-      "league_city",
-      target.league_city,
-    );
+      target_completed_at:
+        target.completed_at,
 
-    push(
-      "league_gender",
-      target.league_gender,
-    );
+      original_winner_id:
+        target.winner_id,
 
-    if (
-      !names.includes(
-        "annulled_match_id",
-      )
-    ) {
-      throw new EloReplayExecutionError(
-        "elo_replay_batches no posee annulled_match_id.",
-        "invalid_replay_batch_schema",
-      );
-    }
+      original_score:
+        target.score,
+
+      source_matches_in_range:
+        replayMatches.length,
+
+      source_elo_events_in_range:
+        events.length,
+    };
 
     const result =
       await client.query(
         `
         INSERT INTO elo_replay_batches (
-          ${names.join(", ")}
+          requested_by,
+          annulled_match_id,
+          city,
+          gender,
+          status,
+          matches_replayed,
+          elo_events_replayed,
+          details
         )
 
         VALUES (
-          ${values.join(", ")}
+          $1,
+          $2,
+          $3,
+          $4,
+          'running',
+          0,
+          0,
+          $5
         )
 
         RETURNING *
         `,
-        params,
+        [
+          adminUserId,
+          target.id,
+          target.league_city,
+          target.league_gender,
+          details,
+        ],
       );
+
+    return result.rows[0];
+  };
+
+
+const completeReplayBatch =
+  async (
+    client,
+    {
+      replayBatchId,
+      replayedMatches,
+      replayedRejections,
+      createdEvents,
+    },
+  ) => {
+    const completionDetails = {
+      replayed_matches:
+        replayedMatches.length,
+
+      replayed_rejections:
+        replayedRejections.length,
+
+      created_elo_events:
+        createdEvents.length,
+    };
+
+    const result =
+      await client.query(
+        `
+        UPDATE elo_replay_batches
+
+        SET
+          status =
+            'completed',
+
+          matches_replayed =
+            $1,
+
+          elo_events_replayed =
+            $2,
+
+          details =
+            COALESCE(
+              details,
+              '{}'::jsonb
+            ) ||
+            $3::jsonb,
+
+          completed_at =
+            CURRENT_TIMESTAMP
+
+        WHERE
+          id = $4
+          AND status =
+            'running'
+
+        RETURNING *
+        `,
+        [
+          replayedMatches.length,
+          createdEvents.length,
+          JSON.stringify(
+            completionDetails,
+          ),
+          replayBatchId,
+        ],
+      );
+
+    if (
+      result.rowCount !==
+      1
+    ) {
+      throw new EloReplayExecutionError(
+        "No se pudo completar el batch de replay.",
+        "replay_batch_completion_failed",
+        {
+          replay_batch_id:
+            replayBatchId,
+        },
+      );
+    }
 
     return result.rows[0];
   };
@@ -1493,7 +1632,7 @@ const createReplayBatch =
 
 /*
   ============================================================
-  MARCAR EVENTOS ORIGINALES COMO REVERTIDOS
+  REVERTIR EVENTOS FUENTE
   ============================================================
 */
 
@@ -1509,7 +1648,7 @@ const reverseOriginalEvents =
     if (
       !events.length
     ) {
-      return;
+      return [];
     }
 
     const ids =
@@ -1518,36 +1657,58 @@ const reverseOriginalEvents =
           event.id,
       );
 
-    await client.query(
-      `
-      UPDATE elo_events
+    const result =
+      await client.query(
+        `
+        UPDATE elo_events
 
-      SET
-        reversed_at =
-          CURRENT_TIMESTAMP,
+        SET
+          reversed_at =
+            CURRENT_TIMESTAMP,
 
-        reversed_by =
-          $1,
+          reversed_by =
+            $1,
 
-        replay_batch_id =
-          COALESCE(
-            replay_batch_id,
-            $2
-          )
+          replay_batch_id =
+            COALESCE(
+              replay_batch_id,
+              $2
+            )
 
-      WHERE
-        id =
-          ANY($3::int[])
+        WHERE
+          id =
+            ANY($3::int[])
 
-        AND reversed_at
-          IS NULL
-      `,
-      [
-        adminUserId,
-        replayBatchId,
-        ids,
-      ],
-    );
+          AND reversed_at
+            IS NULL
+
+        RETURNING id
+        `,
+        [
+          adminUserId,
+          replayBatchId,
+          ids,
+        ],
+      );
+
+    if (
+      result.rowCount !==
+      ids.length
+    ) {
+      throw new EloReplayExecutionError(
+        "Uno o más eventos Elo cambiaron mientras se preparaba el replay.",
+        "elo_state_changed",
+        {
+          expected:
+            ids.length,
+
+          reversed:
+            result.rowCount,
+        },
+      );
+    }
+
+    return result.rows;
   };
 
 
@@ -1626,12 +1787,6 @@ const insertReplayEvent =
   };
 
 
-/*
-  ============================================================
-  ENCONTRAR EVENTO FUENTE
-  ============================================================
-*/
-
 const findSourceEvent =
   (
     matchEventMap,
@@ -1661,7 +1816,7 @@ const findSourceEvent =
 
 /*
   ============================================================
-  REPRODUCIR PARTIDO
+  REPLAY DE PARTIDO
   ============================================================
 */
 
@@ -1679,12 +1834,6 @@ const replayMatch =
   ) => {
     const winnerId =
       match.winner_id;
-
-    const loserId =
-      winnerId ===
-      match.player1_id
-        ? match.player2_id
-        : match.player1_id;
 
     if (
       winnerId !==
@@ -1704,6 +1853,12 @@ const replayMatch =
         },
       );
     }
+
+    const loserId =
+      winnerId ===
+      match.player1_id
+        ? match.player2_id
+        : match.player1_id;
 
     const winner =
       getPlayer(
@@ -1807,7 +1962,7 @@ const replayMatch =
       !loserSource
     ) {
       throw new EloReplayExecutionError(
-        `No se encontraron los eventos fuente del partido #${match.id}.`,
+        `No se encontraron eventos fuente del partido #${match.id}.`,
         "source_match_events_missing",
         {
           match_id:
@@ -1939,6 +2094,16 @@ const replayMatch =
       loserEvent,
     );
 
+    /*
+      Si en el nuevo camino la quinta fecha
+      necesita normalización, la creamos.
+
+      Puede:
+      - mantenerse,
+      - desaparecer,
+      - aparecer en otro partido.
+    */
+
     if (
       calculation
         .winner
@@ -1960,14 +2125,14 @@ const replayMatch =
           },
         );
 
-      const event =
+      const placementEvent =
         await insertReplayEvent(
           client,
           {
             replayBatchId,
 
             sourceEventId:
-              oldSource?.id ||
+              oldSource?.id ??
               null,
 
             userId:
@@ -2003,13 +2168,13 @@ const replayMatch =
               ),
 
             createdAt:
-              oldSource?.created_at ||
+              oldSource?.created_at ??
               winnerSource.created_at,
           },
         );
 
       createdEvents.push(
-        event,
+        placementEvent,
       );
     }
 
@@ -2034,14 +2199,14 @@ const replayMatch =
           },
         );
 
-      const event =
+      const placementEvent =
         await insertReplayEvent(
           client,
           {
             replayBatchId,
 
             sourceEventId:
-              oldSource?.id ||
+              oldSource?.id ??
               null,
 
             userId:
@@ -2077,13 +2242,13 @@ const replayMatch =
               ),
 
             createdAt:
-              oldSource?.created_at ||
+              oldSource?.created_at ??
               loserSource.created_at,
           },
         );
 
       createdEvents.push(
-        event,
+        placementEvent,
       );
     }
 
@@ -2104,7 +2269,7 @@ const replayMatch =
 
 /*
   ============================================================
-  REPRODUCIR RECHAZO
+  REPLAY DE RECHAZO
   ============================================================
 */
 
@@ -2207,7 +2372,7 @@ const replayChallengeRejection =
 
 /*
   ============================================================
-  ACTUALIZAR USUARIOS CON ESTADO RECONSTRUIDO
+  PERSISTIR ESTADO
   ============================================================
 */
 
@@ -2228,8 +2393,12 @@ const persistFinalState =
           UPDATE users
 
           SET
-            rating = $1,
-            matches_played = $2,
+            rating =
+              $1,
+
+            matches_played =
+              $2,
+
             updated_at =
               CURRENT_TIMESTAMP
 
@@ -2254,7 +2423,7 @@ const persistFinalState =
         1
       ) {
         throw new EloReplayExecutionError(
-          `No se pudo persistir el estado del jugador #${player.id}.`,
+          `No se pudo persistir el jugador #${player.id}.`,
           "player_state_update_failed",
           {
             user_id:
@@ -2274,7 +2443,7 @@ const persistFinalState =
 
 /*
   ============================================================
-  ANULAR PARTIDO OBJETIVO
+  ANULAR TARGET
   ============================================================
 */
 
@@ -2328,7 +2497,7 @@ const persistTargetAnnulment =
       1
     ) {
       throw new EloReplayExecutionError(
-        "No se pudo anular el partido objetivo.",
+        "El estado del partido cambió antes de anularlo.",
         "target_annulment_failed",
         {
           match_id:
@@ -2340,12 +2509,6 @@ const persistTargetAnnulment =
     return result.rows[0];
   };
 
-
-/*
-  ============================================================
-  ANULAR DESAFÍO ASOCIADO
-  ============================================================
-*/
 
 const annulTargetChallenge =
   async (
@@ -2388,7 +2551,7 @@ const annulTargetChallenge =
       1
     ) {
       throw new EloReplayExecutionError(
-        "El desafío asociado no está en un estado válido para anularse.",
+        "El desafío asociado no está en un estado válido para ser anulado.",
         "challenge_state_invalid",
         {
           challenge_id:
@@ -2400,12 +2563,6 @@ const annulTargetChallenge =
     return result.rows[0];
   };
 
-
-/*
-  ============================================================
-  RESOLVER ALERTAS DEL PARTIDO
-  ============================================================
-*/
 
 const resolveTargetFlags =
   async (
@@ -2446,7 +2603,7 @@ const resolveTargetFlags =
 
 /*
   ============================================================
-  AUDIT EVENT
+  AUDITORÍA
   ============================================================
 */
 
@@ -2492,6 +2649,9 @@ const createReplayAuditEvent =
         JSON.stringify({
           reason,
 
+          reversal_mode:
+            "chronological_elo_replay",
+
           replay_batch_id:
             replayBatchId,
 
@@ -2536,135 +2696,14 @@ const createReplayAuditEvent =
 
 /*
   ============================================================
-  COMPLETAR BATCH
+  EJECUCIÓN
   ============================================================
-*/
 
-const completeReplayBatch =
-  async (
-    client,
-    {
-      replayBatchId,
-      replayedMatches,
-      replayedRejections,
-      createdEvents,
-    },
-  ) => {
-    const columnsResult =
-      await client.query(
-        `
-        SELECT
-          column_name
-
-        FROM information_schema.columns
-
-        WHERE
-          table_schema = 'public'
-          AND table_name =
-            'elo_replay_batches'
-        `,
-      );
-
-    const columns =
-      new Set(
-        columnsResult.rows.map(
-          (row) =>
-            row.column_name,
-        ),
-      );
-
-    const assignments =
-      [];
-
-    const params =
-      [];
-
-    const push =
-      (
-        column,
-        value,
-      ) => {
-        if (
-          !columns.has(
-            column,
-          )
-        ) {
-          return;
-        }
-
-        params.push(
-          value,
-        );
-
-        assignments.push(
-          `${column} = $${params.length}`,
-        );
-      };
-
-    push(
-      "status",
-      "completed",
-    );
-
-    push(
-      "completed_at",
-      new Date(),
-    );
-
-    push(
-      "matches_replayed",
-      replayedMatches.length,
-    );
-
-    push(
-      "replayed_matches_count",
-      replayedMatches.length,
-    );
-
-    push(
-      "events_created",
-      createdEvents.length,
-    );
-
-    push(
-      "replayed_events_count",
-      createdEvents.length,
-    );
-
-    push(
-      "rejections_replayed",
-      replayedRejections.length,
-    );
-
-    if (
-      !assignments.length
-    ) {
-      return;
-    }
-
-    params.push(
-      replayBatchId,
-    );
-
-    await client.query(
-      `
-      UPDATE elo_replay_batches
-
-      SET
-        ${assignments.join(", ")}
-
-      WHERE
-        id =
-          $${params.length}
-      `,
-      params,
-    );
-  };
-
-
-/*
-  ============================================================
-  EJECUTAR REPLAY
+  IMPORTANTE:
+  - recibe un client ya conectado;
+  - el caller debe haber hecho BEGIN;
+  - este servicio NO hace COMMIT;
+  - este servicio NO hace ROLLBACK.
   ============================================================
 */
 
@@ -2687,6 +2726,12 @@ export const executeEloReplay =
         "database_client_missing",
       );
     }
+
+    const normalizedMatchId =
+      asInteger(
+        matchId,
+        "matchId",
+      );
 
     const normalizedAdminUserId =
       asInteger(
@@ -2711,15 +2756,27 @@ export const executeEloReplay =
       );
     }
 
+    /*
+      1. Infraestructura.
+    */
+
     await assertReplayInfrastructure(
       client,
     );
 
+    /*
+      2. Target.
+    */
+
     const target =
       await loadTargetMatch(
         client,
-        matchId,
+        normalizedMatchId,
       );
+
+    /*
+      3. Bloqueamos liga.
+    */
 
     const players =
       await loadLeaguePlayers(
@@ -2733,6 +2790,10 @@ export const executeEloReplay =
         (player) =>
           player.id,
       );
+
+    /*
+      4. Historia activa.
+    */
 
     const replayMatches =
       await loadReplayMatches(
@@ -2766,6 +2827,10 @@ export const executeEloReplay =
         leaguePlayerIds,
         target.completed_at,
       );
+
+    /*
+      5. Validaciones.
+    */
 
     validateSupportedEvents(
       events,
@@ -2802,7 +2867,7 @@ export const executeEloReplay =
       2
     ) {
       throw new EloReplayExecutionError(
-        "El partido objetivo no posee un historial Elo válido.",
+        "El partido objetivo no posee exactamente dos match_result activos.",
         "target_elo_history_invalid",
         {
           match_id:
@@ -2810,6 +2875,10 @@ export const executeEloReplay =
         },
       );
     }
+
+    /*
+      6. Baseline.
+    */
 
     const baselineState =
       buildBaselineState({
@@ -2823,12 +2892,20 @@ export const executeEloReplay =
         baselineState,
       );
 
+    /*
+      7. Cronología posterior sin target.
+    */
+
     const chronology =
       buildChronology({
         target,
         replayMatches,
         events,
       });
+
+    /*
+      8. Batch.
+    */
 
     const replayBatch =
       await createReplayBatch(
@@ -2841,6 +2918,9 @@ export const executeEloReplay =
 
           reason:
             normalizedReason,
+
+          replayMatches,
+          events,
         },
       );
 
@@ -2849,6 +2929,10 @@ export const executeEloReplay =
         replayBatch.id,
         "replayBatch.id",
       );
+
+    /*
+      9. Revertir línea activa vieja.
+    */
 
     await reverseOriginalEvents(
       client,
@@ -2861,6 +2945,10 @@ export const executeEloReplay =
         replayBatchId,
       },
     );
+
+    /*
+      10. Replay.
+    */
 
     const state =
       cloneState(
@@ -2893,11 +2981,8 @@ export const executeEloReplay =
                 item.match,
 
               target,
-
               replayBatchId,
-
               matchEventMap,
-
               createdEvents,
             },
           );
@@ -2923,7 +3008,6 @@ export const executeEloReplay =
                 item,
 
               replayBatchId,
-
               createdEvents,
             },
           );
@@ -2945,11 +3029,19 @@ export const executeEloReplay =
       );
     }
 
+    /*
+      11. Persistir nuevo estado.
+    */
+
     const updatedPlayers =
       await persistFinalState(
         client,
         state,
       );
+
+    /*
+      12. Anular target.
+    */
 
     const annulledMatch =
       await persistTargetAnnulment(
@@ -2971,6 +3063,10 @@ export const executeEloReplay =
         target,
       );
 
+    /*
+      13. Resolver flags.
+    */
+
     await resolveTargetFlags(
       client,
       {
@@ -2980,6 +3076,10 @@ export const executeEloReplay =
           normalizedAdminUserId,
       },
     );
+
+    /*
+      14. Auditoría.
+    */
 
     const finalSnapshot =
       serializeState(
@@ -2993,16 +3093,13 @@ export const executeEloReplay =
           normalizedAdminUserId,
 
         target,
-
         replayBatchId,
 
         reason:
           normalizedReason,
 
         replayedMatches,
-
         replayedRejections,
-
         createdEvents,
 
         reversedEvents:
@@ -3016,20 +3113,32 @@ export const executeEloReplay =
       },
     );
 
-    await completeReplayBatch(
-      client,
-      {
-        replayBatchId,
+    /*
+      15. Completar batch.
+    */
 
-        replayedMatches,
+    const completedBatch =
+      await completeReplayBatch(
+        client,
+        {
+          replayBatchId,
+          replayedMatches,
+          replayedRejections,
+          createdEvents,
+        },
+      );
 
-        replayedRejections,
-
-        createdEvents,
-      },
-    );
+    /*
+      16. Respuesta.
+    */
 
     return {
+      reversal_mode:
+        "chronological_elo_replay",
+
+      replay_batch:
+        completedBatch,
+
       replay_batch_id:
         replayBatchId,
 

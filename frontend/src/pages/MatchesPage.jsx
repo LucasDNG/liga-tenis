@@ -3,8 +3,13 @@ import {
   useState,
 } from "react";
 
-import { api } from "../api";
-import { useAuth } from "../context/AuthContext";
+import {
+  api,
+} from "../api";
+
+import {
+  useAuth,
+} from "../context/AuthContext";
 
 import "./MatchesPage.css";
 
@@ -30,6 +35,9 @@ const statusLabels = {
 
   completed:
     "Finalizado",
+
+  cancelled:
+    "Cancelado",
 };
 
 
@@ -81,7 +89,8 @@ const formatPhone = (
   }
 
   if (
-    numbers.length === 10
+    numbers.length ===
+    10
   ) {
     const area =
       numbers.slice(
@@ -175,11 +184,15 @@ const setWinner = (
     return null;
   }
 
-  if (p1 > p2) {
+  if (
+    p1 > p2
+  ) {
     return 1;
   }
 
-  if (p2 > p1) {
+  if (
+    p2 > p1
+  ) {
     return 2;
   }
 
@@ -197,7 +210,8 @@ const normalizeScoreSets = (
     );
 
   if (
-    firstTwo.length < 2
+    firstTwo.length <
+    2
   ) {
     return firstTwo;
   }
@@ -220,8 +234,12 @@ const normalizeScoreSets = (
     firstTwoComplete &&
     winner1 !== winner2;
 
-  if (needsThird) {
-    if (score[2]) {
+  if (
+    needsThird
+  ) {
+    if (
+      score[2]
+    ) {
       return [
         ...firstTwo,
         score[2],
@@ -273,63 +291,82 @@ function ActionWithTooltip({
 
 
 export default function MatchesPage() {
-  const { user } =
+  const {
+    user,
+    refreshProfile,
+  } =
     useAuth();
 
   const [
     matches,
     setMatches,
-  ] = useState([]);
+  ] =
+    useState([]);
 
   const [
     scores,
     setScores,
-  ] = useState({});
+  ] =
+    useState({});
 
   const [
     message,
     setMessage,
-  ] = useState("");
+  ] =
+    useState("");
 
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] =
+    useState(true);
 
   const [
     actionLoading,
     setActionLoading,
-  ] = useState(null);
+  ] =
+    useState(null);
 
 
   const load =
     async () => {
       try {
-        setLoading(true);
+        setLoading(
+          true,
+        );
 
-        const { data } =
+        const {
+          data,
+        } =
           await api.get(
             "/matches",
           );
 
         setMatches(
-          data.matches || [],
+          data.matches ||
+            [],
         );
       } catch (error) {
         setMessage(
-          error.response?.data
+          error.response
+            ?.data
             ?.message ||
             "No se pudieron cargar los partidos",
         );
       } finally {
-        setLoading(false);
+        setLoading(
+          false,
+        );
       }
     };
 
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(
+    () => {
+      load();
+    },
+    [],
+  );
 
 
   const change = (
@@ -338,13 +375,6 @@ export default function MatchesPage() {
     side,
     value,
   ) => {
-    /*
-      Permitimos solamente:
-      vacío o entero entre 0 y 7.
-
-      La validación definitiva
-      sigue estando en backend.
-    */
     if (
       value !== ""
     ) {
@@ -363,11 +393,15 @@ export default function MatchesPage() {
     }
 
     setScores(
-      (previous) => {
+      (
+        previous,
+      ) => {
         const current =
           previous[id]
             ? previous[id].map(
-                (set) => ({
+                (
+                  set,
+                ) => ({
                   ...set,
                 }),
               )
@@ -425,12 +459,16 @@ export default function MatchesPage() {
 
       const hasEmpty =
         normalized.some(
-          (set) =>
+          (
+            set,
+          ) =>
             set.p1 === "" ||
             set.p2 === "",
         );
 
-      if (hasEmpty) {
+      if (
+        hasEmpty
+      ) {
         setMessage(
           "Completá todos los sets antes de enviar el resultado.",
         );
@@ -440,7 +478,9 @@ export default function MatchesPage() {
 
       const score =
         normalized.map(
-          (set) => ({
+          (
+            set,
+          ) => ({
             p1:
               Number(
                 set.p1,
@@ -460,7 +500,9 @@ export default function MatchesPage() {
           `${id}-submit`,
         );
 
-        const { data } =
+        const {
+          data,
+        } =
           await api.patch(
             `/matches/${id}/result`,
             {
@@ -473,7 +515,9 @@ export default function MatchesPage() {
         );
 
         setScores(
-          (previous) => {
+          (
+            previous,
+          ) => {
             const next = {
               ...previous,
             };
@@ -487,7 +531,8 @@ export default function MatchesPage() {
         await load();
       } catch (error) {
         setMessage(
-          error.response?.data
+          error.response
+            ?.data
             ?.message ||
             "No se pudo enviar el resultado",
         );
@@ -516,7 +561,9 @@ export default function MatchesPage() {
           `${id}-confirm`,
         );
 
-        const { data } =
+        const {
+          data,
+        } =
           await api.patch(
             `/matches/${id}/confirm`,
           );
@@ -528,7 +575,8 @@ export default function MatchesPage() {
         await load();
       } catch (error) {
         setMessage(
-          error.response?.data
+          error.response
+            ?.data
             ?.message ||
             "No se pudo confirmar el resultado",
         );
@@ -555,7 +603,9 @@ export default function MatchesPage() {
           "¿El resultado cargado es incorrecto? El partido volverá a quedar disponible para cargar un nuevo resultado.",
         );
 
-      if (!confirmed) {
+      if (
+        !confirmed
+      ) {
         return;
       }
 
@@ -566,7 +616,9 @@ export default function MatchesPage() {
           `${id}-reject`,
         );
 
-        const { data } =
+        const {
+          data,
+        } =
           await api.patch(
             `/matches/${id}/reject-result`,
           );
@@ -578,9 +630,284 @@ export default function MatchesPage() {
         await load();
       } catch (error) {
         setMessage(
-          error.response?.data
+          error.response
+            ?.data
             ?.message ||
             "No se pudo rechazar el resultado",
+        );
+      } finally {
+        setActionLoading(
+          null,
+        );
+      }
+    };
+
+
+  const requestMutualCancellation =
+    async (
+      id,
+    ) => {
+      if (
+        actionLoading
+      ) {
+        return;
+      }
+
+      const reason =
+        window.prompt(
+          "Motivo de la cancelación. Tu rival deberá aceptar para que ninguno pierda Elo:",
+        );
+
+      if (
+        reason === null
+      ) {
+        return;
+      }
+
+      const cleanReason =
+        reason.trim();
+
+      if (
+        cleanReason.length <
+        3
+      ) {
+        setMessage(
+          "Ingresá un motivo de al menos 3 caracteres.",
+        );
+
+        return;
+      }
+
+      try {
+        setMessage("");
+
+        setActionLoading(
+          `${id}-cancel-request`,
+        );
+
+        const {
+          data,
+        } =
+          await api.patch(
+            `/matches/${id}/cancel-request`,
+            {
+              reason:
+                cleanReason,
+            },
+          );
+
+        setMessage(
+          data.message,
+        );
+
+        await load();
+      } catch (error) {
+        setMessage(
+          error.response
+            ?.data
+            ?.message ||
+            "No se pudo solicitar la cancelación.",
+        );
+      } finally {
+        setActionLoading(
+          null,
+        );
+      }
+    };
+
+
+  const cancelUnilaterally =
+    async (
+      id,
+    ) => {
+      if (
+        actionLoading
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          "Esta cancelación es unilateral. El partido se cancelará inmediatamente y se aplicará una penalización de hasta 15 puntos Elo. ¿Querés continuar?",
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
+
+      const reason =
+        window.prompt(
+          "Ingresá el motivo de la cancelación:",
+        );
+
+      if (
+        reason === null
+      ) {
+        return;
+      }
+
+      const cleanReason =
+        reason.trim();
+
+      if (
+        cleanReason.length <
+        3
+      ) {
+        setMessage(
+          "Ingresá un motivo de al menos 3 caracteres.",
+        );
+
+        return;
+      }
+
+      try {
+        setMessage("");
+
+        setActionLoading(
+          `${id}-cancel`,
+        );
+
+        const {
+          data,
+        } =
+          await api.patch(
+            `/matches/${id}/cancel`,
+            {
+              reason:
+                cleanReason,
+            },
+          );
+
+        setMessage(
+          data.message,
+        );
+
+        if (
+          typeof refreshProfile ===
+          "function"
+        ) {
+          await refreshProfile();
+        }
+
+        await load();
+      } catch (error) {
+        setMessage(
+          error.response
+            ?.data
+            ?.message ||
+            "No se pudo cancelar el partido.",
+        );
+      } finally {
+        setActionLoading(
+          null,
+        );
+      }
+    };
+
+
+  const confirmMutualCancellation =
+    async (
+      id,
+    ) => {
+      if (
+        actionLoading
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          "¿Confirmás cancelar este partido de común acuerdo? Ninguno de los dos perderá Elo.",
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
+
+      try {
+        setMessage("");
+
+        setActionLoading(
+          `${id}-cancel-confirm`,
+        );
+
+        const {
+          data,
+        } =
+          await api.patch(
+            `/matches/${id}/cancel-request/confirm`,
+          );
+
+        setMessage(
+          data.message,
+        );
+
+        await load();
+      } catch (error) {
+        setMessage(
+          error.response
+            ?.data
+            ?.message ||
+            "No se pudo confirmar la cancelación.",
+        );
+      } finally {
+        setActionLoading(
+          null,
+        );
+      }
+    };
+
+
+  const rejectMutualCancellation =
+    async (
+      id,
+    ) => {
+      if (
+        actionLoading
+      ) {
+        return;
+      }
+
+      const confirmed =
+        window.confirm(
+          "¿Querés rechazar la solicitud de cancelación? El partido seguirá programado.",
+        );
+
+      if (
+        !confirmed
+      ) {
+        return;
+      }
+
+      try {
+        setMessage("");
+
+        setActionLoading(
+          `${id}-cancel-reject`,
+        );
+
+        const {
+          data,
+        } =
+          await api.patch(
+            `/matches/${id}/cancel-request/reject`,
+          );
+
+        setMessage(
+          data.message,
+        );
+
+        await load();
+      } catch (error) {
+        setMessage(
+          error.response
+            ?.data
+            ?.message ||
+            "No se pudo rechazar la solicitud de cancelación.",
         );
       } finally {
         setActionLoading(
@@ -612,15 +939,20 @@ export default function MatchesPage() {
           ) => (
             <div
               className="match-set-view"
-              key={index}
+              key={
+                index
+              }
             >
               <strong>
-                Set {index + 1}
+                Set{" "}
+                {index + 1}
               </strong>
 
               <div>
                 <span>
-                  {player1Name}
+                  {
+                    player1Name
+                  }
                 </span>
 
                 <b>
@@ -628,7 +960,9 @@ export default function MatchesPage() {
                 </b>
 
                 <span>
-                  {player2Name}
+                  {
+                    player2Name
+                  }
                 </span>
 
                 <b>
@@ -639,6 +973,47 @@ export default function MatchesPage() {
           ),
         )}
       </div>
+    );
+  };
+
+
+  const renderCancellationPenalty = (
+    match,
+  ) => {
+    const penalty =
+      Math.max(
+        0,
+        Number(
+          match.cancellation_elo_penalty ||
+            0,
+        ),
+      );
+
+    if (
+      penalty === 0
+    ) {
+      return (
+        <p>
+          Penalización efectiva:{" "}
+          <strong>
+            0 Elo
+          </strong>
+          {" "}
+          <span>
+            (piso Elo alcanzado)
+          </span>
+        </p>
+      );
+    }
+
+    return (
+      <p>
+        Penalización aplicada:{" "}
+        <strong>
+          -
+          {penalty} Elo
+        </strong>
+      </p>
     );
   };
 
@@ -684,14 +1059,19 @@ export default function MatchesPage() {
 
 
             {matches.map(
-              (match) => {
+              (
+                match,
+              ) => {
+                const myId =
+                  Number(
+                    user?.id,
+                  );
+
                 const submittedByMe =
                   Number(
                     match.result_submitted_by,
                   ) ===
-                  Number(
-                    user?.id,
-                  );
+                  myId;
 
                 const score =
                   scores[
@@ -703,9 +1083,7 @@ export default function MatchesPage() {
                   Number(
                     match.player1_id,
                   ) ===
-                  Number(
-                    user?.id,
-                  )
+                  myId
                     ? match.player2_name
                     : match.player1_name;
 
@@ -713,9 +1091,7 @@ export default function MatchesPage() {
                   Number(
                     match.player1_id,
                   ) ===
-                  Number(
-                    user?.id,
-                  )
+                  myId
                     ? match.player2_phone
                     : match.player1_phone;
 
@@ -752,6 +1128,24 @@ export default function MatchesPage() {
                     "pending" &&
                   !matchStarted;
 
+                const hasCancellationRequest =
+                  Boolean(
+                    match.cancellation_requested_at,
+                  ) &&
+                  match.status ===
+                    "pending";
+
+                const cancellationRequestedByMe =
+                  hasCancellationRequest &&
+                  Number(
+                    match.cancellation_requested_by,
+                  ) ===
+                  myId;
+
+                const incomingCancellationRequest =
+                  hasCancellationRequest &&
+                  !cancellationRequestedByMe;
+
                 const submitting =
                   actionLoading ===
                   `${match.id}-submit`;
@@ -763,6 +1157,22 @@ export default function MatchesPage() {
                 const rejecting =
                   actionLoading ===
                   `${match.id}-reject`;
+
+                const requestingCancellation =
+                  actionLoading ===
+                  `${match.id}-cancel-request`;
+
+                const cancelling =
+                  actionLoading ===
+                  `${match.id}-cancel`;
+
+                const confirmingCancellation =
+                  actionLoading ===
+                  `${match.id}-cancel-confirm`;
+
+                const rejectingCancellation =
+                  actionLoading ===
+                  `${match.id}-cancel-reject`;
 
                 const resultTooltip =
                   !validScheduledTime
@@ -815,11 +1225,14 @@ export default function MatchesPage() {
                         <div className="match-schedule">
                           <span>
                             {match.status ===
-                            "completed"
-                              ? "PARTIDO JUGADO"
-                              : matchStarted
-                                ? "PARTIDO EN CURSO / PENDIENTE"
-                                : "PRÓXIMO PARTIDO"}
+                            "cancelled"
+                              ? "PARTIDO CANCELADO"
+                              : match.status ===
+                                  "completed"
+                                ? "PARTIDO JUGADO"
+                                : matchStarted
+                                  ? "PARTIDO EN CURSO / PENDIENTE"
+                                  : "PRÓXIMO PARTIDO"}
                           </span>
 
                           <strong>
@@ -837,7 +1250,9 @@ export default function MatchesPage() {
                       )}
 
 
-                    {rivalPhone &&
+                    {match.status !==
+                      "cancelled" &&
+                      rivalPhone &&
                       whatsappNumber && (
                         <div className="match-contact">
                           <div>
@@ -873,6 +1288,189 @@ export default function MatchesPage() {
 
                     {match.status ===
                       "pending" &&
+                      !hasCancellationRequest && (
+                        <div className="match-cancellation-actions">
+                          <div>
+                            <span className="match-kicker">
+                              ¿NO PUEDEN JUGAR?
+                            </span>
+
+                            <p>
+                              Pueden solicitar una
+                              cancelación de común
+                              acuerdo sin perder Elo.
+                              Si uno cancela por su
+                              cuenta, recibe una
+                              penalización de hasta
+                              15 Elo.
+                            </p>
+                          </div>
+
+                          <div className="match-buttons">
+                            <button
+                              className="match-action"
+                              disabled={
+                                Boolean(
+                                  actionLoading,
+                                )
+                              }
+                              onClick={() =>
+                                requestMutualCancellation(
+                                  match.id,
+                                )
+                              }
+                            >
+                              {requestingCancellation
+                                ? "ENVIANDO..."
+                                : "Solicitar cancelación de común acuerdo"}
+                            </button>
+
+                            <button
+                              className="match-action danger"
+                              disabled={
+                                Boolean(
+                                  actionLoading,
+                                )
+                              }
+                              onClick={() =>
+                                cancelUnilaterally(
+                                  match.id,
+                                )
+                              }
+                            >
+                              {cancelling
+                                ? "CANCELANDO..."
+                                : "Cancelar unilateralmente (-15 Elo)"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+
+                    {match.status ===
+                      "pending" &&
+                      cancellationRequestedByMe && (
+                        <div className="match-cancellation-box waiting">
+                          <span className="match-kicker">
+                            CANCELACIÓN SOLICITADA
+                          </span>
+
+                          <h3>
+                            Esperando respuesta de{" "}
+                            {
+                              rivalName
+                            }
+                          </h3>
+
+                          {match.cancel_reason && (
+                            <p>
+                              <strong>
+                                Motivo:
+                              </strong>{" "}
+                              {
+                                match.cancel_reason
+                              }
+                            </p>
+                          )}
+
+                          <p>
+                            Si tu rival acepta,
+                            ninguno pierde Elo.
+                          </p>
+
+                          <button
+                            className="match-action danger"
+                            disabled={
+                              Boolean(
+                                actionLoading,
+                              )
+                            }
+                            onClick={() =>
+                              cancelUnilaterally(
+                                match.id,
+                              )
+                            }
+                          >
+                            {cancelling
+                              ? "CANCELANDO..."
+                              : "Cancelar unilateralmente (-15 Elo)"}
+                          </button>
+                        </div>
+                      )}
+
+
+                    {match.status ===
+                      "pending" &&
+                      incomingCancellationRequest && (
+                        <div className="match-cancellation-box incoming">
+                          <span className="match-kicker">
+                            TU RIVAL SOLICITA CANCELAR
+                          </span>
+
+                          <h3>
+                            Cancelación de común acuerdo
+                          </h3>
+
+                          {match.cancel_reason && (
+                            <p>
+                              <strong>
+                                Motivo:
+                              </strong>{" "}
+                              {
+                                match.cancel_reason
+                              }
+                            </p>
+                          )}
+
+                          <p>
+                            Si aceptás, el partido
+                            se cancela y ninguno
+                            pierde Elo.
+                          </p>
+
+                          <div className="match-buttons">
+                            <button
+                              className="match-action primary"
+                              disabled={
+                                Boolean(
+                                  actionLoading,
+                                )
+                              }
+                              onClick={() =>
+                                confirmMutualCancellation(
+                                  match.id,
+                                )
+                              }
+                            >
+                              {confirmingCancellation
+                                ? "CONFIRMANDO..."
+                                : "Aceptar cancelación"}
+                            </button>
+
+                            <button
+                              className="match-action danger"
+                              disabled={
+                                Boolean(
+                                  actionLoading,
+                                )
+                              }
+                              onClick={() =>
+                                rejectMutualCancellation(
+                                  match.id,
+                                )
+                              }
+                            >
+                              {rejectingCancellation
+                                ? "RECHAZANDO..."
+                                : "Mantener el partido"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+
+                    {match.status ===
+                      "pending" &&
                       resultBlocked && (
                         <div className="match-waiting">
                           <strong>
@@ -889,7 +1487,8 @@ export default function MatchesPage() {
 
 
                     {match.status ===
-                      "pending" && (
+                      "pending" &&
+                      !hasCancellationRequest && (
                         <div className="match-score-editor">
 
                           <div className="score-row score-title">
@@ -924,8 +1523,7 @@ export default function MatchesPage() {
                               >
                                 <span>
                                   Set{" "}
-                                  {index +
-                                    1}
+                                  {index + 1}
                                 </span>
 
                                 <input
@@ -950,9 +1548,7 @@ export default function MatchesPage() {
                                       match.id,
                                       index,
                                       "p1",
-                                      event
-                                        .target
-                                        .value,
+                                      event.target.value,
                                     )
                                   }
                                 />
@@ -979,9 +1575,7 @@ export default function MatchesPage() {
                                       match.id,
                                       index,
                                       "p2",
-                                      event
-                                        .target
-                                        .value,
+                                      event.target.value,
                                     )
                                   }
                                 />
@@ -1059,9 +1653,14 @@ export default function MatchesPage() {
                               </strong>
 
                               <p>
-                                El resultado ya fue enviado.
-                                Tu rival debe confirmarlo
-                                o rechazarlo.
+                                El resultado ya fue
+                                enviado. Tu rival debe
+                                confirmarlo o rechazarlo.
+                              </p>
+
+                              <p>
+                                En esta etapa el partido
+                                ya no puede cancelarse.
                               </p>
                             </div>
                           ) : (
@@ -1136,6 +1735,60 @@ export default function MatchesPage() {
                               Confirmado{" "}
                               {formatDateTime(
                                 match.completed_at,
+                              )}
+                            </small>
+                          )}
+                        </div>
+                      )}
+
+
+                    {match.status ===
+                      "cancelled" && (
+                        <div className="match-cancelled-box">
+                          <span className="match-kicker">
+                            CANCELACIÓN
+                          </span>
+
+                          <h3>
+                            {match.cancellation_type ===
+                            "mutual"
+                              ? "Cancelado de común acuerdo"
+                              : match.cancellation_type ===
+                                  "admin"
+                                ? "Cancelado administrativamente"
+                                : "Cancelado unilateralmente"}
+                          </h3>
+
+                          {match.cancel_reason && (
+                            <p>
+                              <strong>
+                                Motivo:
+                              </strong>{" "}
+                              {
+                                match.cancel_reason
+                              }
+                            </p>
+                          )}
+
+                          {match.cancellation_type ===
+                            "unilateral" &&
+                            renderCancellationPenalty(
+                              match,
+                            )}
+
+                          {match.cancellation_type ===
+                            "mutual" && (
+                              <p>
+                                Ningún jugador recibió
+                                penalización Elo.
+                              </p>
+                            )}
+
+                          {match.cancelled_at && (
+                            <small>
+                              Cancelado{" "}
+                              {formatDateTime(
+                                match.cancelled_at,
                               )}
                             </small>
                           )}

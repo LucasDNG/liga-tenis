@@ -7,7 +7,9 @@ import {
   Link,
 } from "react-router-dom";
 
-import { api } from "../api";
+import {
+  api,
+} from "../api";
 
 
 const PLACEMENT_MATCHES = 5;
@@ -74,7 +76,9 @@ export default function HomePage() {
         setLoading(true);
 
         try {
-          const { data } =
+          const {
+            data,
+          } =
             await api.get(
               `/ranking?gender=${league}`,
             );
@@ -113,23 +117,37 @@ export default function HomePage() {
 
           <div className="hero-copy-dark">
 
+            <div className="home-brand-tags">
+              <span>
+                LA RED
+              </span>
+
+              <span>
+                LIGA DE TENIS
+              </span>
+
+              <span>
+                SAN PEDRO
+              </span>
+            </div>
+
             <h1 className="home-title">
               <span className="home-title-main">
-                Liga de Tenis
+                La Red
               </span>
 
               <span className="home-title-city">
-                San Pedro
+                Tenis · San Pedro
               </span>
             </h1>
 
             <p>
               Una liga abierta para
-              jugadores de la ciudad.
-              Desafiá, coordiná el
-              partido con tu rival y
-              competí por subir en el
-              ranking.
+              jugadores de San Pedro.
+              Desafiá, coordiná tu
+              partido y competí para
+              hacerte un lugar en
+              La Red.
             </p>
 
             <div className="hero-actions-dark">
@@ -162,8 +180,9 @@ export default function HomePage() {
                     DESAFÍOS
                   </strong>
 
-                  Hasta 3 puestos
-                  por encima
+                  Competí dentro
+                  de tu alcance
+                  en el ranking
                 </span>
               </div>
 
@@ -177,8 +196,8 @@ export default function HomePage() {
                     COORDINACIÓN
                   </strong>
 
-                  Contacto por
-                  WhatsApp
+                  Contacto privado
+                  por WhatsApp
                 </span>
               </div>
 
@@ -194,6 +213,7 @@ export default function HomePage() {
 
                   Carga y
                   confirmación
+                  entre rivales
                 </span>
               </div>
 
@@ -204,10 +224,10 @@ export default function HomePage() {
 
                 <span>
                   <strong>
-                    RANKING
+                    LA RED TENIS
                   </strong>
 
-                  Sistema Elo
+                  Ranking Elo
                   actualizado
                 </span>
               </div>
@@ -222,7 +242,7 @@ export default function HomePage() {
 
               <div>
                 <span>
-                  CLASIFICACIÓN
+                  LA RED · CLASIFICACIÓN
                 </span>
 
                 <h2>
@@ -359,12 +379,14 @@ export default function HomePage() {
           <div className="how-title">
 
             <span>
-              ¿CÓMO FUNCIONA LA LIGA?
+              LA RED SAN PEDRO
             </span>
 
             <p>
-              Simple. Entre jugadores
-              de San Pedro.
+              Tenis local.
+              Competencia clara.
+              Una liga entre jugadores
+              de la ciudad.
             </p>
 
           </div>
@@ -382,10 +404,10 @@ export default function HomePage() {
               </h3>
 
               <p>
-                Podés desafiar hasta
-                tres puestos por
-                encima en tu misma
-                liga.
+                La Red te muestra
+                automáticamente qué
+                jugadores están dentro
+                de tu alcance.
               </p>
             </div>
 
@@ -404,10 +426,9 @@ export default function HomePage() {
               </h3>
 
               <p>
-                Al aceptar reciben
-                el contacto para
-                ponerse de acuerdo
-                por WhatsApp.
+                Acordá cancha, fecha
+                y horario con tu rival
+                y registren el encuentro.
               </p>
             </div>
 
@@ -422,14 +443,14 @@ export default function HomePage() {
 
             <div>
               <h3>
-                Jueguen y carguen
-                el resultado
+                Jugá y subí en La Red
               </h3>
 
               <p>
-                El rival confirma
-                el resultado y el
-                ranking se actualiza.
+                Carguen el resultado,
+                confírmenlo entre ambos
+                y el ranking Elo se
+                actualiza.
               </p>
             </div>
 
@@ -440,7 +461,23 @@ export default function HomePage() {
 
 
       <footer className="home-footer">
-        LIGA DE TENIS SAN PEDRO · 2026
+        <div className="home-footer-brand">
+          <strong>
+            LA RED
+          </strong>
+
+          <span>
+            LIGA DE TENIS
+          </span>
+
+          <span>
+            SAN PEDRO
+          </span>
+        </div>
+
+        <small>
+          LA RED TENIS · SAN PEDRO · 2026
+        </small>
       </footer>
 
     </main>
