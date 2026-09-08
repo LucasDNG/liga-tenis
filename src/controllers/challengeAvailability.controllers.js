@@ -5,14 +5,20 @@ const MAX_RANKED_CHALLENGE_DISTANCE = 3;
 const REJECTION_COOLDOWN_DAYS = 7;
 
 const formatAvailableDate = (value) => {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
-  return new Intl.DateTimeFormat("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "America/Argentina/Buenos_Aires",
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat(
+    "es-AR",
+    {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone:
+        "America/Argentina/Buenos_Aires",
+    },
+  ).format(new Date(value));
 };
 
 const getOfficialRankedPlayers = async (
@@ -54,7 +60,27 @@ const getOfficialRankedPlayers = async (
     ],
   );
 
-  return result.rows;
+  return result.rows.map(
+    (player) => ({
+      ...player,
+
+      id:
+        Number(player.id),
+
+      rating:
+        Number(player.rating),
+
+      matches_played:
+        Number(
+          player.matches_played,
+        ),
+
+      official_position:
+        Number(
+          player.official_position,
+        ),
+    }),
+  );
 };
 
 const getHistoricalMeetingsMap = async (
@@ -104,32 +130,128 @@ const getHistoricalMeetingsMap = async (
   return map;
 };
 
+const getVirtualPosition = (
+  player,
+  officialPlayers,
+) => {
+  const playerRating =
+    Number(player.rating);
+
+  const playerMatches =
+    Number(player.matches_played);
+
+  const playerId =
+    Number(player.id);
+
+  if (
+    !Number.isFinite(
+      playerRating,
+    ) ||
+    !Number.isInteger(
+      playerMatches,
+    ) ||
+    playerMatches < 0 ||
+    !Number.isInteger(
+      playerId,
+    )
+  ) {
+    return null;
+  }
+
+  let playersAbove = 0;
+
+  for (
+    const official of
+    officialPlayers
+  ) {
+    const officialRating =
+      Number(official.rating);
+
+    const officialMatches =
+      Number(
+        official.matches_played,
+      );
+
+    const officialId =
+      Number(official.id);
+
+    const isAbove =
+      officialRating >
+        playerRating ||
+      (
+        officialRating ===
+          playerRating &&
+        officialMatches >
+          playerMatches
+      ) ||
+      (
+        officialRating ===
+          playerRating &&
+        officialMatches ===
+          playerMatches &&
+        officialId <
+          playerId
+      );
+
+    if (isAbove) {
+      playersAbove += 1;
+    }
+  }
+
+  return playersAbove + 1;
+};
+
+const getCompetitivePosition = (
+  player,
+  officialPositionById,
+  officialPlayers,
+) => {
+  const provisional =
+    Number(player.matches_played) <
+    PLACEMENT_MATCHES;
+
+  if (provisional) {
+    return getVirtualPosition(
+      player,
+      officialPlayers,
+    );
+  }
+
+  return (
+    officialPositionById.get(
+      Number(player.id),
+    ) || null
+  );
+};
+
 export const getChallengeAvailability = async (
   req,
   res,
   next,
 ) => {
-  const client = await pool.connect();
+  const client =
+    await pool.connect();
 
   try {
-    const userResult = await client.query(
-      `
-      SELECT
-        id,
-        name,
-        city,
-        gender,
-        role,
-        verification_status,
-        rating,
-        matches_played
+    const userResult =
+      await client.query(
+        `
+        SELECT
+          id,
+          name,
+          city,
+          gender,
+          role,
+          verification_status,
+          rating,
+          matches_played
 
-      FROM users
+        FROM users
 
-      WHERE id = $1
-      `,
-      [req.userId],
-    );
+        WHERE id = $1
+        `,
+        [req.userId],
+      );
 
     if (!userResult.rowCount) {
       return res.json({
@@ -141,8 +263,10 @@ export const getChallengeAvailability = async (
       userResult.rows[0];
 
     if (
-      currentUser.role !== "player" ||
-      currentUser.verification_status !==
+      currentUser.role !==
+        "player" ||
+      currentUser
+        .verification_status !==
         "verified" ||
       !currentUser.gender
     ) {
@@ -155,17 +279,21 @@ export const getChallengeAvailability = async (
       Number(currentUser.id);
 
     const currentMatches =
-      Number(currentUser.matches_played);
+      Number(
+        currentUser.matches_played,
+      );
 
     const currentProvisional =
-      currentMatches < PLACEMENT_MATCHES;
+      currentMatches <
+      PLACEMENT_MATCHES;
 
     /*
       Todos los jugadores verificados
       de la misma liga son visibles.
 
-      Los provisionales también forman
-      parte de la rueda de rivales.
+      La disponibilidad se define
+      más abajo por posición competitiva
+      y por rueda.
     */
     const playersResult =
       await client.query(
@@ -175,6 +303,7 @@ export const getChallengeAvailability = async (
           name,
           rating,
           matches_played,
+
           matches_played < $3
             AS provisional
 
@@ -203,17 +332,6 @@ export const getChallengeAvailability = async (
         ],
       );
 
-    /*
-      Ranking oficial.
-
-      Solo lo usamos para jugadores
-      establecidos.
-
-      Un provisional NO tiene puesto
-      oficial y durante sus primeros
-      cinco partidos no tiene la
-      restricción de tres posiciones.
-    */
     const officialPlayers =
       await getOfficialRankedPlayers(
         client,
@@ -224,24 +342,41 @@ export const getChallengeAvailability = async (
     const officialPositionById =
       new Map();
 
-    for (const player of officialPlayers) {
+    for (
+      const player of
+      officialPlayers
+    ) {
       officialPositionById.set(
         Number(player.id),
-        Number(player.official_position),
+        Number(
+          player.official_position,
+        ),
       );
     }
 
     const currentOfficialPosition =
-      officialPositionById.get(
-        currentUserId,
-      ) || null;
+      currentProvisional
+        ? null
+        : (
+            officialPositionById.get(
+              currentUserId,
+            ) || null
+          );
+
+    const currentCompetitivePosition =
+      getCompetitivePosition(
+        currentUser,
+        officialPositionById,
+        officialPlayers,
+      );
+
+    const currentVirtualPosition =
+      currentProvisional
+        ? currentCompetitivePosition
+        : null;
 
     /*
-      Historial real de partidos.
-
-      Esta es la base de la rueda:
-      primero hay que jugar con quienes
-      menos enfrentamientos tenemos.
+      Historial de enfrentamientos.
     */
     const meetingsByOpponent =
       await getHistoricalMeetingsMap(
@@ -250,94 +385,118 @@ export const getChallengeAvailability = async (
       );
 
     /*
-      Determinamos qué jugadores serían
-      candidatos por REGLA DEPORTIVA,
-      antes de cooldown/activo/etc.
+      RIVALES HABILITADOS.
 
-      PROVISIONAL:
-      puede desafiar a cualquier jugador
-      verificado de su liga.
+      Provisional vs provisional:
+      permitido.
 
-      ESTABLECIDO:
-      solamente 1, 2 o 3 puestos
-      oficiales por encima.
+      En cualquier otro cruce:
+      máximo 3 posiciones competitivas
+      hacia arriba.
+
+      Esto evita que un nuevo jugador
+      con Elo 0 salte al #1.
     */
     const sportEligibleIds =
       new Set();
 
-    for (const player of playersResult.rows) {
+    const competitivePositionById =
+      new Map();
+
+    for (
+      const player of
+      playersResult.rows
+    ) {
       const playerId =
         Number(player.id);
 
-      if (playerId === currentUserId) {
+      const playerProvisional =
+        Boolean(
+          player.provisional,
+        );
+
+      const competitivePosition =
+        getCompetitivePosition(
+          player,
+          officialPositionById,
+          officialPlayers,
+        );
+
+      competitivePositionById.set(
+        playerId,
+        competitivePosition,
+      );
+
+      if (
+        playerId ===
+        currentUserId
+      ) {
         continue;
       }
 
-      if (currentProvisional) {
-        sportEligibleIds.add(playerId);
-        continue;
-      }
-
-      const targetOfficialPosition =
-        officialPositionById.get(
+      if (
+        currentProvisional &&
+        playerProvisional
+      ) {
+        sportEligibleIds.add(
           playerId,
         );
 
+        continue;
+      }
+
       if (
-        !currentOfficialPosition ||
-        !targetOfficialPosition
+        !currentCompetitivePosition ||
+        !competitivePosition
       ) {
         continue;
       }
 
       const difference =
-        currentOfficialPosition -
-        targetOfficialPosition;
+        currentCompetitivePosition -
+        competitivePosition;
 
       if (
         difference >= 1 &&
         difference <=
           MAX_RANKED_CHALLENGE_DISTANCE
       ) {
-        sportEligibleIds.add(playerId);
+        sportEligibleIds.add(
+          playerId,
+        );
       }
     }
 
     /*
-      RUEDA.
+      RUEDA DEL DESAFIANTE.
 
-      Entre todos los rivales que el
-      jugador podría desafiar por regla
-      deportiva, buscamos el menor número
-      de enfrentamientos.
-
-      Ejemplo:
-
-      Pedro 0
-      Juan  0
-      Luis  1
-
-      No se puede volver a jugar con Luis
-      hasta haber pasado por Pedro/Juan.
-
-      Esto también vale para provisionales.
+      Solamente cuenta rivales que
+      deportivamente pueden ser
+      desafiados en este momento.
     */
     let minimumMeetings = null;
 
-    for (const playerId of sportEligibleIds) {
+    for (
+      const playerId of
+      sportEligibleIds
+    ) {
       const meetings =
-        meetingsByOpponent.get(playerId) || 0;
+        meetingsByOpponent.get(
+          playerId,
+        ) || 0;
 
       if (
         minimumMeetings === null ||
-        meetings < minimumMeetings
+        meetings <
+          minimumMeetings
       ) {
-        minimumMeetings = meetings;
+        minimumMeetings =
+          meetings;
       }
     }
 
     /*
-      Desafíos activos del usuario.
+      Desafíos activos.
     */
     const activeChallengesResult =
       await client.query(
@@ -371,10 +530,16 @@ export const getChallengeAvailability = async (
       activeChallengesResult.rows
     ) {
       const opponentId =
-        Number(challenge.challenger_id) ===
+        Number(
+          challenge.challenger_id,
+        ) ===
         currentUserId
-          ? Number(challenge.challenged_id)
-          : Number(challenge.challenger_id);
+          ? Number(
+              challenge.challenged_id,
+            )
+          : Number(
+              challenge.challenger_id,
+            );
 
       activeByOpponent.set(
         opponentId,
@@ -383,9 +548,7 @@ export const getChallengeAvailability = async (
     }
 
     /*
-      Cooldown por rechazo:
-      únicamente para volver a desafiar
-      al mismo jugador.
+      Cooldown de rechazos.
     */
     const cooldownsResult =
       await client.query(
@@ -395,6 +558,7 @@ export const getChallengeAvailability = async (
         )
           challenged_id,
           rejected_at,
+
           rejected_at
             + INTERVAL '7 days'
             AS available_at
@@ -422,16 +586,16 @@ export const getChallengeAvailability = async (
       cooldownsResult.rows
     ) {
       cooldownByOpponent.set(
-        Number(cooldown.challenged_id),
+        Number(
+          cooldown.challenged_id,
+        ),
         cooldown,
       );
     }
 
     /*
-      Si ya jugó contra alguien y ese
-      jugador tiene desafíos anteriores
-      esperando, también respetamos la
-      rueda del RECEPTOR.
+      Último desafío resuelto contra
+      cada receptor.
     */
     const lastResolvedResult =
       await client.query(
@@ -464,7 +628,9 @@ export const getChallengeAvailability = async (
       lastResolvedResult.rows
     ) {
       lastResolvedByOpponent.set(
-        Number(row.challenged_id),
+        Number(
+          row.challenged_id,
+        ),
         row.resolved_at,
       );
     }
@@ -478,57 +644,77 @@ export const getChallengeAvailability = async (
       const playerId =
         Number(player.id);
 
-      if (playerId === currentUserId) {
+      const playerProvisional =
+        Boolean(
+          player.provisional,
+        );
+
+      const playerCompetitivePosition =
+        competitivePositionById.get(
+          playerId,
+        ) || null;
+
+      if (
+        playerId ===
+        currentUserId
+      ) {
         availability[player.id] = {
           can_challenge: false,
           reason: "self",
-          message: "Este sos vos.",
+          message:
+            "Este sos vos.",
+
+          competitive_position:
+            playerCompetitivePosition,
         };
 
         continue;
       }
 
       /*
-        REGLA DEPORTIVA
+        REGLA DEPORTIVA.
       */
       if (
-        !sportEligibleIds.has(playerId)
+        !sportEligibleIds.has(
+          playerId,
+        )
       ) {
+        let message =
+          "Este jugador no está habilitado para este desafío.";
+
         if (currentProvisional) {
-          availability[player.id] = {
-            can_challenge: false,
-            reason: "not_eligible",
-            message:
-              "Este jugador no está habilitado para este desafío.",
-          };
+          message =
+            "Durante tus 5 partidos de colocación podés desafiar otros provisionales o rivales ubicados hasta 3 posiciones competitivas por encima de tu posición virtual.";
         } else if (
-          Boolean(player.provisional)
+          playerProvisional
         ) {
-          availability[player.id] = {
-            can_challenge: false,
-            reason:
-              "provisional_not_official_target",
-            message:
-              "Los jugadores rankeados desafían por posiciones oficiales. Este jugador todavía está en colocación.",
-          };
+          message =
+            "Este provisional no está dentro de las 3 posiciones competitivas superiores que podés desafiar.";
         } else {
-          availability[player.id] = {
-            can_challenge: false,
-            reason: "ranking_distance",
-            message:
-              "Solo podés desafiar hasta 3 posiciones oficiales por encima.",
-          };
+          message =
+            "Solo podés desafiar hasta 3 posiciones competitivas por encima.";
         }
+
+        availability[player.id] = {
+          can_challenge: false,
+
+          reason:
+            "ranking_distance",
+
+          message,
+
+          competitive_position:
+            playerCompetitivePosition,
+
+          current_competitive_position:
+            currentCompetitivePosition,
+        };
 
         continue;
       }
 
       /*
         RUEDA DEL DESAFIANTE.
-
-        No puede repetir rival si todavía
-        tiene otro rival habilitado con
-        menos enfrentamientos.
       */
       const historicalMeetings =
         meetingsByOpponent.get(
@@ -542,11 +728,19 @@ export const getChallengeAvailability = async (
       ) {
         availability[player.id] = {
           can_challenge: false,
-          reason: "opponent_rotation",
+
+          reason:
+            "opponent_rotation",
+
           historical_meetings:
             historicalMeetings,
+
           minimum_meetings:
             minimumMeetings,
+
+          competitive_position:
+            playerCompetitivePosition,
+
           message:
             "Antes tenés que jugar con rivales de tu rueda a los que enfrentaste menos veces.",
         };
@@ -555,8 +749,7 @@ export const getChallengeAvailability = async (
       }
 
       /*
-        Ya hay desafío/partido activo
-        entre ambos.
+        Ya hay desafío activo.
       */
       const active =
         activeByOpponent.get(
@@ -566,9 +759,16 @@ export const getChallengeAvailability = async (
       if (active) {
         availability[player.id] = {
           can_challenge: false,
-          reason: "active_challenge",
+
+          reason:
+            "active_challenge",
+
+          competitive_position:
+            playerCompetitivePosition,
+
           message:
-            active.status === "accepted"
+            active.status ===
+              "accepted"
               ? "Ya tienen un partido confirmado pendiente."
               : "Ya existe un desafío pendiente entre ustedes.",
         };
@@ -599,10 +799,16 @@ export const getChallengeAvailability = async (
         ) {
           availability[player.id] = {
             can_challenge: false,
+
             reason:
               "rejection_cooldown",
+
             available_at:
               cooldown.available_at,
+
+            competitive_position:
+              playerCompetitivePosition,
+
             message:
               `Este jugador rechazó tu último desafío. Podés volver a desafiarlo el ${formatAvailableDate(
                 cooldown.available_at,
@@ -653,7 +859,13 @@ export const getChallengeAvailability = async (
         if (waiting.rowCount) {
           availability[player.id] = {
             can_challenge: false,
-            reason: "rotation_wait",
+
+            reason:
+              "rotation_wait",
+
+            competitive_position:
+              playerCompetitivePosition,
+
             message:
               `${player.name} todavía tiene rivales anteriores esperando en su rueda.`,
           };
@@ -664,22 +876,35 @@ export const getChallengeAvailability = async (
 
       availability[player.id] = {
         can_challenge: true,
+
         reason: null,
+
         historical_meetings:
           historicalMeetings,
 
+        competitive_position:
+          playerCompetitivePosition,
+
+        current_competitive_position:
+          currentCompetitivePosition,
+
         message:
           currentProvisional
-            ? Boolean(player.provisional)
+            ? playerProvisional
               ? "Partido de colocación contra otro provisional."
-              : "Podés desafiarlo como parte de tus 5 partidos de colocación."
-            : "Podés desafiar a este jugador.",
+              : "Este rival está dentro de las 3 posiciones competitivas habilitadas para tu colocación."
+            : playerProvisional
+              ? "Este provisional está dentro de tus 3 posiciones competitivas superiores."
+              : "Podés desafiar a este jugador.",
       };
     }
 
     res.json({
       placement_matches:
         PLACEMENT_MATCHES,
+
+      max_challenge_distance:
+        MAX_RANKED_CHALLENGE_DISTANCE,
 
       current_player: {
         provisional:
@@ -697,6 +922,12 @@ export const getChallengeAvailability = async (
 
         official_position:
           currentOfficialPosition,
+
+        virtual_position:
+          currentVirtualPosition,
+
+        competitive_position:
+          currentCompetitivePosition,
       },
 
       rotation: {

@@ -22,6 +22,11 @@ import {
   annulMatch,
 } from "../controllers/admin.controllers.js";
 
+import {
+  getEloReplayPreview,
+} from "../controllers/eloReplay.controllers.js";
+
+
 const router =
   Router();
 
@@ -87,6 +92,26 @@ router.get(
 
 
 /*
+  ============================================================
+  PREVIEW DE REPLAY HISTÓRICO
+
+  IMPORTANTE:
+  esta ruta debe declararse antes de
+  /audit/matches/:id para que Express
+  resuelva correctamente la ruta más
+  específica.
+
+  Es READ ONLY.
+  ============================================================
+*/
+
+router.get(
+  "/audit/matches/:id/replay-preview",
+  getEloReplayPreview,
+);
+
+
+/*
   Detalle completo:
   - partido
   - alertas
@@ -114,14 +139,13 @@ router.patch(
 /*
   Anula un partido.
 
-  El controlador:
-  - revierte Elo
-  - resta matches_played
-  - marca eventos Elo originales
-    como revertidos
-  - registra la reversión
-  - cierra las alertas
-  - deja auditoría permanente
+  Actualmente:
+  - permite restauración exacta si
+    no existe historia posterior
+  - bloquea con
+    historical_replay_required
+    si necesita reconstrucción
+    cronológica
 */
 
 router.patch(

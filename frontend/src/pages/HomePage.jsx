@@ -10,6 +10,9 @@ import {
 import { api } from "../api";
 
 
+const PLACEMENT_MATCHES = 5;
+
+
 const leagueName = {
   male: "Masculina",
   female: "Femenina",
@@ -57,6 +60,13 @@ export default function HomePage() {
     setLoading,
   ] = useState(true);
 
+  const [
+    placementMatches,
+    setPlacementMatches,
+  ] = useState(
+    PLACEMENT_MATCHES,
+  );
+
 
   useEffect(() => {
     const load =
@@ -69,8 +79,17 @@ export default function HomePage() {
               `/ranking?gender=${league}`,
             );
 
+          setPlacementMatches(
+            Number(
+              data.placement_matches,
+            ) ||
+              PLACEMENT_MATCHES,
+          );
+
           setPlayers(
-            data.players.slice(
+            (
+              data.players || []
+            ).slice(
               0,
               10,
             ),
@@ -280,18 +299,32 @@ export default function HomePage() {
                       }
                     >
                       <span>
-                        {String(
-                          player.rank_position,
-                        ).padStart(
-                          2,
-                          "0",
-                        )}
+                        {player.provisional
+                          ? "PROV."
+                          : String(
+                              player.rank_position,
+                            ).padStart(
+                              2,
+                              "0",
+                            )}
                       </span>
 
                       <strong>
                         {
                           player.name
                         }
+
+                        {player.provisional && (
+                          <small>
+                            {" "}
+                            · {
+                              player.matches_played
+                            }/
+                            {
+                              placementMatches
+                            }
+                          </small>
+                        )}
                       </strong>
 
                       <b>

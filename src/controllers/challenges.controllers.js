@@ -6,7 +6,6 @@ const REJECTION_COOLDOWN_DAYS = 7;
 const PLACEMENT_MATCHES = 5;
 const MAX_RANKED_CHALLENGE_DISTANCE = 3;
 
-
 /*
   ============================================================
   JUGADOR
@@ -46,18 +45,67 @@ const getPlayer = async (
   return result.rows[0];
 };
 
-
 /*
   ============================================================
   RANKING OFICIAL
-
-  Solamente jugadores con 5+ partidos.
   ============================================================
 */
 
-const getOfficialPosition = async (
+const getOfficialRanking = async (
   client,
+  city,
+  gender,
+) => {
+  const result = await client.query(
+    `
+    SELECT
+      id,
+      name,
+      rating,
+      matches_played,
+
+      ROW_NUMBER() OVER (
+        ORDER BY
+          rating DESC,
+          matches_played DESC,
+          id ASC
+      )::int AS official_position
+
+    FROM users
+
+    WHERE
+      role = 'player'
+      AND verification_status = 'verified'
+      AND city = $1
+      AND gender = $2
+      AND matches_played >= $3
+
+    ORDER BY
+      official_position ASC
+    `,
+    [
+      city,
+      gender,
+      PLACEMENT_MATCHES,
+    ],
+  );
+
+  return result.rows.map(
+    (player) => ({
+      ...player,
+      id: Number(player.id),
+      rating: Number(player.rating),
+      matches_played:
+        Number(player.matches_played),
+      official_position:
+        Number(player.official_position),
+    }),
+  );
+};
+
+const getOfficialPositionFromRanking = (
   player,
+  officialRanking,
 ) => {
   if (
     !player ||
@@ -67,18 +115,346 @@ const getOfficialPosition = async (
     return null;
   }
 
-  const result = await client.query(
-    `
-    WITH official_ranking AS (
+  const row = officialRanking.find(
+    (item) =>
+      Number(item.id) ===
+      Number(player.id),
+  );
+
+  return row
+    ? Number(row.official_position)
+    : null;
+};
+
+/*
+  ============================================================
+  POSICIÓN VIRTUAL DEL PROVISIONAL
+
+  El provisional se inserta virtualmente
+  dentro del ranking oficial usando:
+
+  1. Elo
+  2. partidos jugados
+  3. id
+
+  No obtiene puesto oficial.
+
+  Esta posición solamente sirve para
+  calcular qué rivales puede desafiar.
+
+  Ejemplo:
+  si virtualmente quedaría #18,
+  podrá desafiar #17, #16 o #15.
+
+  Así un jugador nuevo con Elo 0
+  no puede entrar y desafiar al #1.
+  ============================================================
+*/
+
+const getVirtualPositionFromRanking = (
+  player,
+  officialRanking,
+) => {
+  if (!player) {
+    return null;
+  }
+
+  const playerRating =
+    Number(player.rating);
+
+  const playerMatches =
+    Number(player.matches_played);
+
+  const playerId =
+    Number(player.id);
+
+  if (
+    !Number.isFinite(playerRating) ||
+    !Number.isInteger(playerMatches) ||
+    playerMatches < 0 ||
+    !Number.isInteger(playerId)
+  ) {
+    return null;
+  }
+
+  let playersAbove = 0;
+
+  for (const official of officialRanking) {
+    const officialRating =
+      Number(official.rating);
+
+    const officialMatches =
+      Number(official.matches_played);
+
+    const officialId =
+      Number(official.id);
+
+    const isAbove =
+      officialRating > playerRating ||
+      (
+        officialRating === playerRating &&
+        officialMatches > playerMatches
+      ) ||
+      (
+        officialRating === playerRating &&
+        officialMatches === playerMatches &&
+        officialId < playerId
+      );
+
+    if (isAbove) {
+      playersAbove += 1;
+    }
+  }
+
+  return playersAbove + 1;
+};
+
+const getCompetitivePosition = (
+  player,
+  officialRanking,
+) => {
+  if (!player) {
+    return null;
+  }
+
+  const provisional =
+    Number(player.matches_played) <
+    PLACEMENT_MATCHES;
+
+  if (provisional) {
+    return getVirtualPositionFromRanking(
+      player,
+      officialRanking,
+    );
+  }
+
+  return getOfficialPositionFromRanking(
+    player,
+    officialRanking,
+  );
+};
+
+/*
+  ============================================================
+  REGLA DEPORTIVA
+
+  PROVISIONAL vs PROVISIONAL:
+  permitido.
+
+  CUALQUIER OTRO CRUCE:
+  el desafiante solamente puede ir
+  hasta 3 posiciones competitivas
+  hacia arriba.
+
+  Oficial:
+  usa posición oficial.
+
+  Provisional:
+  usa posición virtual.
+  ============================================================
+*/
+
+const validateSportEligibility = async (
+  client,
+  challenger,
+  challenged,
+) => {
+  const officialRanking =
+    await getOfficialRanking(
+      client,
+      challenger.city,
+      challenger.gender,
+    );
+
+  const challengerProvisional =
+    Number(challenger.matches_played) <
+    PLACEMENT_MATCHES;
+
+  const challengedProvisional =
+    Number(challenged.matches_played) <
+    PLACEMENT_MATCHES;
+
+  const challengerOfficialPosition =
+    getOfficialPositionFromRanking(
+      challenger,
+      officialRanking,
+    );
+
+  const challengedOfficialPosition =
+    getOfficialPositionFromRanking(
+      challenged,
+      officialRanking,
+    );
+
+  const challengerCompetitivePosition =
+    getCompetitivePosition(
+      challenger,
+      officialRanking,
+    );
+
+  const challengedCompetitivePosition =
+    getCompetitivePosition(
+      challenged,
+      officialRanking,
+    );
+
+  if (
+    challengerProvisional &&
+    challengedProvisional
+  ) {
+    return {
+      allowed: true,
+
+      challengerPosition:
+        challengerOfficialPosition,
+
+      challengedPosition:
+        challengedOfficialPosition,
+
+      challengerCompetitivePosition,
+
+      challengedCompetitivePosition,
+
+      challengerVirtualPosition:
+        challengerCompetitivePosition,
+
+      challengedVirtualPosition:
+        challengedCompetitivePosition,
+
+      officialRanking,
+    };
+  }
+
+  if (
+    !challengerCompetitivePosition ||
+    !challengedCompetitivePosition
+  ) {
+    return {
+      allowed: false,
+
+      reason:
+        "competitive_position_unavailable",
+
+      message:
+        "No se pudo determinar la posición competitiva de alguno de los jugadores.",
+
+      officialRanking,
+    };
+  }
+
+  const difference =
+    challengerCompetitivePosition -
+    challengedCompetitivePosition;
+
+  if (
+    difference < 1 ||
+    difference >
+      MAX_RANKED_CHALLENGE_DISTANCE
+  ) {
+    return {
+      allowed: false,
+
+      reason:
+        "ranking_distance",
+
+      message:
+        challengerProvisional
+          ? "Durante la colocación solo podés desafiar rivales ubicados hasta 3 posiciones competitivas por encima de tu posición virtual."
+          : "Solo podés desafiar hasta 3 posiciones competitivas por encima.",
+
+      challengerPosition:
+        challengerOfficialPosition,
+
+      challengedPosition:
+        challengedOfficialPosition,
+
+      challengerCompetitivePosition,
+
+      challengedCompetitivePosition,
+
+      challengerVirtualPosition:
+        challengerProvisional
+          ? challengerCompetitivePosition
+          : null,
+
+      challengedVirtualPosition:
+        challengedProvisional
+          ? challengedCompetitivePosition
+          : null,
+
+      officialRanking,
+    };
+  }
+
+  return {
+    allowed: true,
+
+    challengerPosition:
+      challengerOfficialPosition,
+
+    challengedPosition:
+      challengedOfficialPosition,
+
+    challengerCompetitivePosition,
+
+    challengedCompetitivePosition,
+
+    challengerVirtualPosition:
+      challengerProvisional
+        ? challengerCompetitivePosition
+        : null,
+
+    challengedVirtualPosition:
+      challengedProvisional
+        ? challengedCompetitivePosition
+        : null,
+
+    officialRanking,
+  };
+};
+
+/*
+  ============================================================
+  RIVALES HABILITADOS POR REGLA DEPORTIVA
+  ============================================================
+*/
+
+const getSportEligibleOpponents = async (
+  client,
+  challenger,
+) => {
+  const officialRanking =
+    await getOfficialRanking(
+      client,
+      challenger.city,
+      challenger.gender,
+    );
+
+  const challengerProvisional =
+    Number(challenger.matches_played) <
+    PLACEMENT_MATCHES;
+
+  const challengerCompetitivePosition =
+    getCompetitivePosition(
+      challenger,
+      officialRanking,
+    );
+
+  const playersResult =
+    await client.query(
+      `
       SELECT
         id,
-
-        ROW_NUMBER() OVER (
-          ORDER BY
-            rating DESC,
-            matches_played DESC,
-            id ASC
-        )::int AS official_position
+        name,
+        phone,
+        city,
+        gender,
+        rating,
+        matches_played,
+        verification_status,
+        role,
+        matches_played < $4
+          AS provisional
 
       FROM users
 
@@ -87,32 +463,70 @@ const getOfficialPosition = async (
         AND verification_status = 'verified'
         AND city = $1
         AND gender = $2
-        AND matches_played >= $3
-    )
+        AND id <> $3
+      `,
+      [
+        challenger.city,
+        challenger.gender,
+        challenger.id,
+        PLACEMENT_MATCHES,
+      ],
+    );
 
-    SELECT
-      official_position
+  const eligible = [];
 
-    FROM official_ranking
+  for (const opponent of playersResult.rows) {
+    const opponentProvisional =
+      Number(opponent.matches_played) <
+      PLACEMENT_MATCHES;
 
-    WHERE id = $4
-    `,
-    [
-      player.city,
-      player.gender,
-      PLACEMENT_MATCHES,
-      player.id,
-    ],
-  );
+    const opponentCompetitivePosition =
+      getCompetitivePosition(
+        opponent,
+        officialRanking,
+      );
 
-  return result.rowCount
-    ? Number(
-        result.rows[0]
-          .official_position,
-      )
-    : null;
+    if (
+      challengerProvisional &&
+      opponentProvisional
+    ) {
+      eligible.push({
+        ...opponent,
+
+        competitive_position:
+          opponentCompetitivePosition,
+      });
+
+      continue;
+    }
+
+    if (
+      !challengerCompetitivePosition ||
+      !opponentCompetitivePosition
+    ) {
+      continue;
+    }
+
+    const difference =
+      challengerCompetitivePosition -
+      opponentCompetitivePosition;
+
+    if (
+      difference >= 1 &&
+      difference <=
+        MAX_RANKED_CHALLENGE_DISTANCE
+    ) {
+      eligible.push({
+        ...opponent,
+
+        competitive_position:
+          opponentCompetitivePosition,
+      });
+    }
+  }
+
+  return eligible;
 };
-
 
 /*
   ============================================================
@@ -158,22 +572,18 @@ const getHistoricalMeetings = async (
   );
 };
 
-
 /*
   ============================================================
   MÍNIMO DE ENFRENTAMIENTOS DE LA RUEDA
 
-  PROVISIONAL:
-  todos los jugadores verificados de
-  su misma liga son candidatos.
+  Se calcula únicamente entre rivales
+  habilitados por la regla deportiva.
 
-  RANKEADO:
-  solamente los 3 puestos oficiales
-  superiores son candidatos.
+  Esto evita dos problemas:
 
-  El jugador solo puede elegir rivales
-  que tengan el mínimo número de
-  enfrentamientos dentro de esa rueda.
+  - repetir siempre contra un amigo;
+  - que un rival imposible de desafiar
+    bloquee artificialmente la rueda.
   ============================================================
 */
 
@@ -182,277 +592,40 @@ const getRotationMinimumMeetings =
     client,
     challenger,
   ) => {
-    const challengerProvisional =
-      Number(
-        challenger.matches_played,
-      ) < PLACEMENT_MATCHES;
-
-    if (challengerProvisional) {
-      const result =
-        await client.query(
-          `
-          WITH opponents AS (
-            SELECT
-              u.id
-
-            FROM users u
-
-            WHERE
-              u.role = 'player'
-              AND u.verification_status = 'verified'
-              AND u.city = $1
-              AND u.gender = $2
-              AND u.id <> $3
-          ),
-
-          meeting_counts AS (
-            SELECT
-              o.id,
-
-              COUNT(m.id)::int
-                AS meetings
-
-            FROM opponents o
-
-            LEFT JOIN matches m
-              ON m.status = 'completed'
-              AND m.annulled_at IS NULL
-              AND (
-                (
-                  m.player1_id = $3
-                  AND m.player2_id = o.id
-                )
-                OR
-                (
-                  m.player2_id = $3
-                  AND m.player1_id = o.id
-                )
-              )
-
-            GROUP BY o.id
-          )
-
-          SELECT
-            COALESCE(
-              MIN(meetings),
-              0
-            )::int AS minimum_meetings
-
-          FROM meeting_counts
-          `,
-          [
-            challenger.city,
-            challenger.gender,
-            challenger.id,
-          ],
-        );
-
-      return Number(
-        result.rows[0]
-          ?.minimum_meetings || 0,
-      );
-    }
-
-    const challengerPosition =
-      await getOfficialPosition(
+    const eligible =
+      await getSportEligibleOpponents(
         client,
         challenger,
       );
 
-    if (!challengerPosition) {
+    if (!eligible.length) {
       return null;
     }
 
-    const result =
-      await client.query(
-        `
-        WITH official_ranking AS (
-          SELECT
-            id,
+    let minimumMeetings = null;
 
-            ROW_NUMBER() OVER (
-              ORDER BY
-                rating DESC,
-                matches_played DESC,
-                id ASC
-            )::int AS official_position
-
-          FROM users
-
-          WHERE
-            role = 'player'
-            AND verification_status = 'verified'
-            AND city = $1
-            AND gender = $2
-            AND matches_played >= $3
-        ),
-
-        eligible AS (
-          SELECT
-            id
-
-          FROM official_ranking
-
-          WHERE
-            official_position <
-              $4
-
-            AND official_position >=
-              $4 - $5
-        ),
-
-        meeting_counts AS (
-          SELECT
-            e.id,
-
-            COUNT(m.id)::int
-              AS meetings
-
-          FROM eligible e
-
-          LEFT JOIN matches m
-            ON m.status = 'completed'
-            AND m.annulled_at IS NULL
-            AND (
-              (
-                m.player1_id = $6
-                AND m.player2_id = e.id
-              )
-              OR
-              (
-                m.player2_id = $6
-                AND m.player1_id = e.id
-              )
-            )
-
-          GROUP BY e.id
-        )
-
-        SELECT
-          MIN(meetings)::int
-            AS minimum_meetings
-
-        FROM meeting_counts
-        `,
-        [
-          challenger.city,
-          challenger.gender,
-          PLACEMENT_MATCHES,
-          challengerPosition,
-          MAX_RANKED_CHALLENGE_DISTANCE,
+    for (const opponent of eligible) {
+      const meetings =
+        await getHistoricalMeetings(
+          client,
           challenger.id,
-        ],
-      );
+          opponent.id,
+        );
 
-    const value =
-      result.rows[0]
-        ?.minimum_meetings;
+      if (
+        minimumMeetings === null ||
+        meetings < minimumMeetings
+      ) {
+        minimumMeetings = meetings;
+      }
+    }
 
-    return value === null ||
-      value === undefined
-      ? null
-      : Number(value);
+    return minimumMeetings;
   };
-
-
-/*
-  ============================================================
-  VALIDAR REGLA DEPORTIVA DEL DESAFÍO
-  ============================================================
-*/
-
-const validateSportEligibility =
-  async (
-    client,
-    challenger,
-    challenged,
-  ) => {
-    const challengerProvisional =
-      Number(
-        challenger.matches_played,
-      ) < PLACEMENT_MATCHES;
-
-    /*
-      Durante colocación puede desafiar
-      a cualquier jugador verificado de
-      su liga, pero siempre respetando
-      la rueda.
-    */
-    if (challengerProvisional) {
-      return {
-        allowed: true,
-        challengerPosition: null,
-        challengedPosition:
-          await getOfficialPosition(
-            client,
-            challenged,
-          ),
-      };
-    }
-
-    /*
-      Un rankeado solamente desafía
-      jugadores que también tengan
-      ranking oficial.
-    */
-    const challengerPosition =
-      await getOfficialPosition(
-        client,
-        challenger,
-      );
-
-    const challengedPosition =
-      await getOfficialPosition(
-        client,
-        challenged,
-      );
-
-    if (
-      !challengerPosition ||
-      !challengedPosition
-    ) {
-      return {
-        allowed: false,
-        reason:
-          "provisional_not_official_target",
-        message:
-          "Los jugadores rankeados solo pueden desafiar jugadores con posición oficial.",
-      };
-    }
-
-    const difference =
-      challengerPosition -
-      challengedPosition;
-
-    if (
-      difference < 1 ||
-      difference >
-        MAX_RANKED_CHALLENGE_DISTANCE
-    ) {
-      return {
-        allowed: false,
-        reason: "ranking_distance",
-        message:
-          "Solo podés desafiar hasta 3 posiciones oficiales por encima.",
-      };
-    }
-
-    return {
-      allowed: true,
-      challengerPosition,
-      challengedPosition,
-    };
-  };
-
 
 /*
   ============================================================
   RUEDA DEL RECEPTOR
-
-  Si ya resolvió un turno con este
-  desafiante y había otros esperando,
-  debe avanzar la rueda antes de volver
-  a recibir al mismo.
   ============================================================
 */
 
@@ -527,7 +700,6 @@ const hasOlderPendingRivals = async (
   );
 };
 
-
 /*
   ============================================================
   COOLDOWN
@@ -600,18 +772,9 @@ const getRejectionCooldown = async (
   };
 };
 
-
 /*
   ============================================================
   RUEDA DE DESAFÍOS RECIBIDOS
-
-  El receptor debe resolver:
-  1. menor cantidad de enfrentamientos
-  2. desafío más antiguo
-  3. id más bajo
-
-  El provisional participa exactamente
-  igual que cualquier otro jugador.
   ============================================================
 */
 
@@ -707,7 +870,6 @@ const getRotationState = async (
       pending.rows,
   };
 };
-
 
 /*
   ============================================================
@@ -892,9 +1054,6 @@ export const createChallenge = async (
         });
     }
 
-    /*
-      REGLA DEPORTIVA.
-    */
     const sportEligibility =
       await validateSportEligibility(
         client,
@@ -914,19 +1073,22 @@ export const createChallenge = async (
         .json({
           message:
             sportEligibility.message,
+
           reason:
             sportEligibility.reason,
+
+          challenger_competitive_position:
+            sportEligibility
+              .challengerCompetitivePosition ??
+            null,
+
+          challenged_competitive_position:
+            sportEligibility
+              .challengedCompetitivePosition ??
+            null,
         });
     }
 
-    /*
-      RUEDA DEL DESAFIANTE.
-
-      Esta validación es la que evita
-      que alguien juegue dos veces con
-      un amigo mientras todavía tiene
-      rivales de la rueda sin enfrentar.
-    */
     const historicalMeetings =
       await getHistoricalMeetings(
         client,
@@ -954,18 +1116,18 @@ export const createChallenge = async (
         .json({
           message:
             "Antes tenés que jugar con rivales de tu rueda a los que enfrentaste menos veces.",
+
           reason:
             "opponent_rotation",
+
           historical_meetings:
             historicalMeetings,
+
           minimum_meetings:
             minimumMeetings,
         });
     }
 
-    /*
-      COOLDOWN.
-    */
     const cooldown =
       await getRejectionCooldown(
         client,
@@ -983,18 +1145,18 @@ export const createChallenge = async (
         .json({
           message:
             "Este jugador rechazó tu último desafío. Tenés que esperar 7 días para volver a desafiarlo.",
+
           reason:
             "rejection_cooldown",
+
           available_at:
             cooldown.availableAt,
+
           cooldown_days:
             REJECTION_COOLDOWN_DAYS,
         });
     }
 
-    /*
-      NO DUPLICAR ACTIVO.
-    */
     const active =
       await client.query(
         `
@@ -1044,9 +1206,6 @@ export const createChallenge = async (
         });
     }
 
-    /*
-      RUEDA DEL RECEPTOR.
-    */
     const mustWaitForOthers =
       await hasOlderPendingRivals(
         client,
@@ -1137,6 +1296,22 @@ export const createChallenge = async (
             sportEligibility
               .challengedPosition,
 
+          challenger_competitive_position:
+            sportEligibility
+              .challengerCompetitivePosition,
+
+          challenged_competitive_position:
+            sportEligibility
+              .challengedCompetitivePosition,
+
+          challenger_virtual_position:
+            sportEligibility
+              .challengerVirtualPosition,
+
+          challenged_virtual_position:
+            sportEligibility
+              .challengedVirtualPosition,
+
           historical_meetings:
             historicalMeetings,
 
@@ -1145,6 +1320,9 @@ export const createChallenge = async (
 
           placement_matches:
             PLACEMENT_MATCHES,
+
+          max_challenge_distance:
+            MAX_RANKED_CHALLENGE_DISTANCE,
         }),
       ],
     );
@@ -1192,7 +1370,6 @@ export const createChallenge = async (
     client.release();
   }
 };
-
 
 /*
   ============================================================
@@ -1368,7 +1545,6 @@ export const getMyChallenges = async (
     next(error);
   }
 };
-
 
 /*
   ============================================================
@@ -1546,7 +1722,6 @@ export const scheduleChallenge = async (
   }
 };
 
-
 /*
   ============================================================
   ACEPTAR DESAFÍO
@@ -1623,15 +1798,6 @@ export const acceptChallenge = async (
         });
     }
 
-    /*
-      Esta es la regla que hace que
-      "si te toca el provisional,
-      te toca".
-
-      No distinguimos provisional/rankeado:
-      la cola se resuelve por historial
-      y antigüedad.
-    */
     const rotation =
       await getRotationState(
         client,
@@ -1691,12 +1857,15 @@ export const acceptChallenge = async (
         .json({
           message:
             `Antes tenés que resolver el desafío de ${rotation.currentChallenge.challenger_name}.`,
+
           reason:
             "rotation_blocked",
+
           current_challenge_id:
             rotation
               .currentChallenge
               .id,
+
           current_opponent:
             rotation
               .currentChallenge
@@ -2019,7 +2188,6 @@ export const acceptChallenge = async (
   }
 };
 
-
 /*
   ============================================================
   RECHAZAR DESAFÍO
@@ -2152,12 +2320,15 @@ export const rejectChallenge = async (
         .json({
           message:
             `Antes tenés que resolver el desafío de ${rotation.currentChallenge.challenger_name}.`,
+
           reason:
             "rotation_blocked",
+
           current_challenge_id:
             rotation
               .currentChallenge
               .id,
+
           current_opponent:
             rotation
               .currentChallenge
@@ -2238,20 +2409,6 @@ export const rejectChallenge = async (
       matchesPlayed <
       PLACEMENT_MATCHES;
 
-    /*
-      IMPORTANTE:
-
-      Un provisional puede tener Elo 0.
-
-      La versión anterior usaba piso 100
-      y rechazar con Elo 0 podía terminar
-      SUBIÉNDOLO a 100.
-
-      Eso queda corregido.
-
-      Provisional: piso 0.
-      Establecido: piso 100.
-    */
     const ratingFloor =
       provisional
         ? 0
