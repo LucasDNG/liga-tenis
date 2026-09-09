@@ -16,52 +16,11 @@ import {
 } from "./placementReference.service.js";
 
 
-/*
-  ============================================================
-  LA RED
-  ORQUESTADOR DE PARTIDOS NIVELATORIOS
-  ============================================================
-
-  Este servicio une:
-
-  1. estado PRE-PARTIDO;
-  2. valor congelado del rival;
-  3. resultado confirmado;
-  4. evidencia persistente;
-  5. progreso 1/5 ... 5/5;
-  6. cálculo final de placement;
-  7. Elo objetivo al completar el quinto partido.
-
-  PRINCIPIOS:
-
-  - solamente las victorias aportan nivel;
-  - las derrotas cuentan para el récord pero no agregan
-    valor deportivo;
-  - el valor del rival se toma ANTES del partido;
-  - rival oficial:
-      percentil oficial pre-partido;
-  - rival provisional:
-      su placement_percentile demostrado pre-partido;
-  - nunca recalculamos retroactivamente esa referencia;
-  - los cinco partidos son exactamente cinco;
-  - el quinto convierte al jugador en oficial.
-  ============================================================
-*/
-
-
-/*
-  ============================================================
-  ERROR
-  ============================================================
-*/
-
 export class PlacementMatchError extends Error {
   constructor(
     message,
-    reason =
-      "placement_match_error",
-    details =
-      null,
+    reason = "placement_match_error",
+    details = null,
   ) {
     super(message);
 
@@ -77,19 +36,12 @@ export class PlacementMatchError extends Error {
 }
 
 
-/*
-  ============================================================
-  HELPERS
-  ============================================================
-*/
-
 const assertClient = (
   client,
 ) => {
   if (
     !client ||
-    typeof client.query !==
-      "function"
+    typeof client.query !== "function"
   ) {
     throw new PlacementMatchError(
       "Se requiere un cliente PostgreSQL.",
@@ -107,9 +59,7 @@ const toInteger = (
     Number(value);
 
   if (
-    !Number.isInteger(
-      number,
-    )
+    !Number.isInteger(number)
   ) {
     throw new PlacementMatchError(
       `${field} debe ser un entero.`,
@@ -153,14 +103,23 @@ const toPositiveInteger = (
 };
 
 
+const normalizeCompetitionId = (
+  competitionId,
+) =>
+  toPositiveInteger(
+    competitionId,
+    "competitionId",
+  );
+
+
 const normalizePlayer = (
   player,
   label,
+  competitionId,
 ) => {
   if (
     !player ||
-    typeof player !==
-      "object" ||
+    typeof player !== "object" ||
     Array.isArray(player)
   ) {
     throw new PlacementMatchError(
@@ -178,9 +137,42 @@ const normalizePlayer = (
       `${label}.id`,
     );
 
+  const normalizedCompetitionId =
+    normalizeCompetitionId(
+      competitionId,
+    );
+
+  if (
+    player.competition_id !==
+      undefined &&
+    player.competition_id !==
+      null &&
+    Number(
+      player.competition_id,
+    ) !==
+      normalizedCompetitionId
+  ) {
+    throw new PlacementMatchError(
+      `${label} pertenece a otra competición.`,
+      "player_competition_mismatch",
+      {
+        user_id:
+          id,
+
+        expected_competition_id:
+          normalizedCompetitionId,
+
+        received_competition_id:
+          Number(
+            player.competition_id,
+          ),
+      },
+    );
+  }
+
   const matchesPlayed =
     toInteger(
-      player.matches_played,
+      player.matches_played ?? 0,
       `${label}.matches_played`,
     );
 
@@ -194,6 +186,9 @@ const normalizePlayer = (
         player_id:
           id,
 
+        competition_id:
+          normalizedCompetitionId,
+
         matches_played:
           matchesPlayed,
       },
@@ -202,13 +197,11 @@ const normalizePlayer = (
 
   const rating =
     Number(
-      player.rating,
+      player.rating ?? 0,
     );
 
   if (
-    !Number.isFinite(
-      rating,
-    ) ||
+    !Number.isFinite(rating) ||
     rating < 0
   ) {
     throw new PlacementMatchError(
@@ -229,6 +222,9 @@ const normalizePlayer = (
 
     id,
 
+    competition_id:
+      normalizedCompetitionId,
+
     matches_played:
       matchesPlayed,
 
@@ -243,6 +239,7 @@ const normalizePlayer = (
 
 const normalizeRanking = (
   officialRanking,
+  competitionId,
 ) => {
   if (
     !Array.isArray(
@@ -255,52 +252,77 @@ const normalizeRanking = (
     );
   }
 
+  const normalizedCompetitionId =
+    normalizeCompetitionId(
+      competitionId,
+    );
+
+  for (
+    const player of
+    officialRanking
+  ) {
+    if (
+      player.competition_id !==
+        undefined &&
+      player.competition_id !==
+        null &&
+      Number(
+        player.competition_id,
+      ) !==
+        normalizedCompetitionId
+    ) {
+      throw new PlacementMatchError(
+        "El ranking oficial contiene jugadores de otra competición.",
+        "ranking_competition_mismatch",
+        {
+          competition_id:
+            normalizedCompetitionId,
+
+          player_id:
+            player.id,
+        },
+      );
+    }
+  }
+
   return officialRanking;
 };
 
 
-/*
-  ============================================================
-  ¿ESTÁ EN NIVELATORIOS?
-  ============================================================
-*/
+export const isPlacementPlayer =
+  (
+    player,
+    competitionId,
+  ) => {
+    const normalized =
+      normalizePlayer(
+        player,
+        "player",
+        competitionId,
+      );
 
-export const isPlacementPlayer = (
-  player,
-) => {
-  const normalized =
-    normalizePlayer(
-      player,
-      "player",
-    );
+    return normalized.provisional;
+  };
 
-  return (
-    normalized
-      .matches_played <
-    PLACEMENT_MATCHES
-  );
-};
-
-
-/*
-  ============================================================
-  ESTADO DE NIVELATORIOS PRE-PARTIDO
-  ============================================================
-*/
 
 export const getPlacementStateBeforeMatch =
   async (
     client,
     player,
+    competitionId,
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      normalizeCompetitionId(
+        competitionId,
+      );
 
     const normalized =
       normalizePlayer(
         player,
         "player",
+        normalizedCompetitionId,
       );
 
     if (
@@ -310,12 +332,14 @@ export const getPlacementStateBeforeMatch =
         user_id:
           normalized.id,
 
+        competition_id:
+          normalizedCompetitionId,
+
         provisional:
           false,
 
         matches_before:
-          normalized
-            .matches_played,
+          normalized.matches_played,
 
         next_match_number:
           null,
@@ -329,35 +353,30 @@ export const getPlacementStateBeforeMatch =
       await getPlayerPlacementEvidence(
         client,
         normalized.id,
+        normalizedCompetitionId,
       );
 
     validatePlacementEvidenceSequence(
       evidence,
+      normalizedCompetitionId,
     );
-
-    /*
-      Mientras terminamos la migración del sistema viejo
-      al nuevo placement, queremos detectar desincronización
-      y no inventar evidencia.
-
-      matches_played debe coincidir con la cantidad de
-      nivelatorios persistidos para jugadores del modelo nuevo.
-    */
 
     if (
       evidence.length !==
       normalized.matches_played
     ) {
       throw new PlacementMatchError(
-        "Los partidos nivelatorios del jugador no coinciden con su evidencia persistida.",
+        "Los nivelatorios del jugador no coinciden con la evidencia de esta competición.",
         "placement_evidence_out_of_sync",
         {
           user_id:
             normalized.id,
 
+          competition_id:
+            normalizedCompetitionId,
+
           matches_played:
-            normalized
-              .matches_played,
+            normalized.matches_played,
 
           evidence_count:
             evidence.length,
@@ -366,8 +385,7 @@ export const getPlacementStateBeforeMatch =
     }
 
     const nextMatchNumber =
-      normalized
-        .matches_played +
+      normalized.matches_played +
       1;
 
     if (
@@ -375,11 +393,14 @@ export const getPlacementStateBeforeMatch =
       PLACEMENT_MATCHES
     ) {
       throw new PlacementMatchError(
-        "El jugador ya completó sus cinco nivelatorios.",
+        "El jugador ya completó sus cinco nivelatorios en esta competición.",
         "placement_already_completed",
         {
           user_id:
             normalized.id,
+
+          competition_id:
+            normalizedCompetitionId,
         },
       );
     }
@@ -388,12 +409,14 @@ export const getPlacementStateBeforeMatch =
       user_id:
         normalized.id,
 
+      competition_id:
+        normalizedCompetitionId,
+
       provisional:
         true,
 
       matches_before:
-        normalized
-          .matches_played,
+        normalized.matches_played,
 
       next_match_number:
         nextMatchNumber,
@@ -404,49 +427,38 @@ export const getPlacementStateBeforeMatch =
   };
 
 
-/*
-  ============================================================
-  PREPARAR REFERENCIA PARA UN JUGADOR
-  ============================================================
-
-  Esto DEBE ejecutarse antes de modificar:
-
-  - matches_played;
-  - rating;
-  - status del jugador.
-
-  La referencia del rival queda conceptualmente congelada
-  en este momento.
-  ============================================================
-*/
-
 export const preparePlayerPlacementReference =
   async (
     client,
     {
       player,
       opponent,
+      competitionId,
     },
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      normalizeCompetitionId(
+        competitionId,
+      );
 
     const normalizedPlayer =
       normalizePlayer(
         player,
         "player",
+        normalizedCompetitionId,
       );
 
     const normalizedOpponent =
       normalizePlayer(
         opponent,
         "opponent",
+        normalizedCompetitionId,
       );
 
     if (
-      !normalizedPlayer
-        .provisional
+      !normalizedPlayer.provisional
     ) {
       return {
         applies:
@@ -457,6 +469,9 @@ export const preparePlayerPlacementReference =
 
         opponent_id:
           normalizedOpponent.id,
+
+        competition_id:
+          normalizedCompetitionId,
 
         placement_match_number:
           null,
@@ -470,12 +485,19 @@ export const preparePlayerPlacementReference =
       await getPlacementStateBeforeMatch(
         client,
         normalizedPlayer,
+        normalizedCompetitionId,
       );
 
     const opponentReference =
       await getPlacementOpponentReference(
         client,
-        normalizedOpponent,
+        {
+          opponent:
+            normalizedOpponent,
+
+          competitionId:
+            normalizedCompetitionId,
+        },
       );
 
     return {
@@ -488,13 +510,14 @@ export const preparePlayerPlacementReference =
       opponent_id:
         normalizedOpponent.id,
 
+      competition_id:
+        normalizedCompetitionId,
+
       placement_match_number:
-        state
-          .next_match_number,
+        state.next_match_number,
 
       matches_before:
-        state
-          .matches_before,
+        state.matches_before,
 
       opponent_reference:
         opponentReference,
@@ -502,53 +525,34 @@ export const preparePlayerPlacementReference =
   };
 
 
-/*
-  ============================================================
-  PREPARAR CONTEXTO COMPLETO DEL PARTIDO
-  ============================================================
-
-  Se calcula para LOS DOS jugadores antes del resultado.
-
-  Ejemplo:
-
-  P1 provisional
-  P2 provisional
-
-  Primero:
-    calculamos cuánto vale P2 para P1
-
-  Luego:
-    calculamos cuánto vale P1 para P2
-
-  Todo ANTES de guardar el resultado.
-
-  Así el partido actual nunca puede inflar su propia
-  referencia.
-  ============================================================
-*/
-
 export const preparePlacementMatchContext =
   async (
     client,
     {
+      competitionId,
       player1,
       player2,
     },
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      normalizeCompetitionId(
+        competitionId,
+      );
 
     const normalizedPlayer1 =
       normalizePlayer(
         player1,
         "player1",
+        normalizedCompetitionId,
       );
 
     const normalizedPlayer2 =
       normalizePlayer(
         player2,
         "player2",
+        normalizedCompetitionId,
       );
 
     if (
@@ -562,8 +566,7 @@ export const preparePlacementMatchContext =
     }
 
     const player1Context =
-      normalizedPlayer1
-        .provisional
+      normalizedPlayer1.provisional
         ? await preparePlayerPlacementReference(
             client,
             {
@@ -572,6 +575,9 @@ export const preparePlacementMatchContext =
 
               opponent:
                 normalizedPlayer2,
+
+              competitionId:
+                normalizedCompetitionId,
             },
           )
         : {
@@ -583,6 +589,9 @@ export const preparePlacementMatchContext =
 
             opponent_id:
               normalizedPlayer2.id,
+
+            competition_id:
+              normalizedCompetitionId,
 
             placement_match_number:
               null,
@@ -592,8 +601,7 @@ export const preparePlacementMatchContext =
           };
 
     const player2Context =
-      normalizedPlayer2
-        .provisional
+      normalizedPlayer2.provisional
         ? await preparePlayerPlacementReference(
             client,
             {
@@ -602,6 +610,9 @@ export const preparePlacementMatchContext =
 
               opponent:
                 normalizedPlayer1,
+
+              competitionId:
+                normalizedCompetitionId,
             },
           )
         : {
@@ -614,6 +625,9 @@ export const preparePlacementMatchContext =
             opponent_id:
               normalizedPlayer1.id,
 
+            competition_id:
+              normalizedCompetitionId,
+
             placement_match_number:
               null,
 
@@ -622,6 +636,9 @@ export const preparePlacementMatchContext =
           };
 
     return {
+      competition_id:
+        normalizedCompetitionId,
+
       player1:
         player1Context,
 
@@ -637,17 +654,12 @@ export const preparePlacementMatchContext =
   };
 
 
-/*
-  ============================================================
-  GUARDAR RESULTADO NIVELATORIO DE UN JUGADOR
-  ============================================================
-*/
-
 export const recordPlayerPlacementResult =
   async (
     client,
     {
       matchId,
+      competitionId,
       player,
       opponent,
       won,
@@ -655,9 +667,7 @@ export const recordPlayerPlacementResult =
       officialRankingBefore,
     },
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
 
     const normalizedMatchId =
       toPositiveInteger(
@@ -665,21 +675,27 @@ export const recordPlayerPlacementResult =
         "matchId",
       );
 
+    const normalizedCompetitionId =
+      normalizeCompetitionId(
+        competitionId,
+      );
+
     const normalizedPlayer =
       normalizePlayer(
         player,
         "player",
+        normalizedCompetitionId,
       );
 
     const normalizedOpponent =
       normalizePlayer(
         opponent,
         "opponent",
+        normalizedCompetitionId,
       );
 
     if (
-      !normalizedPlayer
-        .provisional
+      !normalizedPlayer.provisional
     ) {
       return {
         applies:
@@ -687,6 +703,9 @@ export const recordPlayerPlacementResult =
 
         user_id:
           normalizedPlayer.id,
+
+        competition_id:
+          normalizedCompetitionId,
 
         completed:
           false,
@@ -697,8 +716,7 @@ export const recordPlayerPlacementResult =
     }
 
     if (
-      typeof won !==
-      "boolean"
+      typeof won !== "boolean"
     ) {
       throw new PlacementMatchError(
         "won debe ser boolean.",
@@ -717,6 +735,9 @@ export const recordPlayerPlacementResult =
           user_id:
             normalizedPlayer.id,
 
+          competition_id:
+            normalizedCompetitionId,
+
           match_id:
             normalizedMatchId,
         },
@@ -725,43 +746,37 @@ export const recordPlayerPlacementResult =
 
     if (
       Number(
-        preparedContext
-          .player_id,
+        preparedContext.player_id,
       ) !==
       normalizedPlayer.id
     ) {
       throw new PlacementMatchError(
         "El contexto de placement pertenece a otro jugador.",
         "placement_context_player_mismatch",
-        {
-          expected:
-            normalizedPlayer.id,
-
-          received:
-            preparedContext
-              .player_id,
-        },
       );
     }
 
     if (
       Number(
-        preparedContext
-          .opponent_id,
+        preparedContext.opponent_id,
       ) !==
       normalizedOpponent.id
     ) {
       throw new PlacementMatchError(
         "El contexto de placement pertenece a otro rival.",
         "placement_context_opponent_mismatch",
-        {
-          expected:
-            normalizedOpponent.id,
+      );
+    }
 
-          received:
-            preparedContext
-              .opponent_id,
-        },
+    if (
+      Number(
+        preparedContext.competition_id,
+      ) !==
+      normalizedCompetitionId
+    ) {
+      throw new PlacementMatchError(
+        "El contexto de placement pertenece a otra competición.",
+        "placement_context_competition_mismatch",
       );
     }
 
@@ -769,19 +784,10 @@ export const recordPlayerPlacementResult =
       preparedContext
         .opponent_reference;
 
-    if (
-      !reference
-    ) {
+    if (!reference) {
       throw new PlacementMatchError(
         "Falta la referencia congelada del rival.",
         "opponent_reference_missing",
-        {
-          user_id:
-            normalizedPlayer.id,
-
-          opponent_id:
-            normalizedOpponent.id,
-        },
       );
     }
 
@@ -807,6 +813,9 @@ export const recordPlayerPlacementResult =
           user_id:
             normalizedPlayer.id,
 
+          competition_id:
+            normalizedCompetitionId,
+
           expected:
             expectedMatchNumber,
 
@@ -816,15 +825,6 @@ export const recordPlayerPlacementResult =
       );
     }
 
-    /*
-      Guardamos la derrota aunque no aporte nivel.
-
-      El percentil congelado también puede quedar registrado
-      en la derrota para auditoría.
-
-      El motor simplemente no lo utiliza cuando won=false.
-    */
-
     await createPlacementEvidence(
       client,
       {
@@ -833,6 +833,9 @@ export const recordPlayerPlacementResult =
 
         userId:
           normalizedPlayer.id,
+
+        competitionId:
+          normalizedCompetitionId,
 
         opponentId:
           normalizedOpponent.id,
@@ -866,10 +869,12 @@ export const recordPlayerPlacementResult =
       await getPlayerPlacementEvidence(
         client,
         normalizedPlayer.id,
+        normalizedCompetitionId,
       );
 
     validatePlacementEvidenceSequence(
       storedEvidence,
+      normalizedCompetitionId,
     );
 
     if (
@@ -877,11 +882,14 @@ export const recordPlayerPlacementResult =
       preparedMatchNumber
     ) {
       throw new PlacementMatchError(
-        "La cantidad de evidencias nivelatorias no coincide con el partido procesado.",
+        "La cantidad de evidencias no coincide con el nivelatorio procesado.",
         "placement_evidence_count_mismatch",
         {
           user_id:
             normalizedPlayer.id,
+
+          competition_id:
+            normalizedCompetitionId,
 
           placement_match_number:
             preparedMatchNumber,
@@ -896,6 +904,7 @@ export const recordPlayerPlacementResult =
       await getPlayerPlacementCalculationEvidence(
         client,
         normalizedPlayer.id,
+        normalizedCompetitionId,
       );
 
     const partialPlacement =
@@ -903,14 +912,6 @@ export const recordPlayerPlacementResult =
         evidence:
           calculationEvidence,
       });
-
-    /*
-      Nivelatorios #1 a #4.
-
-      Todavía NO recibe Elo oficial.
-
-      Devolvemos solamente su nivel demostrado actual.
-    */
 
     if (
       preparedMatchNumber <
@@ -922,6 +923,9 @@ export const recordPlayerPlacementResult =
 
         user_id:
           normalizedPlayer.id,
+
+        competition_id:
+          normalizedCompetitionId,
 
         completed:
           false,
@@ -957,21 +961,10 @@ export const recordPlayerPlacementResult =
       };
     }
 
-    /*
-      NIVELATORIO #5
-
-      Acá sí se transforma en oficial.
-
-      officialRankingBefore debe ser el ranking oficial
-      PRE-PARTIDO.
-
-      El jugador que está terminando placement todavía
-      no debe estar incluido en ese ranking.
-    */
-
     const rankingBefore =
       normalizeRanking(
         officialRankingBefore,
+        normalizedCompetitionId,
       );
 
     const duplicatedPlayer =
@@ -983,15 +976,16 @@ export const recordPlayerPlacementResult =
           normalizedPlayer.id,
       );
 
-    if (
-      duplicatedPlayer
-    ) {
+    if (duplicatedPlayer) {
       throw new PlacementMatchError(
-        "El jugador que está terminando placement ya aparece en el ranking oficial pre-partido.",
+        "El jugador que termina placement ya aparece en el ranking oficial de esta competición.",
         "placement_player_already_official",
         {
           user_id:
             normalizedPlayer.id,
+
+          competition_id:
+            normalizedCompetitionId,
         },
       );
     }
@@ -1011,6 +1005,9 @@ export const recordPlayerPlacementResult =
 
       user_id:
         normalizedPlayer.id,
+
+      competition_id:
+        normalizedCompetitionId,
 
       completed:
         true,
@@ -1085,32 +1082,12 @@ export const recordPlayerPlacementResult =
   };
 
 
-/*
-  ============================================================
-  REGISTRAR RESULTADO DE AMBOS JUGADORES
-  ============================================================
-
-  IMPORTANTE:
-
-  officialRankingBefore debe haber sido tomado antes de
-  incrementar matches_played.
-
-  Si ambos jugadores terminan su quinto nivelatorio
-  en el mismo partido:
-
-  - ambos utilizan el mismo ranking oficial pre-partido;
-  - ninguno se usa como referencia oficial del otro;
-  - para la referencia del partido se utilizó su nivel
-    provisional PRE-PARTIDO;
-  - no existe contaminación circular.
-  ============================================================
-*/
-
 export const recordPlacementMatchResult =
   async (
     client,
     {
       matchId,
+      competitionId,
       player1,
       player2,
       winnerId,
@@ -1118,9 +1095,7 @@ export const recordPlacementMatchResult =
       officialRankingBefore,
     },
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
 
     const normalizedMatchId =
       toPositiveInteger(
@@ -1128,16 +1103,23 @@ export const recordPlacementMatchResult =
         "matchId",
       );
 
+    const normalizedCompetitionId =
+      normalizeCompetitionId(
+        competitionId,
+      );
+
     const normalizedPlayer1 =
       normalizePlayer(
         player1,
         "player1",
+        normalizedCompetitionId,
       );
 
     const normalizedPlayer2 =
       normalizePlayer(
         player2,
         "player2",
+        normalizedCompetitionId,
       );
 
     const normalizedWinnerId =
@@ -1155,16 +1137,6 @@ export const recordPlacementMatchResult =
       throw new PlacementMatchError(
         "El ganador no pertenece al partido.",
         "winner_not_in_match",
-        {
-          winner_id:
-            normalizedWinnerId,
-
-          player1_id:
-            normalizedPlayer1.id,
-
-          player2_id:
-            normalizedPlayer2.id,
-        },
       );
     }
 
@@ -1179,44 +1151,61 @@ export const recordPlacementMatchResult =
       );
     }
 
+    if (
+      Number(
+        preparedContext
+          .competition_id,
+      ) !==
+      normalizedCompetitionId
+    ) {
+      throw new PlacementMatchError(
+        "El contexto pre-partido pertenece a otra competición.",
+        "placement_context_competition_mismatch",
+      );
+    }
+
     const rankingBefore =
       normalizeRanking(
         officialRankingBefore,
+        normalizedCompetitionId,
       );
 
-    let player1Placement =
-      {
-        applies:
-          false,
+    let player1Placement = {
+      applies:
+        false,
 
-        user_id:
-          normalizedPlayer1.id,
+      user_id:
+        normalizedPlayer1.id,
 
-        completed:
-          false,
+      competition_id:
+        normalizedCompetitionId,
 
-        placement:
-          null,
-      };
+      completed:
+        false,
 
-    let player2Placement =
-      {
-        applies:
-          false,
+      placement:
+        null,
+    };
 
-        user_id:
-          normalizedPlayer2.id,
+    let player2Placement = {
+      applies:
+        false,
 
-        completed:
-          false,
+      user_id:
+        normalizedPlayer2.id,
 
-        placement:
-          null,
-      };
+      competition_id:
+        normalizedCompetitionId,
+
+      completed:
+        false,
+
+      placement:
+        null,
+    };
 
     if (
-      normalizedPlayer1
-        .provisional
+      normalizedPlayer1.provisional
     ) {
       player1Placement =
         await recordPlayerPlacementResult(
@@ -1224,6 +1213,9 @@ export const recordPlacementMatchResult =
           {
             matchId:
               normalizedMatchId,
+
+            competitionId:
+              normalizedCompetitionId,
 
             player:
               normalizedPlayer1,
@@ -1236,8 +1228,7 @@ export const recordPlacementMatchResult =
               normalizedPlayer1.id,
 
             preparedContext:
-              preparedContext
-                .player1,
+              preparedContext.player1,
 
             officialRankingBefore:
               rankingBefore,
@@ -1246,8 +1237,7 @@ export const recordPlacementMatchResult =
     }
 
     if (
-      normalizedPlayer2
-        .provisional
+      normalizedPlayer2.provisional
     ) {
       player2Placement =
         await recordPlayerPlacementResult(
@@ -1255,6 +1245,9 @@ export const recordPlacementMatchResult =
           {
             matchId:
               normalizedMatchId,
+
+            competitionId:
+              normalizedCompetitionId,
 
             player:
               normalizedPlayer2,
@@ -1267,8 +1260,7 @@ export const recordPlacementMatchResult =
               normalizedPlayer2.id,
 
             preparedContext:
-              preparedContext
-                .player2,
+              preparedContext.player2,
 
             officialRankingBefore:
               rankingBefore,
@@ -1279,6 +1271,9 @@ export const recordPlacementMatchResult =
     return {
       match_id:
         normalizedMatchId,
+
+      competition_id:
+        normalizedCompetitionId,
 
       winner_id:
         normalizedWinnerId,
@@ -1298,28 +1293,13 @@ export const recordPlacementMatchResult =
   };
 
 
-/*
-  ============================================================
-  OBTENER NIVEL ACTUAL DE UN PROVISIONAL
-  ============================================================
-
-  Sirve luego para:
-
-  - ranking público;
-  - desafíos;
-  - mostrar "Nivelatorios 3/5";
-  - calcular cuánto vale frente a otro provisional.
-  ============================================================
-*/
-
 export const getCurrentPlacementLevel =
   async (
     client,
     userId,
+    competitionId,
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
 
     const normalizedUserId =
       toPositiveInteger(
@@ -1327,10 +1307,16 @@ export const getCurrentPlacementLevel =
         "userId",
       );
 
+    const normalizedCompetitionId =
+      normalizeCompetitionId(
+        competitionId,
+      );
+
     const evidence =
       await getPlayerPlacementCalculationEvidence(
         client,
         normalizedUserId,
+        normalizedCompetitionId,
       );
 
     if (
@@ -1338,11 +1324,14 @@ export const getCurrentPlacementLevel =
       PLACEMENT_MATCHES
     ) {
       throw new PlacementMatchError(
-        "El jugador posee más evidencia nivelatoria de la permitida.",
+        "El jugador posee más evidencia nivelatoria de la permitida en esta competición.",
         "too_many_placement_matches",
         {
           user_id:
             normalizedUserId,
+
+          competition_id:
+            normalizedCompetitionId,
 
           evidence_count:
             evidence.length,
@@ -1359,16 +1348,17 @@ export const getCurrentPlacementLevel =
       user_id:
         normalizedUserId,
 
+      competition_id:
+        normalizedCompetitionId,
+
       matches_played:
-        placement
-          .matches_played,
+        placement.matches_played,
 
       matches_remaining:
         Math.max(
           0,
           PLACEMENT_MATCHES -
-            placement
-              .matches_played,
+            placement.matches_played,
         ),
 
       wins:
@@ -1386,8 +1376,7 @@ export const getCurrentPlacementLevel =
           .demonstrated_level,
 
       win_factor:
-        placement
-          .win_factor,
+        placement.win_factor,
 
       placement_percentile:
         placement

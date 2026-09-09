@@ -196,6 +196,11 @@ const normalizeEvidenceRow = (
         row.user_id,
       ),
 
+    competition_id:
+      Number(
+        row.competition_id,
+      ),
+
     opponent_id:
       Number(
         row.opponent_id,
@@ -248,6 +253,7 @@ export const countPlayerPlacementEvidence =
   async (
     client,
     userId,
+    competitionId,
   ) => {
     assertClient(
       client,
@@ -257,6 +263,12 @@ export const countPlayerPlacementEvidence =
       toPositiveInteger(
         userId,
         "userId",
+      );
+
+    const normalizedCompetitionId =
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
       );
 
     const result =
@@ -269,9 +281,11 @@ export const countPlayerPlacementEvidence =
 
         WHERE
           user_id = $1
+          AND competition_id = $2
         `,
         [
           normalizedUserId,
+          normalizedCompetitionId,
         ],
       );
 
@@ -287,11 +301,13 @@ export const getNextPlacementMatchNumber =
   async (
     client,
     userId,
+    competitionId,
   ) => {
     const total =
       await countPlayerPlacementEvidence(
         client,
         userId,
+        competitionId,
       );
 
     if (
@@ -311,6 +327,7 @@ export const createPlacementEvidence =
     {
       matchId,
       userId,
+      competitionId,
       opponentId,
       placementMatchNumber,
       won,
@@ -334,6 +351,12 @@ export const createPlacementEvidence =
       toPositiveInteger(
         userId,
         "userId",
+      );
+
+    const normalizedCompetitionId =
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
       );
 
     const normalizedOpponentId =
@@ -395,25 +418,9 @@ export const createPlacementEvidence =
         opponentReferenceType,
       );
 
-    /*
-      Toda victoria nivelatoria necesita
-      una referencia deportiva congelada.
-
-      Oficial:
-      percentil oficial pre-partido.
-
-      Provisional:
-      placement_percentile demostrado
-      pre-partido.
-
-      No se aplica descuento extra por
-      ser provisional.
-    */
-
     if (
       won &&
-      percentile ===
-        null
+      percentile === null
     ) {
       throw new PlacementEvidenceError(
         "Toda victoria nivelatoria necesita una referencia porcentual congelada del rival.",
@@ -424,6 +431,9 @@ export const createPlacementEvidence =
 
           user_id:
             normalizedUserId,
+
+          competition_id:
+            normalizedCompetitionId,
 
           opponent_id:
             normalizedOpponentId,
@@ -473,12 +483,79 @@ export const createPlacementEvidence =
       }
     }
 
+    /*
+      Blindaje adicional:
+
+      match_id y competition_id deben coincidir.
+
+      Evita guardar por error una evidencia de singles
+      dentro de dobles o viceversa.
+    */
+
+    const matchCheck =
+      await client.query(
+        `
+        SELECT
+          id,
+          competition_id
+
+        FROM matches
+
+        WHERE id = $1
+
+        LIMIT 1
+        `,
+        [
+          normalizedMatchId,
+        ],
+      );
+
+    if (
+      matchCheck.rowCount === 0
+    ) {
+      throw new PlacementEvidenceError(
+        "El partido no existe.",
+        "match_not_found",
+        {
+          match_id:
+            normalizedMatchId,
+        },
+      );
+    }
+
+    if (
+      Number(
+        matchCheck.rows[0]
+          .competition_id,
+      ) !==
+      normalizedCompetitionId
+    ) {
+      throw new PlacementEvidenceError(
+        "La competición de la evidencia no coincide con la del partido.",
+        "match_competition_mismatch",
+        {
+          match_id:
+            normalizedMatchId,
+
+          expected_competition_id:
+            Number(
+              matchCheck.rows[0]
+                .competition_id,
+            ),
+
+          received_competition_id:
+            normalizedCompetitionId,
+        },
+      );
+    }
+
     const result =
       await client.query(
         `
         INSERT INTO placement_match_evidence (
           match_id,
           user_id,
+          competition_id,
           opponent_id,
           placement_match_number,
           won,
@@ -497,7 +574,8 @@ export const createPlacementEvidence =
           $6,
           $7,
           $8,
-          $9
+          $9,
+          $10
         )
 
         ON CONFLICT (
@@ -512,6 +590,7 @@ export const createPlacementEvidence =
         [
           normalizedMatchId,
           normalizedUserId,
+          normalizedCompetitionId,
           normalizedOpponentId,
           normalizedPlacementMatchNumber,
           won,
@@ -539,6 +618,9 @@ export const createPlacementEvidence =
 
           userId:
             normalizedUserId,
+
+          competitionId:
+            normalizedCompetitionId,
         },
       );
 
@@ -559,6 +641,7 @@ export const getPlacementEvidenceByMatch =
     {
       matchId,
       userId,
+      competitionId,
     },
   ) => {
     assertClient(
@@ -577,6 +660,12 @@ export const getPlacementEvidenceByMatch =
         "userId",
       );
 
+    const normalizedCompetitionId =
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
     const result =
       await client.query(
         `
@@ -587,14 +676,15 @@ export const getPlacementEvidenceByMatch =
 
         WHERE
           match_id = $1
-
           AND user_id = $2
+          AND competition_id = $3
 
         LIMIT 1
         `,
         [
           normalizedMatchId,
           normalizedUserId,
+          normalizedCompetitionId,
         ],
       );
 
@@ -609,6 +699,7 @@ export const getPlayerPlacementEvidence =
   async (
     client,
     userId,
+    competitionId,
   ) => {
     assertClient(
       client,
@@ -618,6 +709,12 @@ export const getPlayerPlacementEvidence =
       toPositiveInteger(
         userId,
         "userId",
+      );
+
+    const normalizedCompetitionId =
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
       );
 
     const result =
@@ -630,6 +727,7 @@ export const getPlayerPlacementEvidence =
 
         WHERE
           user_id = $1
+          AND competition_id = $2
 
         ORDER BY
           placement_match_number ASC,
@@ -637,6 +735,7 @@ export const getPlayerPlacementEvidence =
         `,
         [
           normalizedUserId,
+          normalizedCompetitionId,
         ],
       );
 
@@ -650,17 +749,22 @@ export const getPlayerPlacementCalculationEvidence =
   async (
     client,
     userId,
+    competitionId,
   ) => {
     const rows =
       await getPlayerPlacementEvidence(
         client,
         userId,
+        competitionId,
       );
 
     return rows.map(
       (row) => ({
         match_id:
           row.match_id,
+
+        competition_id:
+          row.competition_id,
 
         opponent_id:
           row.opponent_id,
@@ -685,12 +789,31 @@ export const getPlayerPlacementProgress =
   async (
     client,
     userId,
+    competitionId,
   ) => {
+    const normalizedUserId =
+      toPositiveInteger(
+        userId,
+        "userId",
+      );
+
+    const normalizedCompetitionId =
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
     const evidence =
       await getPlayerPlacementEvidence(
         client,
-        userId,
+        normalizedUserId,
+        normalizedCompetitionId,
       );
+
+    validatePlacementEvidenceSequence(
+      evidence,
+      normalizedCompetitionId,
+    );
 
     const wins =
       evidence.filter(
@@ -703,9 +826,10 @@ export const getPlayerPlacementProgress =
 
     return {
       user_id:
-        Number(
-          userId,
-        ),
+        normalizedUserId,
+
+      competition_id:
+        normalizedCompetitionId,
 
       played,
 
@@ -734,6 +858,7 @@ export const getPlayerPlacementProgress =
 export const validatePlacementEvidenceSequence =
   (
     evidence,
+    competitionId = null,
   ) => {
     if (
       !Array.isArray(
@@ -746,14 +871,26 @@ export const validatePlacementEvidenceSequence =
       );
     }
 
+    const normalizedCompetitionId =
+      competitionId === null ||
+      competitionId === undefined
+        ? null
+        : toPositiveInteger(
+            competitionId,
+            "competitionId",
+          );
+
     if (
       evidence.length >
       PLACEMENT_MATCHES
     ) {
       throw new PlacementEvidenceError(
-        "Hay más de cinco evidencias de nivelatorios.",
+        "Hay más de cinco evidencias de nivelatorios en la competición.",
         "too_many_placement_matches",
         {
+          competition_id:
+            normalizedCompetitionId,
+
           total:
             evidence.length,
         },
@@ -767,6 +904,29 @@ export const validatePlacementEvidenceSequence =
       const row of
       evidence
     ) {
+      if (
+        normalizedCompetitionId !==
+          null &&
+        Number(
+          row.competition_id,
+        ) !==
+          normalizedCompetitionId
+      ) {
+        throw new PlacementEvidenceError(
+          "La evidencia contiene otra competición.",
+          "placement_competition_mismatch",
+          {
+            expected_competition_id:
+              normalizedCompetitionId,
+
+            received_competition_id:
+              Number(
+                row.competition_id,
+              ),
+          },
+        );
+      }
+
       const number =
         toInteger(
           row
@@ -795,9 +955,12 @@ export const validatePlacementEvidenceSequence =
         )
       ) {
         throw new PlacementEvidenceError(
-          "Hay números de nivelatorio duplicados.",
+          "Hay números de nivelatorio duplicados dentro de la competición.",
           "duplicate_placement_match_number",
           {
+            competition_id:
+              normalizedCompetitionId,
+
             placement_match_number:
               number,
           },
@@ -832,6 +995,9 @@ export const validatePlacementEvidenceSequence =
           "La secuencia de nivelatorios tiene huecos.",
           "placement_sequence_gap",
           {
+            competition_id:
+              normalizedCompetitionId,
+
             expected,
 
             received:

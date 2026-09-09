@@ -9,8 +9,8 @@ import {
 } from "./placementEvidence.service.js";
 
 import {
-  getOfficialRanking,
-} from "./rankingOrder.service.js";
+  getOfficialCompetitionRanking,
+} from "./competitionRanking.service.js";
 
 
 export class PlacementReferenceError extends Error {
@@ -38,8 +38,7 @@ const assertClient = (
 ) => {
   if (
     !client ||
-    typeof client.query !==
-      "function"
+    typeof client.query !== "function"
   ) {
     throw new PlacementReferenceError(
       "Se requiere un cliente PostgreSQL.",
@@ -49,13 +48,38 @@ const assertClient = (
 };
 
 
+const toPositiveInteger = (
+  value,
+  field,
+) => {
+  const number =
+    Number(value);
+
+  if (
+    !Number.isInteger(number) ||
+    number <= 0
+  ) {
+    throw new PlacementReferenceError(
+      `${field} debe ser un entero positivo.`,
+      "invalid_positive_integer",
+      {
+        field,
+        value,
+      },
+    );
+  }
+
+  return number;
+};
+
+
 const normalizePlayer = (
   player,
+  competitionId,
 ) => {
   if (
     !player ||
-    typeof player !==
-      "object" ||
+    typeof player !== "object" ||
     Array.isArray(player)
   ) {
     throw new PlacementReferenceError(
@@ -65,30 +89,53 @@ const normalizePlayer = (
   }
 
   const id =
-    Number(
+    toPositiveInteger(
       player.id,
+      "player.id",
     );
 
-  const matchesPlayed =
-    Number(
-      player
-        .matches_played,
+  const normalizedCompetitionId =
+    toPositiveInteger(
+      competitionId,
+      "competitionId",
     );
+
+  const playerCompetitionId =
+    player.competition_id === undefined ||
+    player.competition_id === null
+      ? normalizedCompetitionId
+      : toPositiveInteger(
+          player.competition_id,
+          "player.competition_id",
+        );
 
   if (
-    !Number.isInteger(id) ||
-    id <= 0
+    playerCompetitionId !==
+    normalizedCompetitionId
   ) {
     throw new PlacementReferenceError(
-      "ID de jugador inválido.",
-      "invalid_player_id",
+      "El jugador pertenece a otra competición.",
+      "player_competition_mismatch",
+      {
+        user_id:
+          id,
+
+        expected_competition_id:
+          normalizedCompetitionId,
+
+        received_competition_id:
+          playerCompetitionId,
+      },
     );
   }
 
+  const matchesPlayed =
+    Number(
+      player.matches_played ?? 0,
+    );
+
   if (
-    !Number.isInteger(
-      matchesPlayed,
-    ) ||
+    !Number.isInteger(matchesPlayed) ||
     matchesPlayed < 0
   ) {
     throw new PlacementReferenceError(
@@ -99,30 +146,34 @@ const normalizePlayer = (
           id,
 
         matches_played:
-          player
-            .matches_played,
+          player.matches_played,
       },
     );
   }
 
+  const placementMatches =
+    Number(
+      player.placement_matches ??
+      PLACEMENT_MATCHES,
+    );
+
   if (
-    !player.city ||
-    !player.gender
+    !Number.isInteger(placementMatches) ||
+    placementMatches !==
+      PLACEMENT_MATCHES
   ) {
     throw new PlacementReferenceError(
-      "El jugador no tiene liga válida.",
-      "player_league_missing",
+      "La competición debe utilizar cinco partidos nivelatorios.",
+      "invalid_placement_match_count",
       {
         user_id:
           id,
 
-        city:
-          player.city ??
-          null,
+        competition_id:
+          normalizedCompetitionId,
 
-        gender:
-          player.gender ??
-          null,
+        placement_matches:
+          placementMatches,
       },
     );
   }
@@ -132,40 +183,21 @@ const normalizePlayer = (
 
     id,
 
+    competition_id:
+      normalizedCompetitionId,
+
     matches_played:
       matchesPlayed,
 
+    placement_matches:
+      placementMatches,
+
     provisional:
       matchesPlayed <
-      PLACEMENT_MATCHES,
+      placementMatches,
   };
 };
 
-
-/*
-  ============================================================
-  POSICIÓN OFICIAL -> PERCENTIL
-  ============================================================
-
-  Fórmula actual:
-
-    ((N - position) / (N - 1)) * 100
-
-  Ejemplo con 20 oficiales:
-
-    #1  -> 100%
-    #10 -> 52.63%
-    #11 -> 47.37%
-    #20 -> 0%
-
-  Con un solo jugador oficial:
-
-    #1 -> 100%
-
-  Esta conversión representa la posición deportiva
-  dentro del universo oficial de la liga.
-  ============================================================
-*/
 
 export const getOfficialPositionPercentile =
   ({
@@ -173,14 +205,10 @@ export const getOfficialPositionPercentile =
     officialPlayerCount,
   }) => {
     const normalizedPosition =
-      Number(
-        position,
-      );
+      Number(position);
 
     const normalizedCount =
-      Number(
-        officialPlayerCount,
-      );
+      Number(officialPlayerCount);
 
     if (
       !Number.isInteger(
@@ -218,7 +246,7 @@ export const getOfficialPositionPercentile =
       normalizedCount
     ) {
       throw new PlacementReferenceError(
-        "La posición oficial supera la cantidad de jugadores.",
+        "La posición supera la cantidad de jugadores oficiales.",
         "official_position_out_of_range",
         {
           position:
@@ -246,8 +274,7 @@ export const getOfficialPositionPercentile =
           normalizedCount -
           1
         )
-      ) *
-      100;
+      ) * 100;
 
     return normalizePercentile(
       percentile,
@@ -255,56 +282,67 @@ export const getOfficialPositionPercentile =
   };
 
 
-/*
-  ============================================================
-  REFERENCIA DE RIVAL OFICIAL
-  ============================================================
-*/
-
 export const getOfficialOpponentReference =
   async (
     client,
-    opponent,
+    {
+      opponent,
+      competitionId,
+    },
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
+      );
 
     const normalizedOpponent =
       normalizePlayer(
         opponent,
+        normalizedCompetitionId,
       );
 
-    const ranking =
-      await getOfficialRanking(
-        client,
+    if (
+      normalizedOpponent.provisional
+    ) {
+      throw new PlacementReferenceError(
+        "El rival todavía es provisional en esta competición.",
+        "opponent_not_official",
         {
-          city:
-            normalizedOpponent.city,
+          opponent_id:
+            normalizedOpponent.id,
 
-          gender:
-            normalizedOpponent.gender,
+          competition_id:
+            normalizedCompetitionId,
         },
+      );
+    }
+
+    const ranking =
+      await getOfficialCompetitionRanking(
+        client,
+        normalizedCompetitionId,
       );
 
     const officialPlayer =
       ranking.find(
         (player) =>
-          Number(
-            player.id,
-          ) ===
+          Number(player.id) ===
           normalizedOpponent.id,
       );
 
-    if (
-      !officialPlayer
-    ) {
+    if (!officialPlayer) {
       throw new PlacementReferenceError(
-        "El rival figura como oficial pero no aparece en el ranking oficial.",
+        "El rival figura como oficial pero no aparece en el ranking de esta competición.",
         "official_opponent_not_ranked",
         {
           opponent_id:
             normalizedOpponent.id,
+
+          competition_id:
+            normalizedCompetitionId,
 
           matches_played:
             normalizedOpponent
@@ -317,30 +355,8 @@ export const getOfficialOpponentReference =
       Number(
         officialPlayer
           .official_position ??
-        officialPlayer
-          .position ??
-        officialPlayer
-          .rank_position,
+        officialPlayer.position,
       );
-
-    if (
-      !Number.isInteger(
-        position,
-      ) ||
-      position < 1
-    ) {
-      throw new PlacementReferenceError(
-        "El ranking oficial no devolvió una posición válida.",
-        "official_position_missing",
-        {
-          opponent_id:
-            normalizedOpponent.id,
-
-          ranking_row:
-            officialPlayer,
-        },
-      );
-    }
 
     const percentile =
       getOfficialPositionPercentile({
@@ -353,6 +369,9 @@ export const getOfficialOpponentReference =
     return {
       opponent_id:
         normalizedOpponent.id,
+
+      competition_id:
+        normalizedCompetitionId,
 
       opponent_reference_type:
         "official",
@@ -372,47 +391,49 @@ export const getOfficialOpponentReference =
   };
 
 
-/*
-  ============================================================
-  REFERENCIA DE RIVAL PROVISIONAL
-  ============================================================
-
-  REGLA CERRADA:
-
-  El provisional vale exactamente el nivel que YA demostró
-  con sus victorias anteriores.
-
-  No existe descuento extra por ser provisional.
-
-  Si no ganó ningún partido:
-    vale 0%.
-
-  Si demostró 68%:
-    vale 68%.
-
-  El partido actual todavía no existe en la evidencia,
-  por lo que no puede inflar su propia referencia.
-  ============================================================
-*/
-
 export const getProvisionalOpponentReference =
   async (
     client,
-    opponent,
+    {
+      opponent,
+      competitionId,
+    },
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
+      );
 
     const normalizedOpponent =
       normalizePlayer(
         opponent,
+        normalizedCompetitionId,
       );
+
+    if (
+      !normalizedOpponent.provisional
+    ) {
+      throw new PlacementReferenceError(
+        "El rival ya es oficial en esta competición.",
+        "opponent_not_provisional",
+        {
+          opponent_id:
+            normalizedOpponent.id,
+
+          competition_id:
+            normalizedCompetitionId,
+        },
+      );
+    }
 
     const evidence =
       await getPlayerPlacementCalculationEvidence(
         client,
         normalizedOpponent.id,
+        normalizedCompetitionId,
       );
 
     if (
@@ -420,15 +441,14 @@ export const getProvisionalOpponentReference =
       PLACEMENT_MATCHES
     ) {
       throw new PlacementReferenceError(
-        "El rival figura como provisional pero ya posee cinco evidencias nivelatorias.",
+        "El rival figura como provisional pero ya posee cinco evidencias en esta competición.",
         "provisional_state_inconsistent",
         {
           opponent_id:
             normalizedOpponent.id,
 
-          matches_played:
-            normalizedOpponent
-              .matches_played,
+          competition_id:
+            normalizedCompetitionId,
 
           evidence_count:
             evidence.length,
@@ -438,15 +458,17 @@ export const getProvisionalOpponentReference =
 
     if (
       evidence.length !==
-      normalizedOpponent
-        .matches_played
+      normalizedOpponent.matches_played
     ) {
       throw new PlacementReferenceError(
-        "El historial nivelatorio del rival provisional está desincronizado.",
+        "El historial nivelatorio del rival está desincronizado dentro de la competición.",
         "provisional_evidence_out_of_sync",
         {
           opponent_id:
             normalizedOpponent.id,
+
+          competition_id:
+            normalizedCompetitionId,
 
           matches_played:
             normalizedOpponent
@@ -463,29 +485,18 @@ export const getProvisionalOpponentReference =
         evidence,
       });
 
-    /*
-      También guardamos cuántos oficiales existían
-      al momento del partido para auditoría.
-
-      Esa cantidad NO altera el percentil demostrado
-      del provisional.
-    */
-
     const officialRanking =
-      await getOfficialRanking(
+      await getOfficialCompetitionRanking(
         client,
-        {
-          city:
-            normalizedOpponent.city,
-
-          gender:
-            normalizedOpponent.gender,
-        },
+        normalizedCompetitionId,
       );
 
     return {
       opponent_id:
         normalizedOpponent.id,
+
+      competition_id:
+        normalizedCompetitionId,
 
       opponent_reference_type:
         "provisional",
@@ -507,8 +518,7 @@ export const getProvisionalOpponentReference =
 
       demonstrated: {
         matches_played:
-          placement
-            .matches_played,
+          placement.matches_played,
 
         wins:
           placement.wins,
@@ -525,8 +535,7 @@ export const getProvisionalOpponentReference =
             .demonstrated_level,
 
         win_factor:
-          placement
-            .win_factor,
+          placement.win_factor,
 
         placement_percentile:
           placement
@@ -536,38 +545,51 @@ export const getProvisionalOpponentReference =
   };
 
 
-/*
-  ============================================================
-  SELECTOR GENERAL
-  ============================================================
-*/
-
 export const getPlacementOpponentReference =
   async (
     client,
-    opponent,
+    {
+      opponent,
+      competitionId,
+    },
   ) => {
-    assertClient(
-      client,
-    );
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
+      );
 
     const normalizedOpponent =
       normalizePlayer(
         opponent,
+        normalizedCompetitionId,
       );
 
     if (
-      normalizedOpponent
-        .provisional
+      normalizedOpponent.provisional
     ) {
       return getProvisionalOpponentReference(
         client,
-        normalizedOpponent,
+        {
+          opponent:
+            normalizedOpponent,
+
+          competitionId:
+            normalizedCompetitionId,
+        },
       );
     }
 
     return getOfficialOpponentReference(
       client,
-      normalizedOpponent,
+      {
+        opponent:
+          normalizedOpponent,
+
+        competitionId:
+          normalizedCompetitionId,
+      },
     );
   };
