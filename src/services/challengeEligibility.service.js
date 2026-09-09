@@ -1,8 +1,4 @@
 import {
-  getPlayerActivityMap,
-} from "./playerActivity.service.js";
-
-import {
   PLACEMENT_MATCHES,
   placementPercentileToTargetPosition,
 } from "./placementLevel.service.js";
@@ -12,97 +8,54 @@ import {
 } from "./placementMatch.service.js";
 
 import {
-  getOfficialRanking,
-} from "./rankingOrder.service.js";
+  getOfficialCompetitionRanking,
+} from "./competitionRanking.service.js";
 
 
-/*
-  ============================================================
-  LA RED
-  ELEGIBILIDAD DE DESAFÍOS
-  ============================================================
+export const MAX_ACTIVE_CHALLENGE_TARGETS = 3;
 
-  REGLAS CENTRALES:
-
-  OFICIALES
-  - usan su posición real del ranking.
-
-  PROVISIONALES
-  - NO se ordenan por Elo 0;
-  - NO se ordenan por cantidad de partidos;
-  - su posición competitiva se estima a partir de su
-    placement_percentile demostrado;
-  - esa posición es solamente virtual;
-  - no consume una posición oficial.
-
-  ALCANCE
-  - se recorre hacia arriba desde la posición competitiva
-    del desafiante;
-  - se habilitan hasta encontrar 3 jugadores ACTIVOS;
-  - todos los INACTIVOS encontrados antes del tercer activo
-    también son desafiables;
-  - un inactivo no consume uno de los 3 lugares activos.
-
-  PROVISIONAL VS PROVISIONAL
-  - sigue permitido;
-  - cada provisional vale el nivel que ya demostró.
-  ============================================================
-*/
-
-
-export const MAX_ACTIVE_CHALLENGE_TARGETS =
-  3;
-
-
-/*
-  ============================================================
-  ERROR
-  ============================================================
-*/
 
 export class ChallengeEligibilityError extends Error {
   constructor(
     message,
-    reason =
-      "challenge_eligibility_error",
-    details =
-      null,
+    reason = "challenge_eligibility_error",
+    details = null,
   ) {
     super(message);
 
-    this.name =
-      "ChallengeEligibilityError";
-
-    this.reason =
-      reason;
-
-    this.details =
-      details;
+    this.name = "ChallengeEligibilityError";
+    this.reason = reason;
+    this.details = details;
   }
 }
 
 
-/*
-  ============================================================
-  HELPERS
-  ============================================================
-*/
+const assertClient = (client) => {
+  if (
+    !client ||
+    typeof client.query !== "function"
+  ) {
+    throw new ChallengeEligibilityError(
+      "Se requiere un cliente PostgreSQL.",
+      "database_client_missing",
+    );
+  }
+};
 
-const normalizeInteger = (
+
+const positiveInteger = (
   value,
   field,
 ) => {
-  const number =
-    Number(value);
+  const number = Number(value);
 
   if (
-    !Number.isInteger(
-      number,
-    )
+    !Number.isInteger(number) ||
+    number <= 0
   ) {
     throw new ChallengeEligibilityError(
-      `${field} debe ser un entero.`,
-      "invalid_integer",
+      `${field} debe ser un entero positivo.`,
+      "invalid_identifier",
       {
         field,
         value,
@@ -114,57 +67,98 @@ const normalizeInteger = (
 };
 
 
+const compareStrings = (
+  a,
+  b,
+) =>
+  String(a ?? "").localeCompare(
+    String(b ?? ""),
+    "es",
+    {
+      sensitivity: "base",
+    },
+  );
+
+
 const normalizePlayer = (
   player,
   label,
+  competitionId,
 ) => {
   if (
     !player ||
-    typeof player !==
-      "object" ||
+    typeof player !== "object" ||
     Array.isArray(player)
   ) {
     throw new ChallengeEligibilityError(
       `${label} inválido.`,
       "invalid_player",
-      {
-        label,
-      },
     );
   }
 
+  const normalizedCompetitionId =
+    positiveInteger(
+      competitionId,
+      "competitionId",
+    );
+
   const id =
-    normalizeInteger(
+    positiveInteger(
       player.id,
       `${label}.id`,
     );
 
+  const playerCompetitionId =
+    player.competition_id ===
+      undefined ||
+    player.competition_id ===
+      null
+      ? normalizedCompetitionId
+      : positiveInteger(
+          player.competition_id,
+          `${label}.competition_id`,
+        );
+
+  if (
+    playerCompetitionId !==
+    normalizedCompetitionId
+  ) {
+    throw new ChallengeEligibilityError(
+      `${label} pertenece a otra competición.`,
+      "player_competition_mismatch",
+      {
+        user_id: id,
+        expected_competition_id:
+          normalizedCompetitionId,
+        received_competition_id:
+          playerCompetitionId,
+      },
+    );
+  }
+
   const rating =
     Number(
-      player.rating,
+      player.rating ?? 0,
     );
 
   const matchesPlayed =
-    normalizeInteger(
-      player
-        .matches_played,
-      `${label}.matches_played`,
+    Number(
+      player.matches_played ?? 0,
     );
 
   if (
-    id <= 0 ||
-    !Number.isFinite(
-      rating,
-    ) ||
+    !Number.isFinite(rating) ||
     rating < 0 ||
+    !Number.isInteger(
+      matchesPlayed,
+    ) ||
     matchesPlayed < 0
   ) {
     throw new ChallengeEligibilityError(
       `Datos inválidos en ${label}.`,
       "invalid_player_data",
       {
-        label,
-        id,
+        user_id: id,
         rating,
         matches_played:
           matchesPlayed,
@@ -176,6 +170,9 @@ const normalizePlayer = (
     ...player,
 
     id,
+
+    competition_id:
+      normalizedCompetitionId,
 
     rating,
 
@@ -189,86 +186,137 @@ const normalizePlayer = (
 };
 
 
-const compareStrings = (
-  a,
-  b,
-) =>
-  String(
-    a ?? "",
-  ).localeCompare(
-    String(
-      b ?? "",
-    ),
-    "es",
-    {
-      sensitivity:
-        "base",
-    },
-  );
-
-
 /*
   ============================================================
-  JUGADORES DE LA LIGA
+  JUGADORES DE UNA COMPETICIÓN
+  ============================================================
+
+  Ya no leemos users.rating/users.matches_played.
+
+  Cada jugador usa:
+    player_competition_stats.rating
+    player_competition_stats.matches_played
+    etc.
+
+  Por lo tanto singles y dobles son independientes.
   ============================================================
 */
 
-export const getLeaguePlayers =
+export const getCompetitionChallengePlayers =
   async (
     client,
-    city,
-    gender,
+    competitionId,
   ) => {
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      positiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
     const result =
       await client.query(
         `
         SELECT
-          id,
-          name,
-          first_name,
-          last_name,
-          phone,
-          city,
-          gender,
-          rating,
-          matches_played,
-          verification_status,
-          role,
+          u.id,
+          u.name,
+          u.first_name,
+          u.last_name,
+          u.phone,
+          u.city,
+          u.gender,
+          u.verification_status,
+          u.role,
 
-          matches_played < $3
-            AS provisional
+          c.id AS competition_id,
+          c.format,
+          c.gender AS competition_gender,
+          c.city AS competition_city,
+          c.team_size,
+          c.placement_matches,
 
-        FROM users
+          COALESCE(
+            pcs.rating,
+            0
+          )::int AS rating,
+
+          COALESCE(
+            pcs.matches_played,
+            0
+          )::int AS matches_played,
+
+          COALESCE(
+            pcs.wins,
+            0
+          )::int AS wins,
+
+          COALESCE(
+            pcs.losses,
+            0
+          )::int AS losses,
+
+          COALESCE(
+            pcs.games_won,
+            0
+          )::int AS games_won,
+
+          COALESCE(
+            pcs.games_lost,
+            0
+          )::int AS games_lost
+
+        FROM users u
+
+        JOIN competitions c
+          ON c.id = $1
+
+        LEFT JOIN player_competition_stats pcs
+          ON pcs.user_id = u.id
+          AND pcs.competition_id = c.id
 
         WHERE
-          role = 'player'
+          u.role = 'player'
 
-          AND verification_status =
+          AND u.verification_status =
             'verified'
 
-          AND city = $1
+          AND u.city =
+            c.city
 
-          AND gender = $2
+          AND u.gender =
+            c.gender
+
+          AND c.active = TRUE
 
         ORDER BY
-          id ASC
+          u.id ASC
         `,
         [
-          city,
-          gender,
-          PLACEMENT_MATCHES,
+          normalizedCompetitionId,
         ],
       );
 
     return result.rows.map(
-      (
-        row,
-      ) => ({
+      (row) => ({
         ...row,
 
         id:
+          Number(row.id),
+
+        competition_id:
           Number(
-            row.id,
+            row.competition_id,
+          ),
+
+        team_size:
+          Number(
+            row.team_size,
+          ),
+
+        placement_matches:
+          Number(
+            row.placement_matches,
           ),
 
         rating:
@@ -278,13 +326,35 @@ export const getLeaguePlayers =
 
         matches_played:
           Number(
-            row
-              .matches_played,
+            row.matches_played,
+          ),
+
+        wins:
+          Number(
+            row.wins,
+          ),
+
+        losses:
+          Number(
+            row.losses,
+          ),
+
+        games_won:
+          Number(
+            row.games_won,
+          ),
+
+        games_lost:
+          Number(
+            row.games_lost,
           ),
 
         provisional:
-          Boolean(
-            row.provisional,
+          Number(
+            row.matches_played,
+          ) <
+          Number(
+            row.placement_matches,
           ),
       }),
     );
@@ -293,9 +363,147 @@ export const getLeaguePlayers =
 
 /*
   ============================================================
-  POSICIÓN OFICIAL
+  ACTIVIDAD POR COMPETICIÓN
+  ============================================================
+
+  La actividad se calcula usando partidos de ESA competición.
+
+  Un jugador puede estar activo en singles e inactivo en dobles.
   ============================================================
 */
+
+export const getCompetitionActivityMap =
+  async (
+    client,
+    competitionId,
+    players,
+  ) => {
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      positiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
+    const result =
+      await client.query(
+        `
+        SELECT
+          mp.user_id,
+
+          MAX(
+            COALESCE(
+              m.completed_at,
+              m.updated_at,
+              m.created_at
+            )
+          ) AS last_match_at
+
+        FROM match_participants mp
+
+        JOIN matches m
+          ON m.id =
+            mp.match_id
+
+        WHERE
+          m.competition_id = $1
+
+          AND m.status =
+            'completed'
+
+        GROUP BY
+          mp.user_id
+        `,
+        [
+          normalizedCompetitionId,
+        ],
+      );
+
+    const lastMatchById =
+      new Map(
+        result.rows.map(
+          (row) => [
+            Number(
+              row.user_id,
+            ),
+            row.last_match_at
+              ? new Date(
+                  row.last_match_at,
+                )
+              : null,
+          ],
+        ),
+      );
+
+    const now =
+      Date.now();
+
+    const thirtyDaysMs =
+      30 *
+      24 *
+      60 *
+      60 *
+      1000;
+
+    const map =
+      new Map();
+
+    for (
+      const player of
+      players
+    ) {
+      const playerId =
+        Number(
+          player.id,
+        );
+
+      const lastMatchAt =
+        lastMatchById.get(
+          playerId,
+        ) ?? null;
+
+      /*
+        Sin partido en esta competición:
+        lo consideramos activo mientras está habilitado
+        para competir.
+
+        El decay histórico se sigue manejando en su servicio
+        específico; acá solamente necesitamos construir
+        la ventana deportiva de desafíos.
+      */
+
+      const inactive =
+        lastMatchAt !== null &&
+        (
+          now -
+          lastMatchAt.getTime()
+        ) >
+        thirtyDaysMs;
+
+      map.set(
+        playerId,
+        {
+          user_id:
+            playerId,
+
+          competition_id:
+            normalizedCompetitionId,
+
+          last_match_at:
+            lastMatchAt,
+
+          active:
+            !inactive,
+
+          inactive,
+        },
+      );
+    }
+
+    return map;
+  };
+
 
 export const getOfficialPositionFromRanking =
   (
@@ -308,8 +516,7 @@ export const getOfficialPositionFromRanking =
 
     if (
       Number(
-        player
-          .matches_played,
+        player.matches_played,
       ) <
       PLACEMENT_MATCHES
     ) {
@@ -318,9 +525,7 @@ export const getOfficialPositionFromRanking =
 
     const row =
       officialRanking.find(
-        (
-          rankingPlayer,
-        ) =>
+        (rankingPlayer) =>
           Number(
             rankingPlayer.id,
           ) ===
@@ -335,8 +540,7 @@ export const getOfficialPositionFromRanking =
 
     const position =
       Number(
-        row
-          .official_position ??
+        row.official_position ??
         row.position ??
         row.rank_position,
       );
@@ -349,28 +553,28 @@ export const getOfficialPositionFromRanking =
   };
 
 
-/*
-  ============================================================
-  NIVEL ACTUAL DE LOS PROVISIONALES
-  ============================================================
-*/
-
 export const buildPlacementLevelMap =
   async (
     client,
     players,
+    competitionId,
   ) => {
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      positiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
     const map =
       new Map();
 
     const provisionalPlayers =
       players.filter(
-        (
-          player,
-        ) =>
+        (player) =>
           Number(
-            player
-              .matches_played,
+            player.matches_played,
           ) <
           PLACEMENT_MATCHES,
       );
@@ -383,28 +587,19 @@ export const buildPlacementLevelMap =
         await getCurrentPlacementLevel(
           client,
           player.id,
+          normalizedCompetitionId,
         );
-
-      /*
-        Protección de consistencia.
-
-        No queremos posicionar un provisional
-        con evidence 2/5 si users.matches_played
-        dice 3/5.
-      */
 
       if (
         Number(
-          level
-            .matches_played,
+          level.matches_played,
         ) !==
         Number(
-          player
-            .matches_played,
+          player.matches_played,
         )
       ) {
         throw new ChallengeEligibilityError(
-          "El historial nivelatorio del jugador está desincronizado.",
+          "El historial nivelatorio del jugador está desincronizado dentro de la competición.",
           "placement_evidence_out_of_sync",
           {
             user_id:
@@ -412,16 +607,17 @@ export const buildPlacementLevelMap =
                 player.id,
               ),
 
+            competition_id:
+              normalizedCompetitionId,
+
             matches_played:
               Number(
-                player
-                  .matches_played,
+                player.matches_played,
               ),
 
             evidence_count:
               Number(
-                level
-                  .matches_played,
+                level.matches_played,
               ),
           },
         );
@@ -439,31 +635,6 @@ export const buildPlacementLevelMap =
   };
 
 
-/*
-  ============================================================
-  POSICIÓN VIRTUAL DEL PROVISIONAL
-  ============================================================
-
-  Ya NO utiliza:
-
-  - rating;
-  - matches_played como fuerza;
-  - Elo provisional.
-
-  Usa placement_percentile demostrado.
-
-  Ejemplo:
-
-  percentil 70%
-      ↓
-  zona competitiva aproximadamente top 30%
-      ↓
-  posición virtual calculada respecto de los oficiales.
-
-  Un provisional todavía NO aparece como puesto oficial.
-  ============================================================
-*/
-
 export const getVirtualPositionFromRanking =
   (
     player,
@@ -476,8 +647,7 @@ export const getVirtualPositionFromRanking =
 
     if (
       Number(
-        player
-          .matches_played,
+        player.matches_played,
       ) >=
       PLACEMENT_MATCHES
     ) {
@@ -518,17 +688,10 @@ export const getVirtualPositionFromRanking =
       });
 
     return Number(
-      placement
-        .target_position,
+      placement.target_position,
     );
   };
 
-
-/*
-  ============================================================
-  POSICIÓN COMPETITIVA
-  ============================================================
-*/
 
 export const getCompetitivePosition =
   (
@@ -543,14 +706,11 @@ export const getCompetitivePosition =
 
     const provisional =
       Number(
-        player
-          .matches_played,
+        player.matches_played,
       ) <
       PLACEMENT_MATCHES;
 
-    if (
-      provisional
-    ) {
+    if (provisional) {
       return getVirtualPositionFromRanking(
         player,
         officialRanking,
@@ -564,12 +724,6 @@ export const getCompetitivePosition =
     );
   };
 
-
-/*
-  ============================================================
-  POSICIONES COMPETITIVAS
-  ============================================================
-*/
 
 export const buildCompetitivePositions =
   (
@@ -602,25 +756,6 @@ export const buildCompetitivePositions =
   };
 
 
-/*
-  ============================================================
-  ORDEN CUANDO DOS JUGADORES COMPARTEN ZONA VIRTUAL
-  ============================================================
-
-  La posición virtual puede coincidir.
-
-  Para provisionales usamos primero el nivel demostrado.
-
-  Si el nivel es idéntico:
-  - mejor balance W-L;
-  - apellido;
-  - nombre;
-  - id.
-
-  Los oficiales conservan su puesto oficial exacto.
-  ============================================================
-*/
-
 const compareCompetitiveCandidates =
   (
     a,
@@ -629,14 +764,10 @@ const compareCompetitiveCandidates =
     placementLevelById,
   ) => {
     const aId =
-      Number(
-        a.id,
-      );
+      Number(a.id);
 
     const bId =
-      Number(
-        b.id,
-      );
+      Number(b.id);
 
     const aPosition =
       competitivePositionById.get(
@@ -647,13 +778,6 @@ const compareCompetitiveCandidates =
       competitivePositionById.get(
         bId,
       );
-
-    /*
-      Recorremos desde el rival más cercano
-      hacia arriba.
-
-      #9 antes que #8 para desafiante #10.
-    */
 
     if (
       aPosition !==
@@ -674,16 +798,6 @@ const compareCompetitiveCandidates =
       Boolean(
         b.provisional,
       );
-
-    /*
-      Si un provisional tiene exactamente la zona
-      de un oficial, lo consideramos insertado antes
-      de ese puesto oficial.
-
-      Ejemplo:
-      target_position = 7
-      significa virtualmente "zona #7".
-    */
 
     if (
       aProvisional !==
@@ -729,22 +843,18 @@ const compareCompetitiveCandidates =
 
       const aBalance =
         Number(
-          aLevel?.wins ??
-          0,
+          aLevel?.wins ?? 0,
         ) -
         Number(
-          aLevel?.losses ??
-          0,
+          aLevel?.losses ?? 0,
         );
 
       const bBalance =
         Number(
-          bLevel?.wins ??
-          0,
+          bLevel?.wins ?? 0,
         ) -
         Number(
-          bLevel?.losses ??
-          0,
+          bLevel?.losses ?? 0,
         );
 
       if (
@@ -774,9 +884,10 @@ const compareCompetitiveCandidates =
     const firstNameDifference =
       compareStrings(
         a.first_name ??
-          a.name,
+        a.name,
+
         b.first_name ??
-          b.name,
+        b.name,
       );
 
     if (
@@ -786,42 +897,9 @@ const compareCompetitiveCandidates =
       return firstNameDifference;
     }
 
-    return (
-      aId -
-      bId
-    );
+    return aId - bId;
   };
 
-
-/*
-  ============================================================
-  VENTANA:
-  3 ACTIVOS + TODOS LOS INACTIVOS DEL CAMINO
-  ============================================================
-
-  Ejemplo:
-
-  desafiante #10
-
-  #9 activo
-  #8 inactivo
-  #7 activo
-  #6 inactivo
-  #5 inactivo
-  #4 activo
-  ----------------
-  corte
-
-  Habilitados:
-  #9 #8 #7 #6 #5 #4
-
-  Activos consumidos:
-  3
-
-  Inactivos:
-  no consumen cupo.
-  ============================================================
-*/
 
 export const buildActivityChallengeWindow =
   ({
@@ -835,6 +913,8 @@ export const buildActivityChallengeWindow =
       normalizePlayer(
         challenger,
         "challenger",
+        challenger
+          .competition_id,
       );
 
     const challengerCompetitivePosition =
@@ -875,8 +955,7 @@ export const buildActivityChallengeWindow =
 
         inactiveIds,
 
-        activeCount:
-          0,
+        activeCount: 0,
 
         cutoffCompetitivePosition:
           null,
@@ -886,9 +965,7 @@ export const buildActivityChallengeWindow =
     const candidates =
       players
         .filter(
-          (
-            player,
-          ) => {
+          (player) => {
             const playerId =
               Number(
                 player.id,
@@ -911,15 +988,12 @@ export const buildActivityChallengeWindow =
                 position,
               ) &&
               position <
-                challengerCompetitivePosition
+              challengerCompetitivePosition
             );
           },
         )
         .sort(
-          (
-            a,
-            b,
-          ) =>
+          (a, b) =>
             compareCompetitiveCandidates(
               a,
               b,
@@ -928,8 +1002,7 @@ export const buildActivityChallengeWindow =
             ),
         );
 
-    let activeCount =
-      0;
+    let activeCount = 0;
 
     let cutoffCompetitivePosition =
       null;
@@ -954,11 +1027,6 @@ export const buildActivityChallengeWindow =
         activityById.get(
           candidateId,
         );
-
-      /*
-        Si no conocemos la actividad,
-        no habilitamos silenciosamente.
-      */
 
       if (!activity) {
         continue;
@@ -1008,76 +1076,79 @@ export const buildActivityChallengeWindow =
   };
 
 
-/*
-  ============================================================
-  CONTEXTO CENTRAL
-  ============================================================
-*/
-
 export const getChallengeEligibilityContext =
   async (
     client,
     challenger,
+    competitionId,
   ) => {
-    const normalizedChallenger =
+    assertClient(client);
+
+    const normalizedCompetitionId =
+      positiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
+    const players =
+      await getCompetitionChallengePlayers(
+        client,
+        normalizedCompetitionId,
+      );
+
+    const normalizedChallengerInput =
       normalizePlayer(
         challenger,
         "challenger",
+        normalizedCompetitionId,
+      );
+
+    const challengerFromCompetition =
+      players.find(
+        (player) =>
+          Number(
+            player.id,
+          ) ===
+          normalizedChallengerInput.id,
       );
 
     if (
-      !normalizedChallenger.city ||
-      !normalizedChallenger.gender
+      !challengerFromCompetition
     ) {
       throw new ChallengeEligibilityError(
-        "El desafiante no posee ciudad o liga válidas.",
-        "challenger_league_missing",
+        "El desafiante no pertenece a esta competición.",
+        "challenger_not_in_competition",
         {
           challenger_id:
-            normalizedChallenger.id,
+            normalizedChallengerInput.id,
+
+          competition_id:
+            normalizedCompetitionId,
         },
       );
     }
 
-    /*
-      Primero necesitamos ranking y jugadores.
-
-      Después calculamos placement de los provisionales.
-      Activity puede cargarse en paralelo.
-    */
+    const normalizedChallenger =
+      normalizePlayer(
+        challengerFromCompetition,
+        "challenger",
+        normalizedCompetitionId,
+      );
 
     const [
       officialRanking,
-      players,
       activityById,
     ] =
       await Promise.all([
-        getOfficialRanking(
+        getOfficialCompetitionRanking(
           client,
-          {
-            city:
-              normalizedChallenger.city,
-
-            gender:
-              normalizedChallenger.gender,
-          },
+          normalizedCompetitionId,
         ),
 
-        getLeaguePlayers(
+        getCompetitionActivityMap(
           client,
-          normalizedChallenger.city,
-          normalizedChallenger.gender,
-        ),
-
-        getPlayerActivityMap(
-          client,
-          {
-            city:
-              normalizedChallenger.city,
-
-            gender:
-              normalizedChallenger.gender,
-          },
+          normalizedCompetitionId,
+          players,
         ),
       ]);
 
@@ -1085,6 +1156,7 @@ export const getChallengeEligibilityContext =
       await buildPlacementLevelMap(
         client,
         players,
+        normalizedCompetitionId,
       );
 
     const window =
@@ -1101,25 +1173,18 @@ export const getChallengeEligibilityContext =
         activityById,
       });
 
-    /*
-      PROVISIONAL VS PROVISIONAL
-
-      Sigue permitido.
-
-      No quitamos jugadores de la ventana normal.
-      Sumamos los otros provisionales de la liga como
-      candidatos deportivos.
-    */
-
     const sportEligibleIds =
       new Set(
-        window
-          .eligibleIds,
+        window.eligibleIds,
       );
 
+    /*
+      Provisional vs provisional sigue permitido,
+      pero únicamente dentro de la misma competición.
+    */
+
     if (
-      normalizedChallenger
-        .provisional
+      normalizedChallenger.provisional
     ) {
       for (
         const player of
@@ -1156,13 +1221,15 @@ export const getChallengeEligibilityContext =
       );
 
     const challengerVirtualPosition =
-      normalizedChallenger
-        .provisional
+      normalizedChallenger.provisional
         ? window
             .challengerCompetitivePosition
         : null;
 
     return {
+      competition_id:
+        normalizedCompetitionId,
+
       challenger:
         normalizedChallenger,
 
@@ -1189,16 +1256,13 @@ export const getChallengeEligibilityContext =
       sportEligibleIds,
 
       activeEligibleIds:
-        window
-          .activeIds,
+        window.activeIds,
 
       inactiveEligibleIds:
-        window
-          .inactiveIds,
+        window.inactiveIds,
 
       activeTargetsFound:
-        window
-          .activeCount,
+        window.activeCount,
 
       cutoffCompetitivePosition:
         window
@@ -1207,28 +1271,31 @@ export const getChallengeEligibilityContext =
   };
 
 
-/*
-  ============================================================
-  VALIDAR RIVAL CONCRETO
-  ============================================================
-*/
-
 export const validateChallengeSportEligibility =
   async (
     client,
     challenger,
     challenged,
+    competitionId,
   ) => {
+    const normalizedCompetitionId =
+      positiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
     const normalizedChallenger =
       normalizePlayer(
         challenger,
         "challenger",
+        normalizedCompetitionId,
       );
 
     const normalizedChallenged =
       normalizePlayer(
         challenged,
         "challenged",
+        normalizedCompetitionId,
       );
 
     if (
@@ -1236,46 +1303,10 @@ export const validateChallengeSportEligibility =
       normalizedChallenged.id
     ) {
       return {
-        allowed:
-          false,
-
-        reason:
-          "self",
-
+        allowed: false,
+        reason: "self",
         message:
           "No podés desafiarte a vos mismo.",
-      };
-    }
-
-    if (
-      normalizedChallenger.city !==
-      normalizedChallenged.city
-    ) {
-      return {
-        allowed:
-          false,
-
-        reason:
-          "different_city",
-
-        message:
-          "Solo podés desafiar jugadores de tu misma ciudad.",
-      };
-    }
-
-    if (
-      normalizedChallenger.gender !==
-      normalizedChallenged.gender
-    ) {
-      return {
-        allowed:
-          false,
-
-        reason:
-          "different_league",
-
-        message:
-          "Solo podés desafiar jugadores de tu misma liga.",
       };
     }
 
@@ -1283,7 +1314,34 @@ export const validateChallengeSportEligibility =
       await getChallengeEligibilityContext(
         client,
         normalizedChallenger,
+        normalizedCompetitionId,
       );
+
+    const challengedFromCompetition =
+      context.players.find(
+        (player) =>
+          Number(
+            player.id,
+          ) ===
+          normalizedChallenged.id,
+      );
+
+    if (
+      !challengedFromCompetition
+    ) {
+      return {
+        allowed: false,
+
+        reason:
+          "different_competition",
+
+        message:
+          "Solo podés desafiar jugadores de la misma competición.",
+
+        competition_id:
+          normalizedCompetitionId,
+      };
+    }
 
     const challengedCompetitivePosition =
       context
@@ -1295,13 +1353,12 @@ export const validateChallengeSportEligibility =
 
     const challengedOfficialPosition =
       getOfficialPositionFromRanking(
-        normalizedChallenged,
-        context
-          .officialRanking,
+        challengedFromCompetition,
+        context.officialRanking,
       );
 
     const challengedVirtualPosition =
-      normalizedChallenged
+      challengedFromCompetition
         .provisional
         ? challengedCompetitivePosition
         : null;
@@ -1311,13 +1368,13 @@ export const validateChallengeSportEligibility =
         .activityById
         .get(
           normalizedChallenged.id,
-        ) ||
+        ) ??
       null;
 
     const provisionalVsProvisional =
       normalizedChallenger
         .provisional &&
-      normalizedChallenged
+      challengedFromCompetition
         .provisional;
 
     const withinActivityWindow =
@@ -1331,8 +1388,7 @@ export const validateChallengeSportEligibility =
       !withinActivityWindow
     ) {
       return {
-        allowed:
-          false,
+        allowed: false,
 
         reason:
           "ranking_activity_window",
@@ -1340,8 +1396,11 @@ export const validateChallengeSportEligibility =
         message:
           normalizedChallenger
             .provisional
-            ? "Como provisional, podés desafiar a otros provisionales y a los rivales comprendidos en la ventana de hasta 3 jugadores activos hacia arriba, incluyendo los inactivos intermedios."
-            : "Podés desafiar hacia arriba hasta encontrar 3 jugadores activos. Todos los jugadores inactivos que aparezcan en ese recorrido también están habilitados.",
+            ? "Como provisional, podés desafiar a otros provisionales de esta competición y a los rivales habilitados por la ventana competitiva."
+            : "Podés desafiar hacia arriba hasta encontrar 3 jugadores activos de esta competición, incluyendo los inactivos intermedios.",
+
+        competition_id:
+          normalizedCompetitionId,
 
         challengerPosition:
           context
@@ -1393,18 +1452,19 @@ export const validateChallengeSportEligibility =
         );
 
     return {
-      allowed:
-        true,
+      allowed: true,
 
-      reason:
-        null,
+      reason: null,
 
       message:
         provisionalVsProvisional
-          ? "Desafío provisional contra provisional habilitado."
+          ? "Desafío provisional contra provisional habilitado dentro de la competición."
           : inactiveInPath
-            ? "Rival inactivo habilitado dentro del recorrido hacia los 3 rivales activos."
+            ? "Rival inactivo habilitado dentro del recorrido competitivo."
             : "Rival habilitado dentro de la ventana competitiva.",
+
+      competition_id:
+        normalizedCompetitionId,
 
       challengerPosition:
         context
@@ -1454,29 +1514,22 @@ export const validateChallengeSportEligibility =
   };
 
 
-/*
-  ============================================================
-  RIVALES DEPORTIVAMENTE HABILITADOS
-  ============================================================
-*/
-
 export const getSportEligibleOpponents =
   async (
     client,
     challenger,
+    competitionId,
   ) => {
     const context =
       await getChallengeEligibilityContext(
         client,
         challenger,
+        competitionId,
       );
 
-    return context
-      .players
+    return context.players
       .filter(
-        (
-          player,
-        ) =>
+        (player) =>
           context
             .sportEligibleIds
             .has(
@@ -1486,9 +1539,7 @@ export const getSportEligibleOpponents =
             ),
       )
       .map(
-        (
-          player,
-        ) => {
+        (player) => {
           const playerId =
             Number(
               player.id,
@@ -1499,7 +1550,7 @@ export const getSportEligibleOpponents =
               .activityById
               .get(
                 playerId,
-              ) ||
+              ) ??
             null;
 
           const placement =
@@ -1507,11 +1558,15 @@ export const getSportEligibleOpponents =
               .placementLevelById
               .get(
                 playerId,
-              ) ||
+              ) ??
             null;
 
           return {
             ...player,
+
+            competition_id:
+              context
+                .competition_id,
 
             competitive_position:
               context
@@ -1527,13 +1582,11 @@ export const getSportEligibleOpponents =
               null,
 
             placement_wins:
-              placement
-                ?.wins ??
+              placement?.wins ??
               null,
 
             placement_losses:
-              placement
-                ?.losses ??
+              placement?.losses ??
               null,
 
             placement_matches:
@@ -1542,13 +1595,11 @@ export const getSportEligibleOpponents =
               null,
 
             active:
-              activity
-                ?.active ??
+              activity?.active ??
               null,
 
             inactive:
-              activity
-                ?.inactive ??
+              activity?.inactive ??
               null,
 
             counts_as_active_target:
