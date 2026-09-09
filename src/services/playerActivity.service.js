@@ -3,7 +3,7 @@ import { pool } from "../db.js";
 import {
   OFFICIAL_ELO_FLOOR,
   PLACEMENT_MATCHES,
-} from "./eloMatch.service.js";
+} from "./placementLevel.service.js";
 
 
 /*
@@ -266,17 +266,6 @@ const loadActivityRows = async (
     );
   }
 
-  /*
-    Cuando se va a modificar Elo,
-    primero bloqueamos las filas de users.
-
-    Esto serializa:
-    - descuentos de inactividad;
-    - confirmaciones de partidos;
-    - otros cambios de Elo que también
-      bloqueen al jugador.
-  */
-
   if (lockPlayers) {
     await client.query(
       `
@@ -459,14 +448,6 @@ export const calculatePlayerActivity = ({
         DAY_MS,
     );
 
-  /*
-    Exactamente a los 30 días
-    todavía está activo.
-
-    Pasa a inactivo cuando supera
-    los 30 días.
-  */
-
   const inactive =
     elapsedMs >
     ACTIVITY_WINDOW_MS;
@@ -615,12 +596,9 @@ export const getPlayerActivityMap =
     piso 100.
 
   OFICIAL YA DEBAJO DE 100:
-    piso 0 para este cálculo.
+    piso 0.
 
-  Esto evita que una penalización
-  accidentalmente le aumente el Elo
-  a un oficial que quedó debajo de 100
-  por la regla especial del #1.
+  Una penalización nunca puede aumentar Elo.
   ============================================================
 */
 
@@ -822,15 +800,6 @@ const applyDecayToPlayer = async (
       },
     );
 
-  /*
-    El rating de users ya contiene
-    cualquier decay previamente aplicado.
-
-    Por eso comenzamos desde el valor
-    actual y solamente procesamos meses
-    faltantes.
-  */
-
   let currentRating =
     activity.rating;
 
@@ -859,14 +828,6 @@ const applyDecayToPlayer = async (
         matchesPlayed:
           activity.matches_played,
       });
-
-    /*
-      Momento histórico exacto del evento.
-
-      Ejemplo:
-      anchor + 30 días = mes 1.
-      anchor + 60 días = mes 2.
-    */
 
     const decayAt =
       new Date(
@@ -936,14 +897,6 @@ const applyDecayToPlayer = async (
           monthNumber,
         ],
       );
-
-    /*
-      La fila de users está bloqueada.
-
-      El índice único de migration_010
-      evita que un mismo ciclo/mes
-      se registre dos veces.
-    */
 
     if (
       !inserted.rowCount
@@ -1066,10 +1019,6 @@ export const applyPendingInactivityDecay =
         "now",
       );
 
-    /*
-      Bloqueamos primero los jugadores.
-    */
-
     const players =
       await loadActivityRows(
         client,
@@ -1137,10 +1086,6 @@ export const applyPendingInactivityDecay =
   ============================================================
   EJECUCIÓN AUTÓNOMA
   ============================================================
-
-  Para endpoints o tareas donde todavía
-  no existe una transacción abierta.
-  ============================================================
 */
 
 export const runPendingInactivityDecay =
@@ -1180,7 +1125,7 @@ export const runPendingInactivityDecay =
           "ROLLBACK",
         );
       } catch {
-        // La conexión se libera abajo.
+        // conexión liberada abajo
       }
 
       throw error;

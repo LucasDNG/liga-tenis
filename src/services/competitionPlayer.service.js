@@ -66,6 +66,91 @@ const positiveInteger = (
 };
 
 
+const nonNegativeInteger = (
+  value,
+  field,
+) => {
+  const number =
+    Number(value);
+
+  if (
+    !Number.isInteger(
+      number,
+    ) ||
+    number < 0
+  ) {
+    throw new CompetitionPlayerError(
+      `${field} debe ser un entero no negativo.`,
+      "invalid_competition_stat",
+      {
+        field,
+        value,
+      },
+    );
+  }
+
+  return number;
+};
+
+
+const uniquePositiveIntegers = (
+  values,
+  field,
+) => {
+  if (
+    !Array.isArray(
+      values,
+    ) ||
+    values.length === 0
+  ) {
+    throw new CompetitionPlayerError(
+      `${field} debe contener al menos un identificador.`,
+      "invalid_identifier_list",
+      {
+        field,
+        value:
+          values,
+      },
+    );
+  }
+
+  const normalized =
+    values.map(
+      (
+        value,
+      ) =>
+        positiveInteger(
+          value,
+          field,
+        ),
+    );
+
+  const unique =
+    [
+      ...new Set(
+        normalized,
+      ),
+    ];
+
+  if (
+    unique.length !==
+    normalized.length
+  ) {
+    throw new CompetitionPlayerError(
+      `${field} contiene identificadores repetidos.`,
+      "duplicate_identifier",
+      {
+        field,
+        value:
+          values,
+      },
+    );
+  }
+
+  return unique;
+};
+
+
 const normalizePlayerRow = (
   row,
 ) => {
@@ -85,10 +170,32 @@ const normalizePlayerRow = (
         PLACEMENT_MATCHES,
     );
 
+  const savedName =
+    String(
+      row.name ??
+        "",
+    ).trim();
+
+  const fallbackName =
+    [
+      row.first_name,
+      row.last_name,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
   return {
     id:
       Number(
-        row.id,
+        row.id ??
+          row.user_id,
+      ),
+
+    user_id:
+      Number(
+        row.user_id ??
+          row.id,
       ),
 
     first_name:
@@ -98,12 +205,12 @@ const normalizePlayerRow = (
       row.last_name,
 
     name:
-      [
-        row.last_name,
-        row.first_name,
-      ]
-        .filter(Boolean)
-        .join(" "),
+      savedName ||
+      fallbackName,
+
+    phone:
+      row.phone ??
+      null,
 
     gender:
       row.gender,
@@ -187,6 +294,63 @@ const normalizePlayerRow = (
 };
 
 
+const validateCompetitionPlayerRow = (
+  row,
+  {
+    userId,
+    competitionId,
+  },
+) => {
+  if (
+    row.role !==
+    "player"
+  ) {
+    throw new CompetitionPlayerError(
+      "El usuario no es un jugador.",
+      "user_is_not_player",
+      {
+        user_id:
+          userId,
+      },
+    );
+  }
+
+  if (
+    row.gender !==
+    row.competition_gender
+  ) {
+    throw new CompetitionPlayerError(
+      "El género del jugador no corresponde a la competición.",
+      "competition_gender_mismatch",
+      {
+        user_id:
+          userId,
+
+        competition_id:
+          competitionId,
+      },
+    );
+  }
+
+  if (
+    row.city !==
+    row.competition_city
+  ) {
+    throw new CompetitionPlayerError(
+      "La ciudad del jugador no corresponde a la competición.",
+      "competition_city_mismatch",
+      {
+        user_id:
+          userId,
+
+        competition_id:
+          competitionId,
+      },
+    );
+  }
+};
+
+
 export const getCompetitionPlayer =
   async (
     client,
@@ -222,8 +386,11 @@ export const getCompetitionPlayer =
         `
         SELECT
           u.id,
+          u.id AS user_id,
+          u.name,
           u.first_name,
           u.last_name,
+          u.phone,
           u.gender,
           u.city,
           u.role,
@@ -251,8 +418,10 @@ export const getCompetitionPlayer =
           ON c.id = $2
 
         LEFT JOIN player_competition_stats pcs
-          ON pcs.user_id = u.id
-          AND pcs.competition_id = c.id
+          ON pcs.user_id =
+            u.id
+          AND pcs.competition_id =
+            c.id
 
         WHERE
           u.id = $1
@@ -276,53 +445,16 @@ export const getCompetitionPlayer =
     const row =
       result.rows[0];
 
-    if (
-      row.role !==
-      "player"
-    ) {
-      throw new CompetitionPlayerError(
-        "El usuario no es un jugador.",
-        "user_is_not_player",
-        {
-          user_id:
-            normalizedUserId,
-        },
-      );
-    }
+    validateCompetitionPlayerRow(
+      row,
+      {
+        userId:
+          normalizedUserId,
 
-    if (
-      row.gender !==
-      row.competition_gender
-    ) {
-      throw new CompetitionPlayerError(
-        "El género del jugador no corresponde a la competición.",
-        "competition_gender_mismatch",
-        {
-          user_id:
-            normalizedUserId,
-
-          competition_id:
-            normalizedCompetitionId,
-        },
-      );
-    }
-
-    if (
-      row.city !==
-      row.competition_city
-    ) {
-      throw new CompetitionPlayerError(
-        "La ciudad del jugador no corresponde a la competición.",
-        "competition_city_mismatch",
-        {
-          user_id:
-            normalizedUserId,
-
-          competition_id:
-            normalizedCompetitionId,
-        },
-      );
-    }
+        competitionId:
+          normalizedCompetitionId,
+      },
+    );
 
     return normalizePlayerRow(
       row,
@@ -384,11 +516,19 @@ export const ensureCompetitionPlayer =
       );
 
     if (
-      compatibility.rowCount === 0
+      compatibility.rowCount ===
+      0
     ) {
       throw new CompetitionPlayerError(
         "No existe el jugador o la competición.",
         "player_or_competition_not_found",
+        {
+          user_id:
+            normalizedUserId,
+
+          competition_id:
+            normalizedCompetitionId,
+        },
       );
     }
 
@@ -402,23 +542,32 @@ export const ensureCompetitionPlayer =
       throw new CompetitionPlayerError(
         "El usuario no es un jugador.",
         "user_is_not_player",
+        {
+          user_id:
+            normalizedUserId,
+        },
       );
     }
 
     if (
-      row.active !== true
+      row.active !==
+      true
     ) {
       throw new CompetitionPlayerError(
         "La competición está inactiva.",
         "competition_inactive",
+        {
+          competition_id:
+            normalizedCompetitionId,
+        },
       );
     }
 
     if (
       row.user_gender !==
-      row.competition_gender ||
+        row.competition_gender ||
       row.user_city !==
-      row.competition_city
+        row.competition_city
     ) {
       throw new CompetitionPlayerError(
         "El jugador no pertenece a esta competición.",
@@ -503,8 +652,11 @@ export const getCompetitionPlayers =
         `
         SELECT
           u.id,
+          u.id AS user_id,
+          u.name,
           u.first_name,
           u.last_name,
+          u.phone,
           u.gender,
           u.city,
           u.role,
@@ -529,7 +681,8 @@ export const getCompetitionPlayers =
         FROM player_competition_stats pcs
 
         JOIN users u
-          ON u.id = pcs.user_id
+          ON u.id =
+            pcs.user_id
 
         JOIN competitions c
           ON c.id =
@@ -541,8 +694,18 @@ export const getCompetitionPlayers =
 
         ORDER BY
           pcs.rating DESC,
-          u.last_name ASC,
-          u.first_name ASC,
+          LOWER(
+            COALESCE(
+              u.last_name,
+              ''
+            )
+          ) ASC,
+          LOWER(
+            COALESCE(
+              u.first_name,
+              ''
+            )
+          ) ASC,
           u.id ASC
         `,
         [
@@ -588,49 +751,41 @@ export const updateCompetitionPlayerStats =
 
     const values = {
       rating:
-        Number(rating),
+        nonNegativeInteger(
+          rating,
+          "rating",
+        ),
 
       matchesPlayed:
-        Number(matchesPlayed),
+        nonNegativeInteger(
+          matchesPlayed,
+          "matchesPlayed",
+        ),
 
       wins:
-        Number(wins),
+        nonNegativeInteger(
+          wins,
+          "wins",
+        ),
 
       losses:
-        Number(losses),
+        nonNegativeInteger(
+          losses,
+          "losses",
+        ),
 
       gamesWon:
-        Number(gamesWon),
+        nonNegativeInteger(
+          gamesWon,
+          "gamesWon",
+        ),
 
       gamesLost:
-        Number(gamesLost),
+        nonNegativeInteger(
+          gamesLost,
+          "gamesLost",
+        ),
     };
-
-    for (
-      const [
-        field,
-        value,
-      ] of
-      Object.entries(
-        values,
-      )
-    ) {
-      if (
-        !Number.isInteger(
-          value,
-        ) ||
-        value < 0
-      ) {
-        throw new CompetitionPlayerError(
-          `${field} debe ser un entero no negativo.`,
-          "invalid_competition_stat",
-          {
-            field,
-            value,
-          },
-        );
-      }
-    }
 
     const result =
       await client.query(
@@ -665,7 +820,8 @@ export const updateCompetitionPlayerStats =
       );
 
     if (
-      result.rowCount === 0
+      result.rowCount ===
+      0
     ) {
       throw new CompetitionPlayerError(
         "No existen estadísticas del jugador en esta competición.",
@@ -680,5 +836,401 @@ export const updateCompetitionPlayerStats =
       );
     }
 
-    return result.rows[0];
+    return normalizePlayerRow({
+      ...result.rows[0],
+
+      id:
+        normalizedUserId,
+
+      user_id:
+        normalizedUserId,
+
+      competition_id:
+        normalizedCompetitionId,
+    });
   };
+
+
+export const lockCompetitionPlayers =
+  async (
+    client,
+    {
+      competitionId,
+      userIds,
+    },
+  ) => {
+    assertClient(
+      client,
+    );
+
+    const normalizedCompetitionId =
+      positiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
+    const normalizedUserIds =
+      uniquePositiveIntegers(
+        userIds,
+        "userIds",
+      );
+
+    /*
+      Las filas deben existir antes del lock.
+      No hacemos INSERT acá porque un helper llamado
+      "lock" no debe modificar silenciosamente el modelo.
+    */
+
+    const result =
+      await client.query(
+        `
+        SELECT
+          u.id,
+          u.id AS user_id,
+          u.name,
+          u.first_name,
+          u.last_name,
+          u.phone,
+          u.gender,
+          u.city,
+          u.role,
+          u.verification_status,
+
+          c.id AS competition_id,
+          c.name AS competition_name,
+          c.format,
+          c.gender AS competition_gender,
+          c.city AS competition_city,
+          c.team_size,
+          c.placement_matches,
+          c.active AS competition_active,
+
+          pcs.rating,
+          pcs.matches_played,
+          pcs.wins,
+          pcs.losses,
+          pcs.games_won,
+          pcs.games_lost
+
+        FROM player_competition_stats pcs
+
+        JOIN users u
+          ON u.id =
+            pcs.user_id
+
+        JOIN competitions c
+          ON c.id =
+            pcs.competition_id
+
+        WHERE
+          pcs.competition_id = $1
+
+          AND pcs.user_id =
+            ANY($2::int[])
+
+        ORDER BY
+          pcs.user_id ASC
+
+        FOR UPDATE OF pcs
+        `,
+        [
+          normalizedCompetitionId,
+          normalizedUserIds,
+        ],
+      );
+
+    if (
+      result.rowCount !==
+      normalizedUserIds.length
+    ) {
+      throw new CompetitionPlayerError(
+        "No existen estadísticas de todos los jugadores en esta competición.",
+        "competition_players_not_found",
+        {
+          competition_id:
+            normalizedCompetitionId,
+
+          expected_user_ids:
+            normalizedUserIds,
+
+          found_user_ids:
+            result.rows.map(
+              (
+                row,
+              ) =>
+                Number(
+                  row.user_id ??
+                    row.id,
+                ),
+            ),
+        },
+      );
+    }
+
+    const players =
+      result.rows.map(
+        normalizePlayerRow,
+      );
+
+    for (
+      const player of
+      players
+    ) {
+      validateCompetitionPlayerRow(
+        {
+          ...player,
+
+          competition_gender:
+            player
+              .competition_gender,
+
+          competition_city:
+            player
+              .competition_city,
+        },
+        {
+          userId:
+            player.id,
+
+          competitionId:
+            normalizedCompetitionId,
+        },
+      );
+
+      if (
+        player
+          .verification_status !==
+        "verified"
+      ) {
+        throw new CompetitionPlayerError(
+          "Uno de los jugadores no está verificado.",
+          "player_not_verified",
+          {
+            user_id:
+              player.id,
+
+            competition_id:
+              normalizedCompetitionId,
+          },
+        );
+      }
+
+      if (
+        player
+          .competition_active !==
+        true
+      ) {
+        throw new CompetitionPlayerError(
+          "La competición está inactiva.",
+          "competition_inactive",
+          {
+            competition_id:
+              normalizedCompetitionId,
+          },
+        );
+      }
+    }
+
+    return players;
+  };
+
+
+export const applyCompetitionMatchStats =
+  async (
+    client,
+    {
+      userId,
+      competitionId,
+      rating,
+      won,
+      gamesWon,
+      gamesLost,
+    },
+  ) => {
+    assertClient(
+      client,
+    );
+
+    const normalizedUserId =
+      positiveInteger(
+        userId,
+        "userId",
+      );
+
+    const normalizedCompetitionId =
+      positiveInteger(
+        competitionId,
+        "competitionId",
+      );
+
+    const normalizedRating =
+      nonNegativeInteger(
+        rating,
+        "rating",
+      );
+
+    const normalizedGamesWon =
+      nonNegativeInteger(
+        gamesWon,
+        "gamesWon",
+      );
+
+    const normalizedGamesLost =
+      nonNegativeInteger(
+        gamesLost,
+        "gamesLost",
+      );
+
+    if (
+      typeof won !==
+      "boolean"
+    ) {
+      throw new CompetitionPlayerError(
+        "won debe ser booleano.",
+        "invalid_match_result",
+        {
+          won,
+        },
+      );
+    }
+
+    const result =
+      await client.query(
+        `
+        UPDATE player_competition_stats
+
+        SET
+          rating = $3,
+
+          matches_played =
+            matches_played + 1,
+
+          wins =
+            wins +
+            CASE
+              WHEN $4::boolean
+                THEN 1
+              ELSE 0
+            END,
+
+          losses =
+            losses +
+            CASE
+              WHEN $4::boolean
+                THEN 0
+              ELSE 1
+            END,
+
+          games_won =
+            games_won + $5,
+
+          games_lost =
+            games_lost + $6,
+
+          updated_at =
+            NOW()
+
+        WHERE
+          user_id = $1
+          AND competition_id = $2
+
+        RETURNING
+          user_id,
+          competition_id,
+          rating,
+          matches_played,
+          wins,
+          losses,
+          games_won,
+          games_lost,
+          updated_at
+        `,
+        [
+          normalizedUserId,
+          normalizedCompetitionId,
+          normalizedRating,
+          won,
+          normalizedGamesWon,
+          normalizedGamesLost,
+        ],
+      );
+
+    if (
+      result.rowCount !==
+      1
+    ) {
+      throw new CompetitionPlayerError(
+        "No se pudieron aplicar las estadísticas del partido.",
+        "competition_stats_update_failed",
+        {
+          user_id:
+            normalizedUserId,
+
+          competition_id:
+            normalizedCompetitionId,
+        },
+      );
+    }
+
+    return {
+      ...result.rows[0],
+
+      user_id:
+        Number(
+          result.rows[0]
+            .user_id,
+        ),
+
+      competition_id:
+        Number(
+          result.rows[0]
+            .competition_id,
+        ),
+
+      rating:
+        Number(
+          result.rows[0]
+            .rating,
+        ),
+
+      matches_played:
+        Number(
+          result.rows[0]
+            .matches_played,
+        ),
+
+      wins:
+        Number(
+          result.rows[0]
+            .wins,
+        ),
+
+      losses:
+        Number(
+          result.rows[0]
+            .losses,
+        ),
+
+      games_won:
+        Number(
+          result.rows[0]
+            .games_won,
+        ),
+
+      games_lost:
+        Number(
+          result.rows[0]
+            .games_lost,
+        ),
+    };
+  };
+
+
+export default {
+  getCompetitionPlayer,
+  ensureCompetitionPlayer,
+  getCompetitionPlayers,
+  updateCompetitionPlayerStats,
+  lockCompetitionPlayers,
+  applyCompetitionMatchStats,
+};
