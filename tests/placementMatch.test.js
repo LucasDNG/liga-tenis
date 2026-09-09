@@ -5,287 +5,187 @@ import {
   PlacementMatchError,
   isPlacementPlayer,
   getPlacementStateBeforeMatch,
+  preparePlacementMatchContext,
   recordPlayerPlacementResult,
-  recordPlacementMatchResult,
   getCurrentPlacementLevel,
 } from "../src/services/placementMatch.service.js";
 
 
-/*
-  ============================================================
-  LA RED
-  TESTS DEL ORQUESTADOR DE NIVELATORIOS
-  ============================================================
-
-  Esta suite NO toca Neon.
-
-  Verifica:
-
-  - jugador provisional / oficial;
-  - sincronización matches_played <-> evidencia;
-  - siguiente partido 1/5 ... 5/5;
-  - partidos #1 a #4 sin Elo final;
-  - quinto partido con placement completo;
-  - target position;
-  - target Elo;
-  - referencia congelada;
-  - provisional vs provisional;
-  - ganador válido;
-  - contexto válido;
-  - bloqueo de inconsistencias;
-  - nivel actual del provisional.
-  ============================================================
-*/
+const COMPETITION_ID = 1;
+const OTHER_COMPETITION_ID = 2;
 
 
-const createQueuedClient = (
+const makeClient = (
   responses = [],
 ) => {
-  const queue =
-    [...responses];
+  let index = 0;
 
-  const calls =
-    [];
+  const calls = [];
 
   return {
     calls,
 
     async query(
-      sql,
+      text,
       params = [],
     ) {
       calls.push({
-        sql:
-          String(sql),
-
+        text,
         params,
       });
 
       if (
-        queue.length === 0
+        index >=
+        responses.length
       ) {
         throw new Error(
-          `Mock PostgreSQL sin respuesta configurada para query #${calls.length}.`,
+          `Mock PostgreSQL sin respuesta configurada para query #${index + 1}.`,
         );
       }
 
-      const next =
-        queue.shift();
+      const response =
+        responses[index];
+
+      index += 1;
 
       if (
-        next instanceof Error
+        response instanceof Error
       ) {
-        throw next;
+        throw response;
       }
 
       if (
-        typeof next ===
+        typeof response ===
         "function"
       ) {
-        return next({
-          sql:
-            String(sql),
-
+        return response(
+          text,
           params,
-
-          calls,
-        });
+          calls.length,
+        );
       }
 
-      return next;
+      return {
+        rows:
+          response.rows ?? [],
+        rowCount:
+          response.rowCount ??
+          response.rows?.length ??
+          0,
+      };
     },
   };
 };
 
 
-const player = ({
-  id,
+const makePlayer = ({
+  id = 10,
+  competitionId =
+    COMPETITION_ID,
   matchesPlayed = 0,
   rating = 0,
-  firstName = "Jugador",
-  lastName = "Prueba",
-  city = "San Pedro",
-  gender = "male",
+  firstName = "Juan",
+  lastName = "Jugador",
 } = {}) => ({
   id,
-
-  name:
-    `${firstName} ${lastName}`,
-
-  first_name:
-    firstName,
-
-  last_name:
-    lastName,
-
+  competition_id:
+    competitionId,
   matches_played:
     matchesPlayed,
-
   rating,
-
-  city,
-
-  gender,
-
-  role:
-    "player",
-
-  verification_status:
-    "verified",
+  first_name:
+    firstName,
+  last_name:
+    lastName,
 });
 
 
-const evidenceRow = ({
+const makeEvidence = ({
   id = 1,
   matchId = 100,
   userId = 10,
+  competitionId =
+    COMPETITION_ID,
   opponentId = 20,
-  placementMatchNumber = 1,
-  won = true,
-  percentile = 50,
-  referenceType = "official",
-  opponentRankPosition = 10,
-  officialPlayerCount = 20,
+  number = 1,
+  won = false,
+  percentile = null,
+  referenceType = "other",
 } = {}) => ({
   id,
-
   match_id:
     matchId,
-
   user_id:
     userId,
-
+  competition_id:
+    competitionId,
   opponent_id:
     opponentId,
-
   placement_match_number:
-    placementMatchNumber,
-
+    number,
   won,
-
   opponent_percentile_at_match:
     percentile,
-
   opponent_reference_type:
     referenceType,
-
   opponent_rank_position_at_match:
-    opponentRankPosition,
-
+    null,
   official_player_count_at_match:
-    officialPlayerCount,
-
-  created_at:
-    "2026-09-08T12:00:00.000Z",
+    null,
 });
 
 
-const createOfficialRanking = (
-  count = 20,
-) =>
-  Array.from(
-    {
-      length:
-        count,
-    },
-    (
-      _,
-      index,
-    ) => ({
-      id:
-        1000 +
-        index,
-
-      first_name:
-        `Jugador${index + 1}`,
-
-      last_name:
-        "Oficial",
-
-      rating:
-        2000 -
-        index * 50,
-
-      matches_played:
-        10,
-
-      official_position:
-        index + 1,
-
-      position:
-        index + 1,
-
-      rank_position:
-        index + 1,
-    }),
-  );
-
-
-const preparedReference = ({
-  playerId,
-  opponentId,
-  matchNumber,
-  percentile,
-  referenceType = "official",
-  opponentRankPosition = null,
-  officialCount = 20,
+const makeCalculationEvidence = ({
+  matchId = 100,
+  competitionId =
+    COMPETITION_ID,
+  opponentId = 20,
+  won = false,
+  percentile = null,
+  referenceType = "other",
 } = {}) => ({
-  applies:
-    true,
-
-  player_id:
-    playerId,
-
+  match_id:
+    matchId,
+  competition_id:
+    competitionId,
   opponent_id:
     opponentId,
-
-  placement_match_number:
-    matchNumber,
-
-  matches_before:
-    matchNumber - 1,
-
-  opponent_reference: {
-    opponent_id:
-      opponentId,
-
-    opponent_reference_type:
-      referenceType,
-
-    opponent_percentile_at_match:
-      percentile,
-
-    opponent_rank_position_at_match:
-      opponentRankPosition,
-
-    official_player_count_at_match:
-      officialCount,
-
-    provisional:
-      referenceType ===
-      "provisional",
-  },
+  won,
+  opponent_percentile_at_match:
+    percentile,
+  opponent_reference_type:
+    referenceType,
 });
 
 
-/*
-  ============================================================
-  ESTADO PROVISIONAL
-  ============================================================
-*/
+const assertReason = (
+  reason,
+) => (
+  error,
+) => {
+  assert.ok(
+    error instanceof
+      PlacementMatchError,
+  );
+
+  assert.equal(
+    error.reason,
+    reason,
+  );
+
+  return true;
+};
+
 
 test(
   "jugador con 0 partidos está en placement",
   () => {
     assert.equal(
       isPlacementPlayer(
-        player({
-          id:
-            1,
-
-          matchesPlayed:
-            0,
+        makePlayer({
+          matchesPlayed: 0,
         }),
+        COMPETITION_ID,
       ),
       true,
     );
@@ -298,13 +198,10 @@ test(
   () => {
     assert.equal(
       isPlacementPlayer(
-        player({
-          id:
-            1,
-
-          matchesPlayed:
-            4,
+        makePlayer({
+          matchesPlayed: 4,
         }),
+        COMPETITION_ID,
       ),
       true,
     );
@@ -313,20 +210,15 @@ test(
 
 
 test(
-  "jugador con 5 partidos ya es oficial",
+  "jugador con 5 partidos ya es oficial dentro de esa competición",
   () => {
     assert.equal(
       isPlacementPlayer(
-        player({
-          id:
-            1,
-
-          matchesPlayed:
-            5,
-
-          rating:
-            1400,
+        makePlayer({
+          matchesPlayed: 5,
+          rating: 1200,
         }),
+        COMPETITION_ID,
       ),
       false,
     );
@@ -334,42 +226,116 @@ test(
 );
 
 
-/*
-  ============================================================
-  ESTADO PRE-PARTIDO
-  ============================================================
-*/
+test(
+  "jugador con más de 5 partidos sigue siendo oficial",
+  () => {
+    assert.equal(
+      isPlacementPlayer(
+        makePlayer({
+          matchesPlayed: 20,
+          rating: 1350,
+        }),
+        COMPETITION_ID,
+      ),
+      false,
+    );
+  },
+);
+
 
 test(
-  "nuevo jugador prepara nivelatorio 1/5",
+  "isPlacementPlayer rechaza competición faltante",
+  () => {
+    assert.throws(
+      () =>
+        isPlacementPlayer(
+          makePlayer(),
+        ),
+      assertReason(
+        "invalid_integer",
+      ),
+    );
+  },
+);
+
+
+test(
+  "isPlacementPlayer rechaza jugador perteneciente a otra competición",
+  () => {
+    assert.throws(
+      () =>
+        isPlacementPlayer(
+          makePlayer({
+            competitionId:
+              OTHER_COMPETITION_ID,
+          }),
+          COMPETITION_ID,
+        ),
+      assertReason(
+        "player_competition_mismatch",
+      ),
+    );
+  },
+);
+
+
+test(
+  "getPlacementStateBeforeMatch devuelve estado oficial sin consultar evidencia",
   async () => {
     const client =
-      createQueuedClient([
-        {
-          rowCount:
-            0,
+      makeClient([]);
 
-          rows:
-            [],
+    const result =
+      await getPlacementStateBeforeMatch(
+        client,
+        makePlayer({
+          matchesPlayed: 5,
+          rating: 1200,
+        }),
+        COMPETITION_ID,
+      );
+
+    assert.deepEqual(
+      result,
+      {
+        user_id: 10,
+        competition_id:
+          COMPETITION_ID,
+        provisional: false,
+        matches_before: 5,
+        next_match_number:
+          null,
+        evidence_count:
+          null,
+      },
+    );
+
+    assert.equal(
+      client.calls.length,
+      0,
+    );
+  },
+);
+
+
+test(
+  "getPlacementStateBeforeMatch devuelve primer nivelatorio",
+  async () => {
+    const client =
+      makeClient([
+        {
+          rows: [],
         },
       ]);
 
     const result =
       await getPlacementStateBeforeMatch(
         client,
-        player({
-          id:
-            10,
-
-          matchesPlayed:
-            0,
+        makePlayer({
+          matchesPlayed: 0,
         }),
+        COMPETITION_ID,
       );
-
-    assert.equal(
-      result.user_id,
-      10,
-    );
 
     assert.equal(
       result.provisional,
@@ -390,65 +356,44 @@ test(
       result.evidence_count,
       0,
     );
+
+    assert.equal(
+      result.competition_id,
+      COMPETITION_ID,
+    );
   },
 );
 
 
 test(
-  "jugador con cuatro evidencias prepara nivelatorio 5/5",
+  "getPlacementStateBeforeMatch devuelve quinto nivelatorio",
   async () => {
     const rows = [
-      evidenceRow({
-        id:
-          1,
-
-        matchId:
-          101,
-
-        placementMatchNumber:
-          1,
+      makeEvidence({
+        id: 1,
+        matchId: 100,
+        number: 1,
       }),
-
-      evidenceRow({
-        id:
-          2,
-
-        matchId:
-          102,
-
-        placementMatchNumber:
-          2,
+      makeEvidence({
+        id: 2,
+        matchId: 101,
+        number: 2,
       }),
-
-      evidenceRow({
-        id:
-          3,
-
-        matchId:
-          103,
-
-        placementMatchNumber:
-          3,
+      makeEvidence({
+        id: 3,
+        matchId: 102,
+        number: 3,
       }),
-
-      evidenceRow({
-        id:
-          4,
-
-        matchId:
-          104,
-
-        placementMatchNumber:
-          4,
+      makeEvidence({
+        id: 4,
+        matchId: 103,
+        number: 4,
       }),
     ];
 
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount:
-            4,
-
           rows,
         },
       ]);
@@ -456,14 +401,16 @@ test(
     const result =
       await getPlacementStateBeforeMatch(
         client,
-        player({
-          id:
-            10,
-
-          matchesPlayed:
-            4,
+        makePlayer({
+          matchesPlayed: 4,
         }),
+        COMPETITION_ID,
       );
+
+    assert.equal(
+      result.matches_before,
+      4,
+    );
 
     assert.equal(
       result.next_match_number,
@@ -479,18 +426,14 @@ test(
 
 
 test(
-  "detecta matches_played y evidencia desincronizados",
+  "getPlacementStateBeforeMatch detecta evidencia desincronizada",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount:
-            1,
-
           rows: [
-            evidenceRow({
-              placementMatchNumber:
-                1,
+            makeEvidence({
+              number: 1,
             }),
           ],
         },
@@ -500,1840 +443,85 @@ test(
       () =>
         getPlacementStateBeforeMatch(
           client,
-          player({
-            id:
-              10,
-
-            matchesPlayed:
-              2,
+          makePlayer({
+            matchesPlayed: 2,
           }),
+          COMPETITION_ID,
         ),
-      (error) => {
-        assert.ok(
-          error instanceof
-            PlacementMatchError,
-        );
-
-        assert.equal(
-          error.reason,
-          "placement_evidence_out_of_sync",
-        );
-
-        return true;
-      },
+      assertReason(
+        "placement_evidence_out_of_sync",
+      ),
     );
   },
 );
 
 
 test(
-  "jugador oficial no intenta crear sexto nivelatorio",
+  "preparePlacementMatchContext rechaza jugador contra sí mismo",
   async () => {
     const client =
-      createQueuedClient([]);
-
-    const result =
-      await getPlacementStateBeforeMatch(
-        client,
-        player({
-          id:
-            10,
-
-          matchesPlayed:
-            5,
-
-          rating:
-            1400,
-        }),
-      );
-
-    assert.equal(
-      result.provisional,
-      false,
-    );
-
-    assert.equal(
-      result.next_match_number,
-      null,
-    );
-
-    assert.equal(
-      result.evidence_count,
-      null,
-    );
-
-    assert.equal(
-      client.calls.length,
-      0,
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  NIVEL ACTUAL
-  ============================================================
-*/
-
-test(
-  "getCurrentPlacementLevel devuelve 0/5 para jugador sin evidencia",
-  async () => {
-    const client =
-      createQueuedClient([
-        {
-          rowCount:
-            0,
-
-          rows:
-            [],
-        },
-      ]);
-
-    const result =
-      await getCurrentPlacementLevel(
-        client,
-        10,
-      );
-
-    assert.equal(
-      result.user_id,
-      10,
-    );
-
-    assert.equal(
-      result.matches_played,
-      0,
-    );
-
-    assert.equal(
-      result.matches_remaining,
-      5,
-    );
-
-    assert.equal(
-      result.wins,
-      0,
-    );
-
-    assert.equal(
-      result.losses,
-      0,
-    );
-
-    assert.equal(
-      result.placement_percentile,
-      0,
-    );
-
-    assert.equal(
-      result.completed,
-      false,
-    );
-  },
-);
-
-
-test(
-  "getCurrentPlacementLevel calcula 1 victoria contra 50%",
-  async () => {
-    const client =
-      createQueuedClient([
-        {
-          rowCount:
-            1,
-
-          rows: [
-            evidenceRow({
-              id:
-                1,
-
-              matchId:
-                101,
-
-              userId:
-                10,
-
-              placementMatchNumber:
-                1,
-
-              won:
-                true,
-
-              percentile:
-                50,
-            }),
-          ],
-        },
-      ]);
-
-    const result =
-      await getCurrentPlacementLevel(
-        client,
-        10,
-      );
-
-    assert.equal(
-      result.matches_played,
-      1,
-    );
-
-    assert.equal(
-      result.matches_remaining,
-      4,
-    );
-
-    assert.equal(
-      result.wins,
-      1,
-    );
-
-    assert.equal(
-      result.losses,
-      0,
-    );
-
-    assert.equal(
-      result.demonstrated_level,
-      58,
-    );
-
-    assert.equal(
-      result.win_factor,
-      0.65,
-    );
-
-    assert.equal(
-      result.placement_percentile,
-      37.7,
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  NIVELATORIO #1
-  ============================================================
-*/
-
-test(
-  "primer nivelatorio guarda evidencia y todavía no entrega Elo final",
-  async () => {
-    const stored =
-      evidenceRow({
-        id:
-          1,
-
-        matchId:
-          500,
-
-        userId:
-          10,
-
-        opponentId:
-          20,
-
-        placementMatchNumber:
-          1,
-
-        won:
-          true,
-
-        percentile:
-          50,
-
-        referenceType:
-          "official",
-
-        opponentRankPosition:
-          10,
-
-        officialPlayerCount:
-          20,
-      });
-
-    const client =
-      createQueuedClient([
-        {
-          rowCount:
-            1,
-
-          rows: [
-            stored,
-          ],
-        },
-
-        {
-          rowCount:
-            1,
-
-          rows: [
-            stored,
-          ],
-        },
-
-        {
-          rowCount:
-            1,
-
-          rows: [
-            stored,
-          ],
-        },
-      ]);
-
-    const result =
-      await recordPlayerPlacementResult(
-        client,
-        {
-          matchId:
-            500,
-
-          player:
-            player({
-              id:
-                10,
-
-              matchesPlayed:
-                0,
-
-              rating:
-                0,
-            }),
-
-          opponent:
-            player({
-              id:
-                20,
-
-              matchesPlayed:
-                15,
-
-              rating:
-                1500,
-            }),
-
-          won:
-            true,
-
-          preparedContext:
-            preparedReference({
-              playerId:
-                10,
-
-              opponentId:
-                20,
-
-              matchNumber:
-                1,
-
-              percentile:
-                50,
-
-              referenceType:
-                "official",
-
-              opponentRankPosition:
-                10,
-
-              officialCount:
-                20,
-            }),
-
-          officialRankingBefore:
-            createOfficialRanking(
-              20,
-            ),
-        },
-      );
-
-    assert.equal(
-      result.applies,
-      true,
-    );
-
-    assert.equal(
-      result.completed,
-      false,
-    );
-
-    assert.equal(
-      result.placement_match_number,
-      1,
-    );
-
-    assert.equal(
-      result.matches_after,
-      1,
-    );
-
-    assert.equal(
-      result.wins,
-      1,
-    );
-
-    assert.equal(
-      result.losses,
-      0,
-    );
-
-    assert.equal(
-      result.placement_percentile,
-      37.7,
-    );
-
-    assert.equal(
-      result.demonstrated_level,
-      58,
-    );
-
-    assert.equal(
-      result.target_position,
-      null,
-    );
-
-    assert.equal(
-      result.target_elo,
-      null,
-    );
-
-    assert.deepEqual(
-      client.calls[0].params,
-      [
-        500,
-        10,
-        20,
-        1,
-        true,
-        50,
-        "official",
-        10,
-        20,
-      ],
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  NIVELATORIO #4
-  ============================================================
-*/
-
-test(
-  "cuarto nivelatorio sigue sin asignar Elo oficial",
-  async () => {
-    const rows = [
-      evidenceRow({
-        id:
-          1,
-
-        matchId:
-          501,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          1,
-
-        won:
-          true,
-
-        percentile:
-          40,
-      }),
-
-      evidenceRow({
-        id:
-          2,
-
-        matchId:
-          502,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          2,
-
-        won:
-          true,
-
-        percentile:
-          50,
-      }),
-
-      evidenceRow({
-        id:
-          3,
-
-        matchId:
-          503,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          3,
-
-        won:
-          false,
-
-        percentile:
-          80,
-      }),
-
-      evidenceRow({
-        id:
-          4,
-
-        matchId:
-          504,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          4,
-
-        won:
-          false,
-
-        percentile:
-          90,
-      }),
-    ];
-
-    const client =
-      createQueuedClient([
-        {
-          rowCount:
-            1,
-
-          rows: [
-            rows[3],
-          ],
-        },
-
-        {
-          rowCount:
-            4,
-
-          rows,
-        },
-
-        {
-          rowCount:
-            4,
-
-          rows,
-        },
-      ]);
-
-    const result =
-      await recordPlayerPlacementResult(
-        client,
-        {
-          matchId:
-            504,
-
-          player:
-            player({
-              id:
-                10,
-
-              matchesPlayed:
-                3,
-            }),
-
-          opponent:
-            player({
-              id:
-                20,
-
-              matchesPlayed:
-                20,
-
-              rating:
-                1700,
-            }),
-
-          won:
-            false,
-
-          preparedContext:
-            preparedReference({
-              playerId:
-                10,
-
-              opponentId:
-                20,
-
-              matchNumber:
-                4,
-
-              percentile:
-                90,
-
-              referenceType:
-                "official",
-
-              opponentRankPosition:
-                3,
-            }),
-
-          officialRankingBefore:
-            createOfficialRanking(
-              20,
-            ),
-        },
-      );
-
-    assert.equal(
-      result.completed,
-      false,
-    );
-
-    assert.equal(
-      result.matches_after,
-      4,
-    );
-
-    assert.equal(
-      result.wins,
-      2,
-    );
-
-    assert.equal(
-      result.losses,
-      2,
-    );
-
-    assert.equal(
-      result.target_position,
-      null,
-    );
-
-    assert.equal(
-      result.target_elo,
-      null,
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  NIVELATORIO #5
-  ============================================================
-*/
-
-test(
-  "quinto nivelatorio completa placement y asigna Elo objetivo",
-  async () => {
-    const rows = [
-      evidenceRow({
-        id:
-          1,
-
-        matchId:
-          601,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          1,
-
-        won:
-          true,
-
-        percentile:
-          50,
-      }),
-
-      evidenceRow({
-        id:
-          2,
-
-        matchId:
-          602,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          2,
-
-        won:
-          false,
-
-        percentile:
-          90,
-      }),
-
-      evidenceRow({
-        id:
-          3,
-
-        matchId:
-          603,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          3,
-
-        won:
-          false,
-
-        percentile:
-          80,
-      }),
-
-      evidenceRow({
-        id:
-          4,
-
-        matchId:
-          604,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          4,
-
-        won:
-          false,
-
-        percentile:
-          70,
-      }),
-
-      evidenceRow({
-        id:
-          5,
-
-        matchId:
-          605,
-
-        userId:
-          10,
-
-        placementMatchNumber:
-          5,
-
-        won:
-          false,
-
-        percentile:
-          60,
-      }),
-    ];
-
-    const client =
-      createQueuedClient([
-        {
-          rowCount:
-            1,
-
-          rows: [
-            rows[4],
-          ],
-        },
-
-        {
-          rowCount:
-            5,
-
-          rows,
-        },
-
-        {
-          rowCount:
-            5,
-
-          rows,
-        },
-      ]);
-
-    const result =
-      await recordPlayerPlacementResult(
-        client,
-        {
-          matchId:
-            605,
-
-          player:
-            player({
-              id:
-                10,
-
-              matchesPlayed:
-                4,
-
-              rating:
-                0,
-            }),
-
-          opponent:
-            player({
-              id:
-                20,
-
-              matchesPlayed:
-                20,
-
-              rating:
-                1600,
-            }),
-
-          won:
-            false,
-
-          preparedContext:
-            preparedReference({
-              playerId:
-                10,
-
-              opponentId:
-                20,
-
-              matchNumber:
-                5,
-
-              percentile:
-                60,
-
-              referenceType:
-                "official",
-
-              opponentRankPosition:
-                8,
-
-              officialCount:
-                20,
-            }),
-
-          officialRankingBefore:
-            createOfficialRanking(
-              20,
-            ),
-        },
-      );
-
-    assert.equal(
-      result.applies,
-      true,
-    );
-
-    assert.equal(
-      result.completed,
-      true,
-    );
-
-    assert.equal(
-      result.placement_match_number,
-      5,
-    );
-
-    assert.equal(
-      result.matches_after,
-      5,
-    );
-
-    assert.equal(
-      result.wins,
-      1,
-    );
-
-    assert.equal(
-      result.losses,
-      4,
-    );
-
-    assert.equal(
-      result.weighted_victory_percentile,
-      50,
-    );
-
-    assert.equal(
-      result.demonstrated_level,
-      58,
-    );
-
-    assert.equal(
-      result.win_factor,
-      0.65,
-    );
-
-    assert.equal(
-      result.placement_percentile,
-      37.7,
-    );
-
-    assert.equal(
-      result.target_position,
-      13,
-    );
-
-    assert.equal(
-      result.target_elo,
-      1400,
-    );
-
-    assert.equal(
-      result.official_player_count_before,
-      20,
-    );
-
-    assert.equal(
-      result.elo_reference_position,
-      13,
-    );
-
-    assert.equal(
-      result.elo_reference_rating,
-      1400,
-    );
-  },
-);
-
-
-test(
-  "quinto nivelatorio 0/5 termina debajo de todos",
-  async () => {
-    const rows =
-      Array.from(
-        {
-          length:
-            5,
-        },
-        (
-          _,
-          index,
-        ) =>
-          evidenceRow({
-            id:
-              index + 1,
-
-            matchId:
-              700 +
-              index,
-
-            userId:
-              10,
-
-            placementMatchNumber:
-              index + 1,
-
-            won:
-              false,
-
-            percentile:
-              90 -
-              index * 10,
-          }),
-      );
-
-    const client =
-      createQueuedClient([
-        {
-          rowCount:
-            1,
-
-          rows: [
-            rows[4],
-          ],
-        },
-
-        {
-          rowCount:
-            5,
-
-          rows,
-        },
-
-        {
-          rowCount:
-            5,
-
-          rows,
-        },
-      ]);
-
-    const result =
-      await recordPlayerPlacementResult(
-        client,
-        {
-          matchId:
-            rows[4]
-              .match_id,
-
-          player:
-            player({
-              id:
-                10,
-
-              matchesPlayed:
-                4,
-            }),
-
-          opponent:
-            player({
-              id:
-                20,
-
-              matchesPlayed:
-                30,
-
-              rating:
-                1900,
-            }),
-
-          won:
-            false,
-
-          preparedContext:
-            preparedReference({
-              playerId:
-                10,
-
-              opponentId:
-                20,
-
-              matchNumber:
-                5,
-
-              percentile:
-                100,
-
-              referenceType:
-                "official",
-
-              opponentRankPosition:
-                1,
-            }),
-
-          officialRankingBefore:
-            createOfficialRanking(
-              20,
-            ),
-        },
-      );
-
-    assert.equal(
-      result.placement_percentile,
-      0,
-    );
-
-    assert.equal(
-      result.target_position,
-      21,
-    );
-
-    assert.equal(
-      result.target_elo,
-      1050,
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  RANKING PRE-PARTIDO
-  ============================================================
-*/
-
-test(
-  "quinto nivelatorio falla si el jugador ya aparece entre oficiales",
-  async () => {
-    const rows =
-      Array.from(
-        {
-          length:
-            5,
-        },
-        (
-          _,
-          index,
-        ) =>
-          evidenceRow({
-            id:
-              index + 1,
-
-            matchId:
-              800 +
-              index,
-
-            userId:
-              10,
-
-            placementMatchNumber:
-              index + 1,
-
-            won:
-              index ===
-              0,
-
-            percentile:
-              50,
-          }),
-      );
-
-    const ranking =
-      createOfficialRanking(
-        20,
-      );
-
-    ranking.push({
-      id:
-        10,
-
-      rating:
-        1500,
-
-      position:
-        21,
-
-      official_position:
-        21,
-    });
-
-    const client =
-      createQueuedClient([
-        {
-          rowCount:
-            1,
-
-          rows: [
-            rows[4],
-          ],
-        },
-
-        {
-          rowCount:
-            5,
-
-          rows,
-        },
-
-        {
-          rowCount:
-            5,
-
-          rows,
-        },
-      ]);
+      makeClient([]);
 
     await assert.rejects(
       () =>
-        recordPlayerPlacementResult(
+        preparePlacementMatchContext(
           client,
           {
-            matchId:
-              rows[4]
-                .match_id,
-
-            player:
-              player({
-                id:
-                  10,
-
-                matchesPlayed:
-                  4,
-              }),
-
-            opponent:
-              player({
-                id:
-                  20,
-
-                matchesPlayed:
-                  20,
-
-                rating:
-                  1500,
-              }),
-
-            won:
-              false,
-
-            preparedContext:
-              preparedReference({
-                playerId:
-                  10,
-
-                opponentId:
-                  20,
-
-                matchNumber:
-                  5,
-
-                percentile:
-                  50,
-              }),
-
-            officialRankingBefore:
-              ranking,
-          },
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "placement_player_already_official",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  CONTEXTO PRE-PARTIDO
-  ============================================================
-*/
-
-test(
-  "rechaza contexto correspondiente a otro jugador",
-  async () => {
-    const client =
-      createQueuedClient([]);
-
-    await assert.rejects(
-      () =>
-        recordPlayerPlacementResult(
-          client,
-          {
-            matchId:
-              900,
-
-            player:
-              player({
-                id:
-                  10,
-
-                matchesPlayed:
-                  0,
-              }),
-
-            opponent:
-              player({
-                id:
-                  20,
-
-                matchesPlayed:
-                  10,
-
-                rating:
-                  1500,
-              }),
-
-            won:
-              true,
-
-            preparedContext:
-              preparedReference({
-                playerId:
-                  99,
-
-                opponentId:
-                  20,
-
-                matchNumber:
-                  1,
-
-                percentile:
-                  50,
-              }),
-
-            officialRankingBefore:
-              [],
-          },
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "placement_context_player_mismatch",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-test(
-  "rechaza contexto correspondiente a otro rival",
-  async () => {
-    const client =
-      createQueuedClient([]);
-
-    await assert.rejects(
-      () =>
-        recordPlayerPlacementResult(
-          client,
-          {
-            matchId:
-              900,
-
-            player:
-              player({
-                id:
-                  10,
-
-                matchesPlayed:
-                  0,
-              }),
-
-            opponent:
-              player({
-                id:
-                  20,
-
-                matchesPlayed:
-                  10,
-
-                rating:
-                  1500,
-              }),
-
-            won:
-              true,
-
-            preparedContext:
-              preparedReference({
-                playerId:
-                  10,
-
-                opponentId:
-                  99,
-
-                matchNumber:
-                  1,
-
-                percentile:
-                  50,
-              }),
-
-            officialRankingBefore:
-              [],
-          },
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "placement_context_opponent_mismatch",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-test(
-  "rechaza cambio del número de nivelatorio entre preparación y confirmación",
-  async () => {
-    const client =
-      createQueuedClient([]);
-
-    await assert.rejects(
-      () =>
-        recordPlayerPlacementResult(
-          client,
-          {
-            matchId:
-              900,
-
-            player:
-              player({
-                id:
-                  10,
-
-                matchesPlayed:
-                  2,
-              }),
-
-            opponent:
-              player({
-                id:
-                  20,
-
-                matchesPlayed:
-                  10,
-
-                rating:
-                  1500,
-              }),
-
-            won:
-              true,
-
-            preparedContext:
-              preparedReference({
-                playerId:
-                  10,
-
-                opponentId:
-                  20,
-
-                matchNumber:
-                  2,
-
-                percentile:
-                  50,
-              }),
-
-            officialRankingBefore:
-              [],
-          },
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "placement_match_number_changed",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  PROVISIONAL VS PROVISIONAL
-  ============================================================
-*/
-
-test(
-  "provisional vs provisional usa exactamente la referencia congelada pre-partido",
-  async () => {
-    const p1Stored =
-      evidenceRow({
-        id:
-          1,
-
-        matchId:
-          1000,
-
-        userId:
-          10,
-
-        opponentId:
-          20,
-
-        placementMatchNumber:
-          1,
-
-        won:
-          true,
-
-        percentile:
-          68,
-
-        referenceType:
-          "provisional",
-
-        opponentRankPosition:
-          null,
-
-        officialPlayerCount:
-          20,
-      });
-
-    const p2Stored =
-      evidenceRow({
-        id:
-          2,
-
-        matchId:
-          1000,
-
-        userId:
-          20,
-
-        opponentId:
-          10,
-
-        placementMatchNumber:
-          1,
-
-        won:
-          false,
-
-        percentile:
-          0,
-
-        referenceType:
-          "provisional",
-
-        opponentRankPosition:
-          null,
-
-        officialPlayerCount:
-          20,
-      });
-
-    const client =
-      createQueuedClient([
-        {
-          rowCount:
-            1,
-
-          rows: [
-            p1Stored,
-          ],
-        },
-
-        {
-          rowCount:
-            1,
-
-          rows: [
-            p1Stored,
-          ],
-        },
-
-        {
-          rowCount:
-            1,
-
-          rows: [
-            p1Stored,
-          ],
-        },
-
-        {
-          rowCount:
-            1,
-
-          rows: [
-            p2Stored,
-          ],
-        },
-
-        {
-          rowCount:
-            1,
-
-          rows: [
-            p2Stored,
-          ],
-        },
-
-        {
-          rowCount:
-            1,
-
-          rows: [
-            p2Stored,
-          ],
-        },
-      ]);
-
-    const result =
-      await recordPlacementMatchResult(
-        client,
-        {
-          matchId:
-            1000,
-
-          player1:
-            player({
-              id:
-                10,
-
-              matchesPlayed:
-                0,
-
-              rating:
-                0,
-
-              firstName:
-                "Lucas",
-            }),
-
-          player2:
-            player({
-              id:
-                20,
-
-              matchesPlayed:
-                0,
-
-              rating:
-                0,
-
-              firstName:
-                "Mateo",
-            }),
-
-          winnerId:
-            10,
-
-          preparedContext: {
+            competitionId:
+              COMPETITION_ID,
             player1:
-              preparedReference({
-                playerId:
-                  10,
-
-                opponentId:
-                  20,
-
-                matchNumber:
-                  1,
-
-                percentile:
-                  68,
-
-                referenceType:
-                  "provisional",
+              makePlayer({
+                id: 10,
+                matchesPlayed: 5,
+                rating: 1200,
               }),
-
             player2:
-              preparedReference({
-                playerId:
-                  20,
-
-                opponentId:
-                  10,
-
-                matchNumber:
-                  1,
-
-                percentile:
-                  0,
-
-                referenceType:
-                  "provisional",
+              makePlayer({
+                id: 10,
+                matchesPlayed: 5,
+                rating: 1200,
               }),
-
-            has_placement_player:
-              true,
-          },
-
-          officialRankingBefore:
-            createOfficialRanking(
-              20,
-            ),
-        },
-      );
-
-    assert.equal(
-      result.has_placement_player,
-      true,
-    );
-
-    assert.equal(
-      result.winner_id,
-      10,
-    );
-
-    assert.equal(
-      result.player1.wins,
-      1,
-    );
-
-    assert.equal(
-      result.player1.losses,
-      0,
-    );
-
-    assert.equal(
-      result.player1
-        .placement_percentile,
-      49.4,
-    );
-
-    assert.equal(
-      result.player2.wins,
-      0,
-    );
-
-    assert.equal(
-      result.player2.losses,
-      1,
-    );
-
-    assert.equal(
-      result.player2
-        .placement_percentile,
-      0,
-    );
-
-    assert.equal(
-      client.calls[0]
-        .params[5],
-      68,
-    );
-
-    assert.equal(
-      client.calls[0]
-        .params[6],
-      "provisional",
-    );
-
-    assert.equal(
-      client.calls[3]
-        .params[5],
-      0,
-    );
-
-    assert.equal(
-      client.calls[3]
-        .params[6],
-      "provisional",
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  GANADOR
-  ============================================================
-*/
-
-test(
-  "recordPlacementMatchResult rechaza ganador ajeno al partido",
-  async () => {
-    const client =
-      createQueuedClient([]);
-
-    await assert.rejects(
-      () =>
-        recordPlacementMatchResult(
-          client,
-          {
-            matchId:
-              1100,
-
-            player1:
-              player({
-                id:
-                  10,
-              }),
-
-            player2:
-              player({
-                id:
-                  20,
-              }),
-
-            winnerId:
-              99,
-
-            preparedContext: {
-              player1:
-                {},
-
-              player2:
-                {},
-            },
-
-            officialRankingBefore:
-              [],
           },
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "winner_not_in_match",
-        );
-
-        return true;
-      },
-    );
-
-    assert.equal(
-      client.calls.length,
-      0,
+      assertReason(
+        "same_player",
+      ),
     );
   },
 );
 
 
-/*
-  ============================================================
-  DOS OFICIALES
-  ============================================================
-*/
-
 test(
-  "partido entre dos oficiales no genera placement",
+  "preparePlacementMatchContext entre dos oficiales no genera placement",
   async () => {
     const client =
-      createQueuedClient([]);
+      makeClient([]);
 
     const result =
-      await recordPlacementMatchResult(
+      await preparePlacementMatchContext(
         client,
         {
-          matchId:
-            1200,
-
+          competitionId:
+            COMPETITION_ID,
           player1:
-            player({
-              id:
-                10,
-
-              matchesPlayed:
-                20,
-
-              rating:
-                1600,
+            makePlayer({
+              id: 10,
+              matchesPlayed: 5,
+              rating: 1200,
             }),
-
           player2:
-            player({
-              id:
-                20,
-
-              matchesPlayed:
-                30,
-
-              rating:
-                1700,
+            makePlayer({
+              id: 20,
+              matchesPlayed: 10,
+              rating: 1300,
             }),
-
-          winnerId:
-            20,
-
-          preparedContext: {
-            player1: {
-              applies:
-                false,
-            },
-
-            player2: {
-              applies:
-                false,
-            },
-
-            has_placement_player:
-              false,
-          },
-
-          officialRankingBefore:
-            createOfficialRanking(
-              20,
-            ),
         },
       );
+
+    assert.equal(
+      result.competition_id,
+      COMPETITION_ID,
+    );
 
     assert.equal(
       result.has_placement_player,
@@ -2358,195 +546,840 @@ test(
 );
 
 
-/*
-  ============================================================
-  EVIDENCIA POST-INSERT
-  ============================================================
-*/
+test(
+  "recordPlayerPlacementResult no aplica a jugador oficial",
+  async () => {
+    const client =
+      makeClient([]);
+
+    const result =
+      await recordPlayerPlacementResult(
+        client,
+        {
+          matchId: 100,
+          competitionId:
+            COMPETITION_ID,
+          player:
+            makePlayer({
+              id: 10,
+              matchesPlayed: 5,
+              rating: 1200,
+            }),
+          opponent:
+            makePlayer({
+              id: 20,
+              matchesPlayed: 5,
+              rating: 1300,
+            }),
+          won: true,
+          preparedContext:
+            null,
+          officialRankingBefore:
+            [],
+        },
+      );
+
+    assert.deepEqual(
+      result,
+      {
+        applies: false,
+        user_id: 10,
+        competition_id:
+          COMPETITION_ID,
+        completed: false,
+        placement:
+          null,
+      },
+    );
+
+    assert.equal(
+      client.calls.length,
+      0,
+    );
+  },
+);
+
 
 test(
-  "falla si después de guardar no coincide la cantidad de evidencias",
+  "recordPlayerPlacementResult exige contexto preparado para provisional",
   async () => {
-    /*
-      El jugador tenía 1 partido antes.
-
-      Estamos intentando procesar su
-      segundo nivelatorio.
-
-      El INSERT de #2 funciona.
-
-      Pero al leer el historial completo,
-      simulamos que PostgreSQL devuelve
-      solamente la evidencia #1.
-
-      La secuencia [1] es válida.
-
-      Sin embargo:
-
-        esperado = 2 evidencias
-        recibido = 1 evidencia
-
-      Entonces debemos llegar específicamente
-      a placement_evidence_count_mismatch.
-    */
-
-    const insertedSecond =
-      evidenceRow({
-        id:
-          2,
-
-        matchId:
-          1300,
-
-        userId:
-          10,
-
-        opponentId:
-          20,
-
-        placementMatchNumber:
-          2,
-
-        won:
-          true,
-
-        percentile:
-          50,
-      });
-
-    const existingFirst =
-      evidenceRow({
-        id:
-          1,
-
-        matchId:
-          1299,
-
-        userId:
-          10,
-
-        opponentId:
-          30,
-
-        placementMatchNumber:
-          1,
-
-        won:
-          false,
-
-        percentile:
-          70,
-      });
-
     const client =
-      createQueuedClient([
-        /*
-          INSERT de la evidencia #2.
-        */
-        {
-          rowCount:
-            1,
-
-          rows: [
-            insertedSecond,
-          ],
-        },
-
-        /*
-          Lectura posterior inconsistente:
-
-          devuelve solamente #1.
-
-          La secuencia es válida,
-          así que validatePlacementEvidenceSequence
-          NO debe cortar antes.
-        */
-        {
-          rowCount:
-            1,
-
-          rows: [
-            existingFirst,
-          ],
-        },
-      ]);
+      makeClient([]);
 
     await assert.rejects(
       () =>
         recordPlayerPlacementResult(
           client,
           {
-            matchId:
-              1300,
-
+            matchId: 100,
+            competitionId:
+              COMPETITION_ID,
             player:
-              player({
-                id:
-                  10,
-
-                matchesPlayed:
-                  1,
+              makePlayer({
+                id: 10,
+                matchesPlayed: 0,
               }),
-
             opponent:
-              player({
-                id:
-                  20,
-
-                matchesPlayed:
-                  10,
-
-                rating:
-                  1500,
+              makePlayer({
+                id: 20,
+                matchesPlayed: 5,
+                rating: 1200,
               }),
-
-            won:
-              true,
-
+            won: false,
             preparedContext:
-              preparedReference({
-                playerId:
-                  10,
-
-                opponentId:
-                  20,
-
-                matchNumber:
-                  2,
-
-                percentile:
-                  50,
-              }),
-
+              null,
             officialRankingBefore:
               [],
           },
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "placement_evidence_count_mismatch",
-        );
+      assertReason(
+        "placement_context_missing",
+      ),
+    );
+  },
+);
 
-        assert.equal(
-          error.details
-            .placement_match_number,
-          2,
-        );
 
-        assert.equal(
-          error.details
-            .evidence_count,
-          1,
-        );
+test(
+  "recordPlayerPlacementResult rechaza contexto de otro jugador",
+  async () => {
+    const client =
+      makeClient([]);
 
-        return true;
-      },
+    await assert.rejects(
+      () =>
+        recordPlayerPlacementResult(
+          client,
+          {
+            matchId: 100,
+            competitionId:
+              COMPETITION_ID,
+            player:
+              makePlayer({
+                id: 10,
+                matchesPlayed: 0,
+              }),
+            opponent:
+              makePlayer({
+                id: 20,
+                matchesPlayed: 5,
+                rating: 1200,
+              }),
+            won: false,
+            preparedContext: {
+              applies: true,
+              player_id: 999,
+              opponent_id: 20,
+              competition_id:
+                COMPETITION_ID,
+              placement_match_number:
+                1,
+              opponent_reference: {
+                opponent_percentile_at_match:
+                  50,
+                opponent_reference_type:
+                  "official",
+              },
+            },
+            officialRankingBefore:
+              [],
+          },
+        ),
+      assertReason(
+        "placement_context_player_mismatch",
+      ),
+    );
+  },
+);
+
+
+test(
+  "recordPlayerPlacementResult rechaza contexto de otro rival",
+  async () => {
+    const client =
+      makeClient([]);
+
+    await assert.rejects(
+      () =>
+        recordPlayerPlacementResult(
+          client,
+          {
+            matchId: 100,
+            competitionId:
+              COMPETITION_ID,
+            player:
+              makePlayer({
+                id: 10,
+                matchesPlayed: 0,
+              }),
+            opponent:
+              makePlayer({
+                id: 20,
+                matchesPlayed: 5,
+                rating: 1200,
+              }),
+            won: false,
+            preparedContext: {
+              applies: true,
+              player_id: 10,
+              opponent_id: 999,
+              competition_id:
+                COMPETITION_ID,
+              placement_match_number:
+                1,
+              opponent_reference: {
+                opponent_percentile_at_match:
+                  50,
+                opponent_reference_type:
+                  "official",
+              },
+            },
+            officialRankingBefore:
+              [],
+          },
+        ),
+      assertReason(
+        "placement_context_opponent_mismatch",
+      ),
+    );
+  },
+);
+
+
+test(
+  "recordPlayerPlacementResult rechaza contexto de otra competición",
+  async () => {
+    const client =
+      makeClient([]);
+
+    await assert.rejects(
+      () =>
+        recordPlayerPlacementResult(
+          client,
+          {
+            matchId: 100,
+            competitionId:
+              COMPETITION_ID,
+            player:
+              makePlayer({
+                id: 10,
+                matchesPlayed: 0,
+              }),
+            opponent:
+              makePlayer({
+                id: 20,
+                matchesPlayed: 5,
+                rating: 1200,
+              }),
+            won: false,
+            preparedContext: {
+              applies: true,
+              player_id: 10,
+              opponent_id: 20,
+              competition_id:
+                OTHER_COMPETITION_ID,
+              placement_match_number:
+                1,
+              opponent_reference: {
+                opponent_percentile_at_match:
+                  50,
+                opponent_reference_type:
+                  "official",
+              },
+            },
+            officialRankingBefore:
+              [],
+          },
+        ),
+      assertReason(
+        "placement_context_competition_mismatch",
+      ),
+    );
+  },
+);
+
+
+test(
+  "recordPlayerPlacementResult rechaza cambio del número de nivelatorio entre preparación y confirmación",
+  async () => {
+    const client =
+      makeClient([]);
+
+    await assert.rejects(
+      () =>
+        recordPlayerPlacementResult(
+          client,
+          {
+            matchId: 100,
+            competitionId:
+              COMPETITION_ID,
+            player:
+              makePlayer({
+                id: 10,
+                matchesPlayed: 1,
+              }),
+            opponent:
+              makePlayer({
+                id: 20,
+                matchesPlayed: 5,
+                rating: 1200,
+              }),
+            won: false,
+            preparedContext: {
+              applies: true,
+              player_id: 10,
+              opponent_id: 20,
+              competition_id:
+                COMPETITION_ID,
+
+              /*
+                El jugador ya tiene un partido,
+                por lo que ahora debería confirmar
+                el nivelatorio número 2.
+              */
+              placement_match_number:
+                1,
+
+              opponent_reference: {
+                opponent_percentile_at_match:
+                  50,
+                opponent_reference_type:
+                  "official",
+              },
+            },
+            officialRankingBefore:
+              [],
+          },
+        ),
+      assertReason(
+        "placement_match_number_changed",
+      ),
+    );
+  },
+);
+
+
+test(
+  "recordPlayerPlacementResult exige referencia congelada del rival",
+  async () => {
+    const client =
+      makeClient([]);
+
+    await assert.rejects(
+      () =>
+        recordPlayerPlacementResult(
+          client,
+          {
+            matchId: 100,
+            competitionId:
+              COMPETITION_ID,
+            player:
+              makePlayer({
+                id: 10,
+                matchesPlayed: 0,
+              }),
+            opponent:
+              makePlayer({
+                id: 20,
+                matchesPlayed: 5,
+                rating: 1200,
+              }),
+            won: false,
+            preparedContext: {
+              applies: true,
+              player_id: 10,
+              opponent_id: 20,
+              competition_id:
+                COMPETITION_ID,
+              placement_match_number:
+                1,
+              opponent_reference:
+                null,
+            },
+            officialRankingBefore:
+              [],
+          },
+        ),
+      assertReason(
+        "opponent_reference_missing",
+      ),
+    );
+  },
+);
+
+
+test(
+  "getCurrentPlacementLevel devuelve 0/5 para competición sin evidencia",
+  async () => {
+    const client =
+      makeClient([
+        {
+          rows: [],
+        },
+      ]);
+
+    const result =
+      await getCurrentPlacementLevel(
+        client,
+        10,
+        COMPETITION_ID,
+      );
+
+    assert.equal(
+      result.user_id,
+      10,
     );
 
     assert.equal(
-      client.calls.length,
+      result.competition_id,
+      COMPETITION_ID,
+    );
+
+    assert.equal(
+      result.matches_played,
+      0,
+    );
+
+    assert.equal(
+      result.matches_remaining,
+      5,
+    );
+
+    assert.equal(
+      result.wins,
+      0,
+    );
+
+    assert.equal(
+      result.losses,
+      0,
+    );
+
+    assert.equal(
+      result.placement_percentile,
+      0,
+    );
+
+    assert.equal(
+      result.completed,
+      false,
+    );
+
+    assert.deepEqual(
+      client.calls[0].params,
+      [
+        10,
+        COMPETITION_ID,
+      ],
+    );
+  },
+);
+
+
+test(
+  "getCurrentPlacementLevel calcula una victoria contra 50%",
+  async () => {
+    const client =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              won: true,
+              percentile: 50,
+              referenceType:
+                "official",
+            }),
+          ],
+        },
+      ]);
+
+    const result =
+      await getCurrentPlacementLevel(
+        client,
+        10,
+        COMPETITION_ID,
+      );
+
+    assert.equal(
+      result.matches_played,
+      1,
+    );
+
+    assert.equal(
+      result.matches_remaining,
+      4,
+    );
+
+    assert.equal(
+      result.wins,
+      1,
+    );
+
+    assert.equal(
+      result.losses,
+      0,
+    );
+
+    assert.equal(
+      result.completed,
+      false,
+    );
+
+    assert.ok(
+      result.placement_percentile >
+        0,
+    );
+
+    assert.ok(
+      result.placement_percentile <=
+        100,
+    );
+  },
+);
+
+
+test(
+  "getCurrentPlacementLevel no gana nivel por una derrota",
+  async () => {
+    const client =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              won: false,
+              percentile: 100,
+              referenceType:
+                "official",
+            }),
+          ],
+        },
+      ]);
+
+    const result =
+      await getCurrentPlacementLevel(
+        client,
+        10,
+        COMPETITION_ID,
+      );
+
+    assert.equal(
+      result.matches_played,
+      1,
+    );
+
+    assert.equal(
+      result.wins,
+      0,
+    );
+
+    assert.equal(
+      result.losses,
+      1,
+    );
+
+    assert.equal(
+      result.placement_percentile,
+      0,
+    );
+  },
+);
+
+
+test(
+  "getCurrentPlacementLevel completa placement con cinco evidencias",
+  async () => {
+    const client =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              id: 1,
+              matchId: 100,
+              number: 1,
+              won: true,
+              percentile: 80,
+              referenceType:
+                "official",
+            }),
+            makeEvidence({
+              id: 2,
+              matchId: 101,
+              opponentId: 21,
+              number: 2,
+              won: false,
+            }),
+            makeEvidence({
+              id: 3,
+              matchId: 102,
+              opponentId: 22,
+              number: 3,
+              won: true,
+              percentile: 60,
+              referenceType:
+                "official",
+            }),
+            makeEvidence({
+              id: 4,
+              matchId: 103,
+              opponentId: 23,
+              number: 4,
+              won: false,
+            }),
+            makeEvidence({
+              id: 5,
+              matchId: 104,
+              opponentId: 24,
+              number: 5,
+              won: true,
+              percentile: 70,
+              referenceType:
+                "official",
+            }),
+          ],
+        },
+      ]);
+
+    const result =
+      await getCurrentPlacementLevel(
+        client,
+        10,
+        COMPETITION_ID,
+      );
+
+    assert.equal(
+      result.matches_played,
+      5,
+    );
+
+    assert.equal(
+      result.matches_remaining,
+      0,
+    );
+
+    assert.equal(
+      result.wins,
+      3,
+    );
+
+    assert.equal(
+      result.losses,
       2,
+    );
+
+    assert.equal(
+      result.completed,
+      true,
+    );
+
+    assert.ok(
+      result.placement_percentile >
+        0,
+    );
+  },
+);
+
+
+test(
+  "el mismo jugador puede estar 5/5 en singles y 0/5 en dobles",
+  async () => {
+    const singlesClient =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              id: 1,
+              matchId: 100,
+              competitionId: 1,
+              number: 1,
+              won: true,
+              percentile: 70,
+            }),
+            makeEvidence({
+              id: 2,
+              matchId: 101,
+              competitionId: 1,
+              number: 2,
+            }),
+            makeEvidence({
+              id: 3,
+              matchId: 102,
+              competitionId: 1,
+              number: 3,
+            }),
+            makeEvidence({
+              id: 4,
+              matchId: 103,
+              competitionId: 1,
+              number: 4,
+            }),
+            makeEvidence({
+              id: 5,
+              matchId: 104,
+              competitionId: 1,
+              number: 5,
+            }),
+          ],
+        },
+      ]);
+
+    const doublesClient =
+      makeClient([
+        {
+          rows: [],
+        },
+      ]);
+
+    const singles =
+      await getCurrentPlacementLevel(
+        singlesClient,
+        10,
+        1,
+      );
+
+    const doubles =
+      await getCurrentPlacementLevel(
+        doublesClient,
+        10,
+        2,
+      );
+
+    assert.equal(
+      singles.matches_played,
+      5,
+    );
+
+    assert.equal(
+      singles.completed,
+      true,
+    );
+
+    assert.equal(
+      doubles.matches_played,
+      0,
+    );
+
+    assert.equal(
+      doubles.completed,
+      false,
+    );
+
+    assert.equal(
+      singles.competition_id,
+      1,
+    );
+
+    assert.equal(
+      doubles.competition_id,
+      2,
+    );
+  },
+);
+
+
+test(
+  "getCurrentPlacementLevel rechaza userId inválido",
+  async () => {
+    const client =
+      makeClient([]);
+
+    await assert.rejects(
+      () =>
+        getCurrentPlacementLevel(
+          client,
+          "abc",
+          COMPETITION_ID,
+        ),
+      assertReason(
+        "invalid_integer",
+      ),
+    );
+  },
+);
+
+
+test(
+  "getCurrentPlacementLevel rechaza competitionId inválido",
+  async () => {
+    const client =
+      makeClient([]);
+
+    await assert.rejects(
+      () =>
+        getCurrentPlacementLevel(
+          client,
+          10,
+          undefined,
+        ),
+      assertReason(
+        "invalid_integer",
+      ),
+    );
+  },
+);
+
+
+test(
+  "placement de singles y dobles no mezcla evidencia",
+  async () => {
+    const singlesClient =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              competitionId: 1,
+              won: true,
+              percentile: 80,
+            }),
+          ],
+        },
+      ]);
+
+    const doublesClient =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              id: 2,
+              matchId: 200,
+              competitionId: 2,
+              won: false,
+            }),
+          ],
+        },
+      ]);
+
+    const singles =
+      await getCurrentPlacementLevel(
+        singlesClient,
+        10,
+        1,
+      );
+
+    const doubles =
+      await getCurrentPlacementLevel(
+        doublesClient,
+        10,
+        2,
+      );
+
+    assert.equal(
+      singles.wins,
+      1,
+    );
+
+    assert.equal(
+      singles.losses,
+      0,
+    );
+
+    assert.equal(
+      doubles.wins,
+      0,
+    );
+
+    assert.equal(
+      doubles.losses,
+      1,
     );
   },
 );

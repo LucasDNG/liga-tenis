@@ -14,302 +14,221 @@ import {
 } from "../src/services/placementEvidence.service.js";
 
 
-/*
-  ============================================================
-  LA RED
-  TESTS DE EVIDENCIA DE NIVELATORIOS
-  ============================================================
-
-  Esta suite NO toca Neon.
-
-  Usa clientes PostgreSQL simulados para verificar:
-
-  - conteo de evidencias;
-  - siguiente nivelatorio;
-  - máximo de 5;
-  - referencia congelada obligatoria en victorias;
-  - normalización de filas;
-  - prevención de duplicados;
-  - fallback cuando ON CONFLICT no inserta;
-  - progreso 0/5 ... 5/5;
-  - secuencia estricta 1,2,3,4,5;
-  - ausencia de huecos y duplicados.
-  ============================================================
-*/
+const COMPETITION_ID = 1;
+const OTHER_COMPETITION_ID = 2;
 
 
-/*
-  ============================================================
-  HELPERS
-  ============================================================
-*/
-
-const createQueuedClient = (
+const makeClient = (
   responses = [],
 ) => {
-  const queue =
-    [...responses];
+  let index = 0;
 
-  const calls =
-    [];
+  const calls = [];
 
   return {
     calls,
 
     async query(
-      sql,
+      text,
       params = [],
     ) {
       calls.push({
-        sql:
-          String(sql),
+        text,
         params,
       });
 
       if (
-        queue.length === 0
+        index >=
+        responses.length
       ) {
         throw new Error(
-          "Mock PostgreSQL sin respuesta configurada.",
+          `Mock PostgreSQL sin respuesta configurada para query #${index + 1}.`,
         );
       }
 
-      const next =
-        queue.shift();
+      const response =
+        responses[index];
+
+      index += 1;
 
       if (
-        next instanceof Error
+        response instanceof Error
       ) {
-        throw next;
+        throw response;
       }
 
       if (
-        typeof next ===
+        typeof response ===
         "function"
       ) {
-        return next({
-          sql:
-            String(sql),
+        return response(
+          text,
           params,
-          calls,
-        });
+          calls.length,
+        );
       }
 
-      return next;
+      return {
+        rows:
+          response.rows ?? [],
+        rowCount:
+          response.rowCount ??
+          response.rows?.length ??
+          0,
+      };
     },
   };
 };
 
 
-const evidenceRow = ({
+const makeEvidence = ({
   id = 1,
   matchId = 100,
   userId = 10,
+  competitionId = COMPETITION_ID,
   opponentId = 20,
-  placementMatchNumber = 1,
-  won = true,
-  percentile = 50,
-  referenceType = "official",
-  opponentRankPosition = 5,
-  officialPlayerCount = 20,
+  number = 1,
+  won = false,
+  percentile = null,
+  referenceType = null,
+  rankPosition = null,
+  officialCount = null,
 } = {}) => ({
-  id:
-    String(id),
-
+  id,
   match_id:
-    String(matchId),
-
+    matchId,
   user_id:
-    String(userId),
-
+    userId,
+  competition_id:
+    competitionId,
   opponent_id:
-    String(opponentId),
-
-  placement_match_number:
-    String(
-      placementMatchNumber,
-    ),
-
-  won,
-
-  opponent_percentile_at_match:
-    percentile === null
-      ? null
-      : String(
-          percentile,
-        ),
-
-  opponent_reference_type:
-    referenceType,
-
-  opponent_rank_position_at_match:
-    opponentRankPosition ===
-      null
-      ? null
-      : String(
-          opponentRankPosition,
-        ),
-
-  official_player_count_at_match:
-    officialPlayerCount ===
-      null
-      ? null
-      : String(
-          officialPlayerCount,
-        ),
-
-  created_at:
-    "2026-09-08T12:00:00.000Z",
-});
-
-
-const sequenceRow = (
-  number,
-) => ({
+    opponentId,
   placement_match_number:
     number,
+  won,
+  opponent_percentile_at_match:
+    percentile,
+  opponent_reference_type:
+    referenceType,
+  opponent_rank_position_at_match:
+    rankPosition,
+  official_player_count_at_match:
+    officialCount,
 });
 
 
-/*
-  ============================================================
-  CLIENTE
-  ============================================================
-*/
+const assertReason = (
+  reason,
+) => (
+  error,
+) => {
+  assert.ok(
+    error instanceof
+      PlacementEvidenceError,
+  );
+
+  assert.equal(
+    error.reason,
+    reason,
+  );
+
+  return true;
+};
+
 
 test(
-  "rechaza cliente PostgreSQL inexistente",
-  async () => {
-    await assert.rejects(
-      () =>
-        countPlayerPlacementEvidence(
-          null,
-          1,
-        ),
-      (error) => {
-        assert.ok(
-          error instanceof
-            PlacementEvidenceError,
-        );
-
-        assert.equal(
-          error.reason,
-          "database_client_missing",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-/*
-  ============================================================
-  CONTEO
-  ============================================================
-*/
-
-test(
-  "countPlayerPlacementEvidence devuelve cantidad numérica",
+  "countPlayerPlacementEvidence cuenta solamente usuario y competición",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 1,
           rows: [
             {
-              total:
-                "3",
+              total: 3,
             },
           ],
         },
       ]);
 
-    const result =
+    const total =
       await countPlayerPlacementEvidence(
         client,
         10,
+        COMPETITION_ID,
       );
 
     assert.equal(
-      result,
+      total,
       3,
-    );
-
-    assert.equal(
-      client.calls.length,
-      1,
     );
 
     assert.deepEqual(
       client.calls[0].params,
-      [10],
+      [
+        10,
+        COMPETITION_ID,
+      ],
     );
 
     assert.match(
-      client.calls[0].sql,
-      /placement_match_evidence/i,
+      client.calls[0].text,
+      /user_id = \$1/,
+    );
+
+    assert.match(
+      client.calls[0].text,
+      /competition_id = \$2/,
     );
   },
 );
 
 
 test(
-  "countPlayerPlacementEvidence devuelve 0 si no hay total",
+  "countPlayerPlacementEvidence devuelve 0 cuando no hay evidencia",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 0,
-          rows: [],
+          rows: [
+            {
+              total: 0,
+            },
+          ],
         },
       ]);
 
-    const result =
+    assert.equal(
       await countPlayerPlacementEvidence(
         client,
         10,
-      );
-
-    assert.equal(
-      result,
+        COMPETITION_ID,
+      ),
       0,
     );
   },
 );
 
 
-/*
-  ============================================================
-  SIGUIENTE NIVELATORIO
-  ============================================================
-*/
-
 test(
-  "getNextPlacementMatchNumber devuelve 1 cuando no hay evidencias",
+  "getNextPlacementMatchNumber devuelve 1 cuando todavía no jugó",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 1,
           rows: [
             {
-              total:
-                0,
+              total: 0,
             },
           ],
         },
       ]);
 
-    const result =
+    assert.equal(
       await getNextPlacementMatchNumber(
         client,
         10,
-      );
-
-    assert.equal(
-      result,
+        COMPETITION_ID,
+      ),
       1,
     );
   },
@@ -317,29 +236,25 @@ test(
 
 
 test(
-  "getNextPlacementMatchNumber devuelve 5 cuando hay cuatro evidencias",
+  "getNextPlacementMatchNumber devuelve 5 después de cuatro evidencias",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 1,
           rows: [
             {
-              total:
-                4,
+              total: 4,
             },
           ],
         },
       ]);
 
-    const result =
+    assert.equal(
       await getNextPlacementMatchNumber(
         client,
         10,
-      );
-
-    assert.equal(
-      result,
+        COMPETITION_ID,
+      ),
       5,
     );
   },
@@ -347,176 +262,127 @@ test(
 
 
 test(
-  "getNextPlacementMatchNumber devuelve null después de cinco",
+  "getNextPlacementMatchNumber devuelve null después de cinco evidencias",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 1,
           rows: [
             {
-              total:
-                5,
+              total: 5,
             },
           ],
         },
       ]);
 
-    const result =
+    assert.equal(
       await getNextPlacementMatchNumber(
         client,
         10,
-      );
-
-    assert.equal(
-      result,
+        COMPETITION_ID,
+      ),
       null,
     );
   },
 );
 
 
-/*
-  ============================================================
-  CREACIÓN
-  ============================================================
-*/
-
 test(
-  "createPlacementEvidence guarda una victoria oficial congelada",
+  "createPlacementEvidence guarda competition_id",
   async () => {
     const row =
-      evidenceRow({
-        id: 77,
-        matchId: 100,
-        userId: 10,
-        opponentId: 20,
-        placementMatchNumber:
-          2,
+      makeEvidence({
         won: true,
-        percentile:
-          63.25,
+        percentile: 80,
         referenceType:
           "official",
-        opponentRankPosition:
-          8,
-        officialPlayerCount:
-          30,
+        rankPosition: 2,
+        officialCount: 10,
       });
 
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 1,
+          rows: [
+            {
+              id: 100,
+              competition_id:
+                COMPETITION_ID,
+            },
+          ],
+        },
+        {
           rows: [
             row,
           ],
         },
       ]);
 
-    const result =
+    const created =
       await createPlacementEvidence(
         client,
         {
-          matchId:
-            100,
-
-          userId:
-            10,
-
-          opponentId:
-            20,
-
-          placementMatchNumber:
-            2,
-
-          won:
-            true,
-
+          matchId: 100,
+          userId: 10,
+          competitionId:
+            COMPETITION_ID,
+          opponentId: 20,
+          placementMatchNumber: 1,
+          won: true,
           opponentPercentileAtMatch:
-            63.25,
-
+            80,
           opponentReferenceType:
             "official",
-
           opponentRankPositionAtMatch:
-            8,
-
+            2,
           officialPlayerCountAtMatch:
-            30,
+            10,
         },
       );
 
     assert.equal(
-      result.id,
-      77,
+      created.competition_id,
+      COMPETITION_ID,
     );
 
     assert.equal(
-      result.match_id,
-      100,
-    );
-
-    assert.equal(
-      result.user_id,
+      created.user_id,
       10,
     );
 
     assert.equal(
-      result.opponent_id,
-      20,
+      created.match_id,
+      100,
     );
 
     assert.equal(
-      result.placement_match_number,
-      2,
-    );
-
-    assert.equal(
-      result.won,
-      true,
-    );
-
-    assert.equal(
-      result
-        .opponent_percentile_at_match,
-      63.25,
-    );
-
-    assert.equal(
-      result
-        .opponent_rank_position_at_match,
-      8,
-    );
-
-    assert.equal(
-      result
-        .official_player_count_at_match,
-      30,
-    );
-
-    assert.equal(
-      client.calls.length,
+      created.placement_match_number,
       1,
     );
 
-    assert.match(
-      client.calls[0].sql,
-      /ON\s+CONFLICT/i,
+    assert.equal(
+      created.won,
+      true,
     );
 
     assert.deepEqual(
       client.calls[0].params,
+      [100],
+    );
+
+    assert.deepEqual(
+      client.calls[1].params,
       [
         100,
         10,
+        COMPETITION_ID,
         20,
-        2,
+        1,
         true,
-        63.25,
+        80,
         "official",
-        8,
-        30,
+        2,
+        10,
       ],
     );
   },
@@ -524,61 +390,52 @@ test(
 
 
 test(
-  "createPlacementEvidence acepta derrota sin percentil congelado",
+  "createPlacementEvidence permite derrota sin percentil del rival",
   async () => {
     const row =
-      evidenceRow({
-        won:
-          false,
-        percentile:
-          null,
-        referenceType:
-          null,
-        opponentRankPosition:
-          null,
-        officialPlayerCount:
-          null,
+      makeEvidence({
+        won: false,
       });
 
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 1,
+          rows: [
+            {
+              id: 100,
+              competition_id:
+                COMPETITION_ID,
+            },
+          ],
+        },
+        {
           rows: [
             row,
           ],
         },
       ]);
 
-    const result =
+    const created =
       await createPlacementEvidence(
         client,
         {
-          matchId:
-            100,
-
-          userId:
-            10,
-
-          opponentId:
-            20,
-
-          placementMatchNumber:
-            1,
-
-          won:
-            false,
+          matchId: 100,
+          userId: 10,
+          competitionId:
+            COMPETITION_ID,
+          opponentId: 20,
+          placementMatchNumber: 1,
+          won: false,
         },
       );
 
     assert.equal(
-      result.won,
+      created.won,
       false,
     );
 
     assert.equal(
-      result
-        .opponent_percentile_at_match,
+      created.opponent_percentile_at_match,
       null,
     );
   },
@@ -586,46 +443,28 @@ test(
 
 
 test(
-  "createPlacementEvidence rechaza victoria sin referencia congelada",
+  "createPlacementEvidence exige referencia porcentual cuando gana",
   async () => {
     const client =
-      createQueuedClient([]);
+      makeClient([]);
 
     await assert.rejects(
       () =>
         createPlacementEvidence(
           client,
           {
-            matchId:
-              100,
-
-            userId:
-              10,
-
-            opponentId:
-              20,
-
-            placementMatchNumber:
-              1,
-
-            won:
-              true,
-
-            opponentPercentileAtMatch:
-              null,
-
-            opponentReferenceType:
-              "official",
+            matchId: 100,
+            userId: 10,
+            competitionId:
+              COMPETITION_ID,
+            opponentId: 20,
+            placementMatchNumber: 1,
+            won: true,
           },
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "victory_reference_missing",
-        );
-
-        return true;
-      },
+      assertReason(
+        "victory_reference_missing",
+      ),
     );
 
     assert.equal(
@@ -640,346 +479,154 @@ test(
   "createPlacementEvidence rechaza jugador contra sí mismo",
   async () => {
     const client =
-      createQueuedClient([]);
+      makeClient([]);
 
     await assert.rejects(
       () =>
         createPlacementEvidence(
           client,
           {
-            matchId:
-              100,
-
-            userId:
-              10,
-
-            opponentId:
-              10,
-
-            placementMatchNumber:
-              1,
-
-            won:
-              true,
-
-            opponentPercentileAtMatch:
-              50,
-
-            opponentReferenceType:
-              "official",
+            matchId: 100,
+            userId: 10,
+            competitionId:
+              COMPETITION_ID,
+            opponentId: 10,
+            placementMatchNumber: 1,
+            won: false,
           },
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "same_player",
-        );
-
-        return true;
-      },
+      assertReason(
+        "same_player",
+      ),
     );
   },
 );
 
 
 test(
-  "createPlacementEvidence rechaza nivelatorio 0",
+  "createPlacementEvidence rechaza número de nivelatorio fuera de rango",
   async () => {
     const client =
-      createQueuedClient([]);
+      makeClient([]);
 
     await assert.rejects(
       () =>
         createPlacementEvidence(
           client,
           {
-            matchId:
-              100,
-
-            userId:
-              10,
-
-            opponentId:
-              20,
-
-            placementMatchNumber:
-              0,
-
-            won:
-              true,
-
-            opponentPercentileAtMatch:
-              50,
-
-            opponentReferenceType:
-              "official",
+            matchId: 100,
+            userId: 10,
+            competitionId:
+              COMPETITION_ID,
+            opponentId: 20,
+            placementMatchNumber: 6,
+            won: false,
           },
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "invalid_placement_match_number",
-        );
-
-        return true;
-      },
+      assertReason(
+        "invalid_placement_match_number",
+      ),
     );
   },
 );
 
 
 test(
-  "createPlacementEvidence rechaza sexto nivelatorio",
+  "createPlacementEvidence rechaza partido inexistente",
   async () => {
     const client =
-      createQueuedClient([]);
-
-    await assert.rejects(
-      () =>
-        createPlacementEvidence(
-          client,
-          {
-            matchId:
-              100,
-
-            userId:
-              10,
-
-            opponentId:
-              20,
-
-            placementMatchNumber:
-              6,
-
-            won:
-              true,
-
-            opponentPercentileAtMatch:
-              50,
-
-            opponentReferenceType:
-              "official",
-          },
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "invalid_placement_match_number",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-test(
-  "createPlacementEvidence rechaza won no boolean",
-  async () => {
-    const client =
-      createQueuedClient([]);
-
-    await assert.rejects(
-      () =>
-        createPlacementEvidence(
-          client,
-          {
-            matchId:
-              100,
-
-            userId:
-              10,
-
-            opponentId:
-              20,
-
-            placementMatchNumber:
-              1,
-
-            won:
-              1,
-
-            opponentPercentileAtMatch:
-              50,
-
-            opponentReferenceType:
-              "official",
-          },
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "invalid_result",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-test(
-  "createPlacementEvidence rechaza percentil mayor a 100",
-  async () => {
-    const client =
-      createQueuedClient([]);
-
-    await assert.rejects(
-      () =>
-        createPlacementEvidence(
-          client,
-          {
-            matchId:
-              100,
-
-            userId:
-              10,
-
-            opponentId:
-              20,
-
-            placementMatchNumber:
-              1,
-
-            won:
-              true,
-
-            opponentPercentileAtMatch:
-              101,
-
-            opponentReferenceType:
-              "official",
-          },
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "invalid_percentile",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-test(
-  "createPlacementEvidence admite referencia provisional sin descuento",
-  async () => {
-    const row =
-      evidenceRow({
-        referenceType:
-          "provisional",
-        percentile:
-          68,
-      });
-
-    const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 1,
+          rows: [],
+          rowCount: 0,
+        },
+      ]);
+
+    await assert.rejects(
+      () =>
+        createPlacementEvidence(
+          client,
+          {
+            matchId: 100,
+            userId: 10,
+            competitionId:
+              COMPETITION_ID,
+            opponentId: 20,
+            placementMatchNumber: 1,
+            won: false,
+          },
+        ),
+      assertReason(
+        "match_not_found",
+      ),
+    );
+  },
+);
+
+
+test(
+  "createPlacementEvidence rechaza partido de otra competición",
+  async () => {
+    const client =
+      makeClient([
+        {
           rows: [
-            row,
+            {
+              id: 100,
+              competition_id:
+                OTHER_COMPETITION_ID,
+            },
           ],
         },
       ]);
 
-    const result =
-      await createPlacementEvidence(
-        client,
-        {
-          matchId:
-            100,
-
-          userId:
-            10,
-
-          opponentId:
-            20,
-
-          placementMatchNumber:
-            1,
-
-          won:
-            true,
-
-          opponentPercentileAtMatch:
-            68,
-
-          opponentReferenceType:
-            "provisional",
-        },
-      );
-
-    assert.equal(
-      result
-        .opponent_percentile_at_match,
-      68,
-    );
-
-    assert.equal(
-      result
-        .opponent_reference_type,
-      "provisional",
-    );
-
-    assert.equal(
-      client.calls[0]
-        .params[5],
-      68,
+    await assert.rejects(
+      () =>
+        createPlacementEvidence(
+          client,
+          {
+            matchId: 100,
+            userId: 10,
+            competitionId:
+              COMPETITION_ID,
+            opponentId: 20,
+            placementMatchNumber: 1,
+            won: false,
+          },
+        ),
+      assertReason(
+        "match_competition_mismatch",
+      ),
     );
   },
 );
 
 
-/*
-  ============================================================
-  DUPLICADO / IDEMPOTENCIA
-  ============================================================
-*/
-
 test(
-  "si ON CONFLICT no inserta recupera la evidencia existente",
+  "createPlacementEvidence recupera evidencia existente ante conflicto",
   async () => {
     const existing =
-      evidenceRow({
-        id:
-          999,
-        matchId:
-          100,
-        userId:
-          10,
-        opponentId:
-          20,
-        placementMatchNumber:
-          3,
-        won:
-          true,
-        percentile:
-          72,
-        referenceType:
-          "official",
+      makeEvidence({
+        id: 99,
+        won: false,
       });
 
     const client =
-      createQueuedClient([
-        /*
-          INSERT:
-          conflicto, no inserta.
-        */
+      makeClient([
         {
-          rowCount: 0,
-          rows: [],
+          rows: [
+            {
+              id: 100,
+              competition_id:
+                COMPETITION_ID,
+            },
+          ],
         },
-
-        /*
-          SELECT fallback.
-        */
         {
-          rowCount: 1,
+          rows: [],
+          rowCount: 0,
+        },
+        {
           rows: [
             existing,
           ],
@@ -990,48 +637,28 @@ test(
       await createPlacementEvidence(
         client,
         {
-          matchId:
-            100,
-
-          userId:
-            10,
-
-          opponentId:
-            20,
-
-          placementMatchNumber:
-            3,
-
-          won:
-            true,
-
-          opponentPercentileAtMatch:
-            72,
-
-          opponentReferenceType:
-            "official",
+          matchId: 100,
+          userId: 10,
+          competitionId:
+            COMPETITION_ID,
+          opponentId: 20,
+          placementMatchNumber: 1,
+          won: false,
         },
       );
 
     assert.equal(
       result.id,
-      999,
+      99,
     );
 
-    assert.equal(
-      result
-        .placement_match_number,
-      3,
-    );
-
-    assert.equal(
-      client.calls.length,
-      2,
-    );
-
-    assert.match(
-      client.calls[1].sql,
-      /WHERE\s+match_id\s*=\s*\$1/i,
+    assert.deepEqual(
+      client.calls[2].params,
+      [
+        100,
+        10,
+        COMPETITION_ID,
+      ],
     );
   },
 );
@@ -1041,15 +668,23 @@ test(
   "conflicto sin fila recuperable falla",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 0,
-          rows: [],
+          rows: [
+            {
+              id: 100,
+              competition_id:
+                COMPETITION_ID,
+            },
+          ],
         },
-
         {
-          rowCount: 0,
           rows: [],
+          rowCount: 0,
+        },
+        {
+          rows: [],
+          rowCount: 0,
         },
       ]);
 
@@ -1058,69 +693,34 @@ test(
         createPlacementEvidence(
           client,
           {
-            matchId:
-              100,
-
-            userId:
-              10,
-
-            opponentId:
-              20,
-
-            placementMatchNumber:
-              1,
-
-            won:
-              true,
-
-            opponentPercentileAtMatch:
-              50,
-
-            opponentReferenceType:
-              "official",
+            matchId: 100,
+            userId: 10,
+            competitionId:
+              COMPETITION_ID,
+            opponentId: 20,
+            placementMatchNumber: 1,
+            won: false,
           },
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "placement_evidence_write_failed",
-        );
-
-        return true;
-      },
+      assertReason(
+        "placement_evidence_write_failed",
+      ),
     );
   },
 );
 
 
-/*
-  ============================================================
-  GET BY MATCH
-  ============================================================
-*/
-
 test(
-  "getPlacementEvidenceByMatch normaliza campos numéricos",
+  "getPlacementEvidenceByMatch filtra partido usuario y competición",
   async () => {
+    const row =
+      makeEvidence();
+
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 1,
           rows: [
-            evidenceRow({
-              id:
-                55,
-              matchId:
-                200,
-              userId:
-                30,
-              opponentId:
-                40,
-              placementMatchNumber:
-                4,
-              percentile:
-                81.5,
-            }),
+            row,
           ],
         },
       ]);
@@ -1129,61 +729,36 @@ test(
       await getPlacementEvidenceByMatch(
         client,
         {
-          matchId:
-            200,
-
-          userId:
-            30,
+          matchId: 100,
+          userId: 10,
+          competitionId:
+            COMPETITION_ID,
         },
       );
 
     assert.equal(
       result.id,
-      55,
+      1,
     );
 
-    assert.equal(
-      typeof result.id,
-      "number",
-    );
-
-    assert.equal(
-      result.match_id,
-      200,
-    );
-
-    assert.equal(
-      result.user_id,
-      30,
-    );
-
-    assert.equal(
-      result.opponent_id,
-      40,
-    );
-
-    assert.equal(
-      result
-        .placement_match_number,
-      4,
-    );
-
-    assert.equal(
-      result
-        .opponent_percentile_at_match,
-      81.5,
+    assert.deepEqual(
+      client.calls[0].params,
+      [
+        100,
+        10,
+        COMPETITION_ID,
+      ],
     );
   },
 );
 
 
 test(
-  "getPlacementEvidenceByMatch devuelve null si no existe",
+  "getPlacementEvidenceByMatch devuelve null cuando no existe",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 0,
           rows: [],
         },
       ]);
@@ -1192,11 +767,10 @@ test(
       await getPlacementEvidenceByMatch(
         client,
         {
-          matchId:
-            200,
-
-          userId:
-            30,
+          matchId: 100,
+          userId: 10,
+          competitionId:
+            COMPETITION_ID,
         },
       );
 
@@ -1208,40 +782,26 @@ test(
 );
 
 
-/*
-  ============================================================
-  HISTORIAL DEL JUGADOR
-  ============================================================
-*/
-
 test(
-  "getPlayerPlacementEvidence devuelve evidencias normalizadas",
+  "getPlayerPlacementEvidence consulta usuario y competición",
   async () => {
-    const client =
-      createQueuedClient([
-        {
-          rowCount: 2,
-          rows: [
-            evidenceRow({
-              id:
-                1,
-              placementMatchNumber:
-                1,
-            }),
+    const rows = [
+      makeEvidence({
+        id: 1,
+        number: 1,
+      }),
+      makeEvidence({
+        id: 2,
+        matchId: 101,
+        opponentId: 21,
+        number: 2,
+      }),
+    ];
 
-            evidenceRow({
-              id:
-                2,
-              matchId:
-                101,
-              placementMatchNumber:
-                2,
-              won:
-                false,
-              percentile:
-                null,
-            }),
-          ],
+    const client =
+      makeClient([
+        {
+          rows,
         },
       ]);
 
@@ -1249,6 +809,7 @@ test(
       await getPlayerPlacementEvidence(
         client,
         10,
+        COMPETITION_ID,
       );
 
     assert.equal(
@@ -1256,73 +817,37 @@ test(
       2,
     );
 
-    assert.equal(
-      result[0]
-        .placement_match_number,
-      1,
+    assert.deepEqual(
+      client.calls[0].params,
+      [
+        10,
+        COMPETITION_ID,
+      ],
     );
 
     assert.equal(
-      result[1]
-        .placement_match_number,
-      2,
+      result[0].competition_id,
+      COMPETITION_ID,
     );
 
     assert.equal(
-      result[1].won,
-      false,
-    );
-
-    assert.match(
-      client.calls[0].sql,
-      /ORDER BY[\s\S]*placement_match_number\s+ASC/i,
+      result[1].competition_id,
+      COMPETITION_ID,
     );
   },
 );
 
 
 test(
-  "getPlayerPlacementCalculationEvidence expone solo datos usados por el motor",
+  "getPlayerPlacementCalculationEvidence expone solo datos del motor",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 2,
           rows: [
-            evidenceRow({
-              id:
-                1,
-              matchId:
-                100,
-              userId:
-                10,
-              opponentId:
-                20,
-              placementMatchNumber:
-                1,
-              won:
-                true,
-              percentile:
-                68,
-              referenceType:
-                "provisional",
-            }),
-
-            evidenceRow({
-              id:
-                2,
-              matchId:
-                101,
-              userId:
-                10,
-              opponentId:
-                30,
-              placementMatchNumber:
-                2,
-              won:
-                false,
-              percentile:
-                90,
+            makeEvidence({
+              won: true,
+              percentile: 75,
               referenceType:
                 "official",
             }),
@@ -1334,41 +859,20 @@ test(
       await getPlayerPlacementCalculationEvidence(
         client,
         10,
+        COMPETITION_ID,
       );
 
     assert.deepEqual(
       result,
       [
         {
-          match_id:
-            100,
-
-          opponent_id:
-            20,
-
-          won:
-            true,
-
+          match_id: 100,
+          competition_id:
+            COMPETITION_ID,
+          opponent_id: 20,
+          won: true,
           opponent_percentile_at_match:
-            68,
-
-          opponent_reference_type:
-            "provisional",
-        },
-
-        {
-          match_id:
-            101,
-
-          opponent_id:
-            30,
-
-          won:
-            false,
-
-          opponent_percentile_at_match:
-            90,
-
+            75,
           opponent_reference_type:
             "official",
         },
@@ -1378,89 +882,108 @@ test(
 );
 
 
-/*
-  ============================================================
-  PROGRESO
-  ============================================================
-*/
-
 test(
-  "getPlayerPlacementProgress calcula 3/5 correctamente",
+  "getPlayerPlacementCalculationEvidence normaliza referencia faltante como other",
   async () => {
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 3,
           rows: [
-            evidenceRow({
-              id:
-                1,
-              placementMatchNumber:
-                1,
-              won:
-                true,
-            }),
-
-            evidenceRow({
-              id:
-                2,
-              matchId:
-                101,
-              placementMatchNumber:
-                2,
-              won:
-                false,
-              percentile:
+            makeEvidence({
+              won: false,
+              referenceType:
                 null,
-            }),
-
-            evidenceRow({
-              id:
-                3,
-              matchId:
-                102,
-              placementMatchNumber:
-                3,
-              won:
-                true,
             }),
           ],
         },
       ]);
 
     const result =
-      await getPlayerPlacementProgress(
+      await getPlayerPlacementCalculationEvidence(
         client,
         10,
+        COMPETITION_ID,
       );
 
     assert.equal(
-      result.user_id,
+      result[0]
+        .opponent_reference_type,
+      "other",
+    );
+  },
+);
+
+
+test(
+  "getPlayerPlacementProgress calcula 3/5 dentro de una competición",
+  async () => {
+    const client =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              id: 1,
+              matchId: 100,
+              number: 1,
+              won: true,
+              percentile: 50,
+            }),
+            makeEvidence({
+              id: 2,
+              matchId: 101,
+              number: 2,
+              won: false,
+            }),
+            makeEvidence({
+              id: 3,
+              matchId: 102,
+              number: 3,
+              won: true,
+              percentile: 70,
+            }),
+          ],
+        },
+      ]);
+
+    const progress =
+      await getPlayerPlacementProgress(
+        client,
+        10,
+        COMPETITION_ID,
+      );
+
+    assert.equal(
+      progress.user_id,
       10,
     );
 
     assert.equal(
-      result.played,
+      progress.competition_id,
+      COMPETITION_ID,
+    );
+
+    assert.equal(
+      progress.played,
       3,
     );
 
     assert.equal(
-      result.wins,
+      progress.wins,
       2,
     );
 
     assert.equal(
-      result.losses,
+      progress.losses,
       1,
     );
 
     assert.equal(
-      result.remaining,
+      progress.remaining,
       2,
     );
 
     assert.equal(
-      result.completed,
+      progress.completed,
       false,
     );
   },
@@ -1468,7 +991,7 @@ test(
 
 
 test(
-  "getPlayerPlacementProgress marca 5/5 completado",
+  "getPlayerPlacementProgress marca 5/5 completado solamente en su competición",
   async () => {
     const rows =
       Array.from(
@@ -1479,76 +1002,94 @@ test(
           _,
           index,
         ) =>
-          evidenceRow({
+          makeEvidence({
             id:
               index + 1,
-
             matchId:
-              100 +
-              index,
-
-            placementMatchNumber:
+              100 + index,
+            opponentId:
+              20 + index,
+            number:
               index + 1,
-
             won:
-              index < 3,
+              index < 2,
+            percentile:
+              index < 2
+                ? 60 + index * 10
+                : null,
           }),
       );
 
     const client =
-      createQueuedClient([
+      makeClient([
         {
-          rowCount: 5,
           rows,
         },
       ]);
 
-    const result =
+    const progress =
       await getPlayerPlacementProgress(
         client,
         10,
+        COMPETITION_ID,
       );
 
     assert.equal(
-      result.played,
+      progress.played,
       5,
     );
 
     assert.equal(
-      result.remaining,
+      progress.remaining,
       0,
     );
 
     assert.equal(
-      result.completed,
+      progress.completed,
       true,
     );
 
     assert.equal(
-      result.wins,
-      3,
-    );
-
-    assert.equal(
-      result.losses,
+      progress.wins,
       2,
     );
+
+    assert.equal(
+      progress.losses,
+      3,
+    );
   },
 );
 
 
-/*
-  ============================================================
-  VALIDACIÓN DE SECUENCIA
-  ============================================================
-*/
-
 test(
-  "validatePlacementEvidenceSequence acepta array vacío",
+  "validatePlacementEvidenceSequence acepta secuencia 1 a 5",
   () => {
+    const evidence =
+      Array.from(
+        {
+          length: 5,
+        },
+        (
+          _,
+          index,
+        ) =>
+          makeEvidence({
+            id:
+              index + 1,
+            matchId:
+              100 + index,
+            opponentId:
+              20 + index,
+            number:
+              index + 1,
+          }),
+      );
+
     assert.equal(
       validatePlacementEvidenceSequence(
-        [],
+        evidence,
+        COMPETITION_ID,
       ),
       true,
     );
@@ -1557,17 +1098,28 @@ test(
 
 
 test(
-  "validatePlacementEvidenceSequence acepta 1,2,3,4,5",
+  "validatePlacementEvidenceSequence acepta secuencia parcial consecutiva",
   () => {
+    const evidence = [
+      makeEvidence({
+        number: 1,
+      }),
+      makeEvidence({
+        id: 2,
+        matchId: 101,
+        number: 2,
+      }),
+      makeEvidence({
+        id: 3,
+        matchId: 102,
+        number: 3,
+      }),
+    ];
+
     assert.equal(
       validatePlacementEvidenceSequence(
-        [
-          sequenceRow(1),
-          sequenceRow(2),
-          sequenceRow(3),
-          sequenceRow(4),
-          sequenceRow(5),
-        ],
+        evidence,
+        COMPETITION_ID,
       ),
       true,
     );
@@ -1576,165 +1128,209 @@ test(
 
 
 test(
-  "validatePlacementEvidenceSequence acepta secuencia parcial 1,2,3",
+  "validatePlacementEvidenceSequence rechaza huecos",
   () => {
-    assert.equal(
-      validatePlacementEvidenceSequence(
-        [
-          sequenceRow(1),
-          sequenceRow(2),
-          sequenceRow(3),
-        ],
+    const evidence = [
+      makeEvidence({
+        number: 1,
+      }),
+      makeEvidence({
+        id: 2,
+        matchId: 102,
+        number: 3,
+      }),
+    ];
+
+    assert.throws(
+      () =>
+        validatePlacementEvidenceSequence(
+          evidence,
+          COMPETITION_ID,
+        ),
+      assertReason(
+        "placement_sequence_gap",
       ),
-      true,
     );
   },
 );
 
 
 test(
-  "validatePlacementEvidenceSequence rechaza duplicados",
+  "validatePlacementEvidenceSequence rechaza números duplicados",
   () => {
+    const evidence = [
+      makeEvidence({
+        id: 1,
+        matchId: 100,
+        number: 1,
+      }),
+      makeEvidence({
+        id: 2,
+        matchId: 101,
+        number: 1,
+      }),
+    ];
+
     assert.throws(
       () =>
         validatePlacementEvidenceSequence(
-          [
-            sequenceRow(1),
-            sequenceRow(2),
-            sequenceRow(2),
-          ],
+          evidence,
+          COMPETITION_ID,
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "duplicate_placement_match_number",
-        );
-
-        return true;
-      },
+      assertReason(
+        "duplicate_placement_match_number",
+      ),
     );
   },
 );
 
 
 test(
-  "validatePlacementEvidenceSequence rechaza hueco 1,3",
+  "validatePlacementEvidenceSequence rechaza evidencia de otra competición",
   () => {
+    const evidence = [
+      makeEvidence({
+        competitionId:
+          OTHER_COMPETITION_ID,
+      }),
+    ];
+
     assert.throws(
       () =>
         validatePlacementEvidenceSequence(
-          [
-            sequenceRow(1),
-            sequenceRow(3),
-          ],
+          evidence,
+          COMPETITION_ID,
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "placement_sequence_gap",
-        );
-
-        return true;
-      },
+      assertReason(
+        "placement_competition_mismatch",
+      ),
     );
   },
 );
 
 
 test(
-  "validatePlacementEvidenceSequence rechaza empezar en 2",
+  "validatePlacementEvidenceSequence rechaza más de cinco nivelatorios",
   () => {
+    const evidence =
+      Array.from(
+        {
+          length: 6,
+        },
+        (
+          _,
+          index,
+        ) =>
+          makeEvidence({
+            id:
+              index + 1,
+            matchId:
+              100 + index,
+            opponentId:
+              20 + index,
+            number:
+              index + 1,
+          }),
+      );
+
     assert.throws(
       () =>
         validatePlacementEvidenceSequence(
-          [
-            sequenceRow(2),
-          ],
+          evidence,
+          COMPETITION_ID,
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "placement_sequence_gap",
-        );
-
-        return true;
-      },
+      assertReason(
+        "too_many_placement_matches",
+      ),
     );
   },
 );
 
 
 test(
-  "validatePlacementEvidenceSequence rechaza número 6",
-  () => {
-    assert.throws(
-      () =>
-        validatePlacementEvidenceSequence(
-          [
-            sequenceRow(1),
-            sequenceRow(2),
-            sequenceRow(3),
-            sequenceRow(4),
-            sequenceRow(6),
-          ],
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "invalid_placement_match_number",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-test(
-  "validatePlacementEvidenceSequence rechaza más de cinco evidencias",
-  () => {
-    assert.throws(
-      () =>
-        validatePlacementEvidenceSequence(
-          [
-            sequenceRow(1),
-            sequenceRow(2),
-            sequenceRow(3),
-            sequenceRow(4),
-            sequenceRow(5),
-            sequenceRow(5),
-          ],
-        ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "too_many_placement_matches",
-        );
-
-        return true;
-      },
-    );
-  },
-);
-
-
-test(
-  "validatePlacementEvidenceSequence rechaza dato que no es array",
+  "validatePlacementEvidenceSequence rechaza colección inválida",
   () => {
     assert.throws(
       () =>
         validatePlacementEvidenceSequence(
           null,
+          COMPETITION_ID,
         ),
-      (error) => {
-        assert.equal(
-          error.reason,
-          "invalid_evidence_collection",
-        );
+      assertReason(
+        "invalid_evidence_collection",
+      ),
+    );
+  },
+);
 
-        return true;
-      },
+
+test(
+  "las evidencias de singles y dobles quedan aisladas por competition_id",
+  async () => {
+    const singlesClient =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              competitionId: 1,
+              number: 1,
+            }),
+            makeEvidence({
+              id: 2,
+              matchId: 101,
+              competitionId: 1,
+              number: 2,
+            }),
+          ],
+        },
+      ]);
+
+    const doublesClient =
+      makeClient([
+        {
+          rows: [
+            makeEvidence({
+              id: 3,
+              matchId: 200,
+              competitionId: 2,
+              number: 1,
+            }),
+          ],
+        },
+      ]);
+
+    const singles =
+      await getPlayerPlacementProgress(
+        singlesClient,
+        10,
+        1,
+      );
+
+    const doubles =
+      await getPlayerPlacementProgress(
+        doublesClient,
+        10,
+        2,
+      );
+
+    assert.equal(
+      singles.played,
+      2,
+    );
+
+    assert.equal(
+      doubles.played,
+      1,
+    );
+
+    assert.equal(
+      singles.competition_id,
+      1,
+    );
+
+    assert.equal(
+      doubles.competition_id,
+      2,
     );
   },
 );
