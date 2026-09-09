@@ -1,15 +1,27 @@
 import { pool } from "../db.js";
 
 import {
+  parseMatchScore,
+} from "../services/matchScore.service.js";
+
+import {
   createMatchAuditFlag,
   checkFrequentOpponents,
   checkEloConcentration,
 } from "../services/antifraud.service.js";
 
 import {
-  PLACEMENT_MATCHES,
-  OFFICIAL_ELO_FLOOR,
-} from "../services/placementLevel.service.js";
+  isPlacementRatingPlayer,
+  calculatePlayerMatchRating,
+} from "../services/matchRating.service.js";
+
+import {
+  buildMatchEloEvents,
+} from "../services/matchEloEvents.service.js";
+
+import {
+  persistMatchEloEventPlan,
+} from "../services/eloEventPersistence.service.js";
 
 import {
   preparePlacementMatchContext,
@@ -51,535 +63,8 @@ import {
 */
 
 
-const NORMAL_K = 32;
-
-const RANKED_LOSS_TO_PROVISIONAL_MIN =
-  200;
-
-const RANKED_LOSS_TO_PROVISIONAL_PERCENT =
-  0.12;
-
-const RANKED_LOSS_TO_PROVISIONAL_MAX =
-  300;
-
 const TOO_FAST_RESULT_MINUTES =
   40;
-
-
-/*
-  ============================================================
-  SCORE
-  ============================================================
-*/
-
-const parseGameValue = (
-  value,
-) => {
-  if (
-    value === null ||
-    value === undefined ||
-    value === "" ||
-    typeof value ===
-      "boolean"
-  ) {
-    return null;
-  }
-
-  if (
-    typeof value !==
-      "number" &&
-    typeof value !==
-      "string"
-  ) {
-    return null;
-  }
-
-  if (
-    typeof value ===
-      "string" &&
-    value.trim() ===
-      ""
-  ) {
-    return null;
-  }
-
-  const number =
-    Number(value);
-
-  return Number.isInteger(
-    number,
-  )
-    ? number
-    : null;
-};
-
-
-const isValidSet = (
-  a,
-  b,
-) => {
-  if (
-    !Number.isInteger(a) ||
-    !Number.isInteger(b) ||
-    a < 0 ||
-    b < 0
-  ) {
-    return false;
-  }
-
-  const max =
-    Math.max(a, b);
-
-  const min =
-    Math.min(a, b);
-
-  if (
-    max === 6 &&
-    min <= 4
-  ) {
-    return true;
-  }
-
-  if (
-    max === 7 &&
-    (
-      min === 5 ||
-      min === 6
-    )
-  ) {
-    return true;
-  }
-
-  return false;
-};
-
-
-const parseScore = (
-  score,
-) => {
-  if (
-    !Array.isArray(score) ||
-    (
-      score.length !== 2 &&
-      score.length !== 3
-    )
-  ) {
-    return {
-      error:
-        "El partido debe tener exactamente 2 o 3 sets",
-    };
-  }
-
-  const normalizedScore =
-    [];
-
-  const setWinners =
-    [];
-
-  for (
-    let index = 0;
-    index <
-    score.length;
-    index += 1
-  ) {
-    const currentSet =
-      score[index];
-
-    if (
-      !currentSet ||
-      typeof currentSet !==
-        "object" ||
-      Array.isArray(
-        currentSet,
-      )
-    ) {
-      return {
-        error:
-          `El Set ${index + 1} no tiene un formato válido.`,
-      };
-    }
-
-    const player1Games =
-      parseGameValue(
-        currentSet.p1,
-      );
-
-    const player2Games =
-      parseGameValue(
-        currentSet.p2,
-      );
-
-    if (
-      player1Games ===
-        null ||
-      player2Games ===
-        null
-    ) {
-      return {
-        error:
-          `Completá correctamente los dos valores del Set ${index + 1}.`,
-      };
-    }
-
-    if (
-      !isValidSet(
-        player1Games,
-        player2Games,
-      )
-    ) {
-      return {
-        error:
-          `El Set ${index + 1} no es válido. Ejemplos: 6-4, 7-5 o 7-6.`,
-      };
-    }
-
-    normalizedScore.push({
-      p1:
-        player1Games,
-
-      p2:
-        player2Games,
-    });
-
-    setWinners.push(
-      player1Games >
-        player2Games
-        ? 1
-        : 2,
-    );
-  }
-
-  if (
-    normalizedScore.length ===
-    2
-  ) {
-    if (
-      setWinners[0] !==
-      setWinners[1]
-    ) {
-      return {
-        error:
-          "Si cada jugador ganó un set, tenés que cargar el tercer set.",
-      };
-    }
-
-    return {
-      winnerSide:
-        setWinners[0],
-
-      normalizedScore,
-    };
-  }
-
-  if (
-    setWinners[0] ===
-    setWinners[1]
-  ) {
-    return {
-      error:
-        "Si un jugador ganó los dos primeros sets no corresponde cargar un tercer set.",
-    };
-  }
-
-  return {
-    winnerSide:
-      setWinners[2],
-
-    normalizedScore,
-  };
-};
-
-
-/*
-  ============================================================
-  HELPERS ELO OFICIAL
-  ============================================================
-*/
-
-const isProvisional = (
-  matchesPlayed,
-) =>
-  Number(
-    matchesPlayed,
-  ) <
-  PLACEMENT_MATCHES;
-
-
-const expectedScore = (
-  ownRating,
-  opponentRating,
-) =>
-  1 /
-  (
-    1 +
-    10 **
-      (
-        (
-          opponentRating -
-          ownRating
-        ) /
-        400
-      )
-  );
-
-
-const normalEloChange = ({
-  ownRating,
-  opponentRating,
-  won,
-}) => {
-  const expected =
-    expectedScore(
-      ownRating,
-      opponentRating,
-    );
-
-  return Math.round(
-    NORMAL_K *
-      (
-        (
-          won
-            ? 1
-            : 0
-        ) -
-        expected
-      ),
-  );
-};
-
-
-const getRankedLossToProvisionalPenalty =
-  (
-    rating,
-  ) => {
-    const percentage =
-      Math.round(
-        rating *
-          RANKED_LOSS_TO_PROVISIONAL_PERCENT,
-      );
-
-    return Math.min(
-      RANKED_LOSS_TO_PROVISIONAL_MAX,
-
-      Math.max(
-        RANKED_LOSS_TO_PROVISIONAL_MIN,
-        percentage,
-      ),
-    );
-  };
-
-
-const getOfficialLossFloor = (
-  rating,
-) =>
-  rating >=
-  OFFICIAL_ELO_FLOOR
-    ? OFFICIAL_ELO_FLOOR
-    : 0;
-
-
-/*
-  ============================================================
-  ELO DE UN OFICIAL
-  ============================================================
-
-  El provisional NO utiliza este cálculo.
-
-  Si el oficial gana:
-  - K32.
-
-  Si el oficial pierde contra otro oficial:
-  - K32.
-
-  Si el oficial pierde contra provisional:
-  - conserva la penalización especial vigente.
-  ============================================================
-*/
-
-const calculateOfficialMatchRating = ({
-  player,
-  opponent,
-  won,
-}) => {
-  const rating =
-    Number(
-      player.rating,
-    );
-
-  const opponentRating =
-    Number(
-      opponent.rating,
-    );
-
-  const opponentProvisional =
-    isProvisional(
-      opponent
-        .matches_played,
-    );
-
-  if (
-    won
-  ) {
-    const delta =
-      normalEloChange({
-        ownRating:
-          rating,
-
-        opponentRating,
-
-        won:
-          true,
-      });
-
-    return {
-      rating_before:
-        rating,
-
-      rating_after:
-        Math.max(
-          OFFICIAL_ELO_FLOOR,
-          rating +
-            delta,
-        ),
-
-      calculation:
-        opponentProvisional
-          ? "ranked_beats_placement"
-          : "normal_ranked",
-
-      special_provisional_penalty:
-        null,
-    };
-  }
-
-  if (
-    opponentProvisional
-  ) {
-    const penalty =
-      getRankedLossToProvisionalPenalty(
-        rating,
-      );
-
-    return {
-      rating_before:
-        rating,
-
-      rating_after:
-        Math.max(
-          getOfficialLossFloor(
-            rating,
-          ),
-          rating -
-            penalty,
-        ),
-
-      calculation:
-        "ranked_loses_to_placement",
-
-      special_provisional_penalty:
-        penalty,
-    };
-  }
-
-  const delta =
-    normalEloChange({
-      ownRating:
-        rating,
-
-      opponentRating,
-
-      won:
-        false,
-    });
-
-  return {
-    rating_before:
-      rating,
-
-    rating_after:
-      Math.max(
-        getOfficialLossFloor(
-          rating,
-        ),
-        rating +
-          delta,
-      ),
-
-    calculation:
-      "normal_ranked",
-
-    special_provisional_penalty:
-      null,
-  };
-};
-
-
-/*
-  ============================================================
-  EVENTO ELO
-  ============================================================
-*/
-
-const insertEloEvent =
-  async (
-    client,
-    {
-      userId,
-      matchId,
-      challengeId,
-      eventType,
-      eloBefore,
-      eloAfter,
-      description,
-    },
-  ) => {
-    const before =
-      Number(
-        eloBefore,
-      );
-
-    const after =
-      Number(
-        eloAfter,
-      );
-
-    await client.query(
-      `
-      INSERT INTO elo_events (
-        user_id,
-        match_id,
-        challenge_id,
-        event_type,
-        elo_before,
-        elo_change,
-        elo_after,
-        description
-      )
-
-      VALUES (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8
-      )
-      `,
-      [
-        userId,
-        matchId,
-        challengeId,
-        eventType,
-        before,
-        after -
-          before,
-        after,
-        description,
-      ],
-    );
-  };
 
 
 /*
@@ -692,7 +177,7 @@ export const submitMatchResult =
         req.body;
 
       const parsed =
-        parseScore(
+        parseMatchScore(
           score,
         );
 
@@ -1337,7 +822,7 @@ export const confirmMatchResult =
       }
 
       const parsed =
-        parseScore(
+        parseMatchScore(
           proposedScore,
         );
 
@@ -1620,13 +1105,13 @@ export const confirmMatchResult =
       }
 
       const player1Provisional =
-        isProvisional(
-          player1MatchesBefore,
+        isPlacementRatingPlayer(
+          player1,
         );
 
       const player2Provisional =
-        isProvisional(
-          player2MatchesBefore,
+        isPlacementRatingPlayer(
+          player2,
         );
 
       /*
@@ -1775,131 +1260,78 @@ export const confirmMatchResult =
 
       /*
         ========================================================
-        CALCULAR ELO FINAL DE P1
+        CALCULAR ELO FINAL
         ========================================================
+
+        Toda la política deportiva base vive ahora en
+        matchRating.service.js.
+
+        La regla especial de destronamiento del #1 se aplica
+        después, porque depende de la posición oficial previa
+        del ranking y no del cálculo Elo aislado.
       */
+
+      const player1RatingResult =
+        calculatePlayerMatchRating({
+          player:
+            player1,
+
+          opponent:
+            player2,
+
+          won:
+            winnerId ===
+            player1Id,
+
+          placementResult:
+            player1Placement,
+        });
+
+      const player2RatingResult =
+        calculatePlayerMatchRating({
+          player:
+            player2,
+
+          opponent:
+            player1,
+
+          won:
+            winnerId ===
+            player2Id,
+
+          placementResult:
+            player2Placement,
+        });
 
       let player1RatingAfter =
-        player1RatingBefore;
-
-      let player1Calculation =
-        player1Provisional
-          ? "placement_in_progress"
-          : "normal_ranked";
-
-      let player1SpecialPenalty =
-        null;
-
-      if (
-        player1Provisional
-      ) {
-        /*
-          Durante partidos #1 a #4:
-          el Elo no se mueve.
-
-          En partido #5:
-          recibe Elo de la zona objetivo.
-        */
-
-        if (
-          player1Placement
-            ?.completed
-        ) {
-          player1RatingAfter =
-            Number(
-              player1Placement
-                .target_elo,
-            );
-
-          player1Calculation =
-            "placement_completed";
-        }
-      } else {
-        const officialResult =
-          calculateOfficialMatchRating({
-            player:
-              player1,
-
-            opponent:
-              player2,
-
-            won:
-              winnerId ===
-              player1Id,
-          });
-
-        player1RatingAfter =
-          officialResult
-            .rating_after;
-
-        player1Calculation =
-          officialResult
-            .calculation;
-
-        player1SpecialPenalty =
-          officialResult
-            .special_provisional_penalty;
-      }
-
-      /*
-        ========================================================
-        CALCULAR ELO FINAL DE P2
-        ========================================================
-      */
+        Number(
+          player1RatingResult
+            .rating_after,
+        );
 
       let player2RatingAfter =
-        player2RatingBefore;
+        Number(
+          player2RatingResult
+            .rating_after,
+        );
 
-      let player2Calculation =
-        player2Provisional
-          ? "placement_in_progress"
-          : "normal_ranked";
+      const player1Calculation =
+        player1RatingResult
+          .calculation;
 
-      let player2SpecialPenalty =
+      const player2Calculation =
+        player2RatingResult
+          .calculation;
+
+      const player1SpecialPenalty =
+        player1RatingResult
+          .special_provisional_penalty ??
         null;
 
-      if (
-        player2Provisional
-      ) {
-        if (
-          player2Placement
-            ?.completed
-        ) {
-          player2RatingAfter =
-            Number(
-              player2Placement
-                .target_elo,
-            );
-
-          player2Calculation =
-            "placement_completed";
-        }
-      } else {
-        const officialResult =
-          calculateOfficialMatchRating({
-            player:
-              player2,
-
-            opponent:
-              player1,
-
-            won:
-              winnerId ===
-              player2Id,
-          });
-
-        player2RatingAfter =
-          officialResult
-            .rating_after;
-
-        player2Calculation =
-          officialResult
-            .calculation;
-
-        player2SpecialPenalty =
-          officialResult
-            .special_provisional_penalty;
-      }
+      const player2SpecialPenalty =
+        player2RatingResult
+          .special_provisional_penalty ??
+        null;
 
       /*
         ========================================================
@@ -2247,183 +1679,83 @@ export const confirmMatchResult =
 
       /*
         ========================================================
-        EVENTOS MATCH_RESULT
+        EVENTOS ELO
         ========================================================
 
-        Seguimos generando exactamente un match_result
-        por jugador.
+        matchEloEvents.service.js decide qué eventos deben
+        existir. eloEventPersistence.service.js solamente los
+        persiste dentro de esta misma transacción.
 
-        Provisional #1 a #4:
-          delta 0.
-
-        Provisional #5:
-          match_result delta 0
-          +
-          placement_completed con asignación final.
-
-        Esto mantiene separado:
-
-        - resultado deportivo;
-        - graduación del placement.
+        Invariante:
+        - exactamente 2 x match_result;
+        - 0..2 x placement_completed.
       */
 
-      const player1MatchResultAfter =
-        player1Provisional
-          ? player1RatingBefore
-          : player1RatingAfter;
-
-      const player2MatchResultAfter =
-        player2Provisional
-          ? player2RatingBefore
-          : player2RatingAfter;
-
-      await insertEloEvent(
-        client,
-        {
-          userId:
-            player1Id,
-
+      const eloEventPlan =
+        buildMatchEloEvents({
           matchId:
             match.id,
 
           challengeId:
             match.challenge_id,
 
-          eventType:
-            "match_result",
-
-          eloBefore:
-            player1RatingBefore,
-
-          eloAfter:
-            player1MatchResultAfter,
-
-          description:
-            player1Provisional
-              ? `Nivelatorio ${player1MatchesBefore + 1}/${PLACEMENT_MATCHES} en partido #${match.id}`
-              : winnerId ===
-                  player1Id
-                ? `Victoria en partido #${match.id}`
-                : dethroneApplied &&
-                    loserId ===
-                      player1Id
-                  ? `Derrota siendo #1 en partido #${match.id}. Se aplicó regla de destronamiento.`
-                  : `Derrota en partido #${match.id}`,
-        },
-      );
-
-      await insertEloEvent(
-        client,
-        {
-          userId:
-            player2Id,
-
-          matchId:
-            match.id,
-
-          challengeId:
-            match.challenge_id,
-
-          eventType:
-            "match_result",
-
-          eloBefore:
-            player2RatingBefore,
-
-          eloAfter:
-            player2MatchResultAfter,
-
-          description:
-            player2Provisional
-              ? `Nivelatorio ${player2MatchesBefore + 1}/${PLACEMENT_MATCHES} en partido #${match.id}`
-              : winnerId ===
-                  player2Id
-                ? `Victoria en partido #${match.id}`
-                : dethroneApplied &&
-                    loserId ===
-                      player2Id
-                  ? `Derrota siendo #1 en partido #${match.id}. Se aplicó regla de destronamiento.`
-                  : `Derrota en partido #${match.id}`,
-        },
-      );
-
-      /*
-        ========================================================
-        GRADUACIÓN P1
-        ========================================================
-      */
-
-      if (
-        player1Provisional &&
-        player1Placement
-          ?.completed
-      ) {
-        await insertEloEvent(
-          client,
-          {
-            userId:
+          player1: {
+            id:
               player1Id,
 
-            matchId:
-              match.id,
-
-            challengeId:
-              match
-                .challenge_id,
-
-            eventType:
-              "placement_completed",
-
-            eloBefore:
+            rating_before:
               player1RatingBefore,
 
-            eloAfter:
+            rating_after:
               player1RatingAfter,
 
-            description:
-              `Nivelatorios completados. Percentil ${player1Placement.placement_percentile}% · posición objetivo #${player1Placement.target_position} · Elo oficial ${player1RatingAfter}.`,
+            matches_before:
+              player1MatchesBefore,
+
+            won:
+              winnerId ===
+              player1Id,
+
+            dethrone_applied:
+              dethroneApplied &&
+              loserId ===
+                player1Id,
+
+            placement:
+              player1Placement,
           },
-        );
-      }
 
-      /*
-        ========================================================
-        GRADUACIÓN P2
-        ========================================================
-      */
-
-      if (
-        player2Provisional &&
-        player2Placement
-          ?.completed
-      ) {
-        await insertEloEvent(
-          client,
-          {
-            userId:
+          player2: {
+            id:
               player2Id,
 
-            matchId:
-              match.id,
-
-            challengeId:
-              match
-                .challenge_id,
-
-            eventType:
-              "placement_completed",
-
-            eloBefore:
+            rating_before:
               player2RatingBefore,
 
-            eloAfter:
+            rating_after:
               player2RatingAfter,
 
-            description:
-              `Nivelatorios completados. Percentil ${player2Placement.placement_percentile}% · posición objetivo #${player2Placement.target_position} · Elo oficial ${player2RatingAfter}.`,
+            matches_before:
+              player2MatchesBefore,
+
+            won:
+              winnerId ===
+              player2Id,
+
+            dethrone_applied:
+              dethroneApplied &&
+              loserId ===
+                player2Id,
+
+            placement:
+              player2Placement,
           },
-        );
-      }
+        });
+
+      await persistMatchEloEventPlan(
+        client,
+        eloEventPlan,
+      );
 
       /*
         ========================================================
