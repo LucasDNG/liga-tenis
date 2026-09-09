@@ -1,29 +1,38 @@
 import {
   OFFICIAL_ELO_FLOOR,
   PLACEMENT_MATCHES,
-} from "./eloMatch.service.js";
+} from "./placementLevel.service.js";
 
 
 /*
   ============================================================
+  LA RED
   CANCELACIÓN DE PARTIDO ACEPTADO
   ============================================================
 
-  Un rechazo de desafío cuesta 8 Elo.
+  Reglas actuales:
 
-  Una cancelación unilateral es más grave
-  porque ya existían:
+  - rechazo de desafío:
+      -8 Elo
 
-  - desafío aceptado
-  - rival comprometido
-  - fecha
-  - lugar
-  - rival bloqueado
+  - cancelación unilateral de partido aceptado:
+      -15 Elo
 
-  Penalización configurada:
-  15 Elo.
+  - cancelación mutua:
+      0 Elo
+
+  - cancelación administrativa justificada:
+      0 Elo
+
+  Este servicio solamente calcula la penalización
+  unilateral de -15 Elo.
+
+  NO modifica PostgreSQL.
+  NO cambia estados.
+  NO crea eventos.
   ============================================================
 */
+
 
 export const MATCH_CANCELLATION_PENALTY =
   15;
@@ -59,7 +68,7 @@ export class MatchCancellationError
 
 /*
   ============================================================
-  VALIDACIÓN NUMÉRICA
+  VALIDACIÓN
   ============================================================
 */
 
@@ -68,10 +77,14 @@ const asNonNegativeInteger = (
   field,
 ) => {
   const number =
-    Number(value);
+    Number(
+      value,
+    );
 
   if (
-    !Number.isInteger(number) ||
+    !Number.isInteger(
+      number,
+    ) ||
     number < 0
   ) {
     throw new MatchCancellationError(
@@ -90,27 +103,22 @@ const asNonNegativeInteger = (
 
 /*
   ============================================================
-  CALCULAR PENALIZACIÓN POR CANCELACIÓN
+  PENALIZACIÓN
   ============================================================
 
   PROVISIONAL
-  ----------
-  Piso Elo = 0.
+  -----------
+  Piso 0.
 
   OFICIAL NORMAL
   --------------
-  Piso Elo = 100.
+  Piso 100.
 
-  OFICIAL QUE YA ESTÁ DEBAJO DE 100
-  ---------------------------------
-  Piso Elo = 0.
+  OFICIAL QUE YA ESTABA DEBAJO DE 100
+  ------------------------------------
+  Piso 0.
 
-  Esto conserva la excepción extrema
-  que puede producir la regla literal
-  del jugador #1.
-
-  Una penalización nunca puede provocar
-  que un jugador gane Elo.
+  Una penalización nunca puede regalar Elo.
   ============================================================
 */
 
@@ -135,73 +143,38 @@ export const calculateMatchCancellationElo =
       currentMatches <
       PLACEMENT_MATCHES;
 
-    let eloAfter;
+    let floor;
 
-
-    /*
-      ========================================================
-      PROVISIONAL
-      ========================================================
-    */
-
-    if (provisional) {
-      eloAfter =
-        Math.max(
-          0,
-
-          currentRating -
-            MATCH_CANCELLATION_PENALTY,
-        );
-    }
-
-
-    /*
-      ========================================================
-      OFICIAL NORMAL
-      ========================================================
-    */
-
-    else if (
+    if (
+      provisional
+    ) {
+      floor = 0;
+    } else if (
       currentRating >=
       OFFICIAL_ELO_FLOOR
     ) {
-      eloAfter =
-        Math.max(
-          OFFICIAL_ELO_FLOOR,
-
-          currentRating -
-            MATCH_CANCELLATION_PENALTY,
-        );
+      floor =
+        OFFICIAL_ELO_FLOOR;
+    } else {
+      floor = 0;
     }
 
+    const eloAfter =
+      Math.max(
+        floor,
 
-    /*
-      ========================================================
-      OFICIAL YA DEBAJO DE 100
-      ========================================================
-
-      Puede ocurrir únicamente por el
-      caso límite de la regla literal #1.
-
-      No usamos piso 100 porque una
-      penalización jamás puede regalar Elo.
-    */
-
-    else {
-      eloAfter =
-        Math.max(
-          0,
-
-          currentRating -
-            MATCH_CANCELLATION_PENALTY,
-        );
-    }
-
+        currentRating -
+          MATCH_CANCELLATION_PENALTY,
+      );
 
     const eloChange =
       eloAfter -
       currentRating;
 
+    const effectivePenalty =
+      Math.abs(
+        eloChange,
+      );
 
     /*
       ========================================================
@@ -225,7 +198,6 @@ export const calculateMatchCancellationElo =
       );
     }
 
-
     if (
       eloChange > 0
     ) {
@@ -239,13 +211,6 @@ export const calculateMatchCancellationElo =
         },
       );
     }
-
-
-    const effectivePenalty =
-      Math.abs(
-        eloChange,
-      );
-
 
     if (
       effectivePenalty >
@@ -261,17 +226,11 @@ export const calculateMatchCancellationElo =
           effectivePenalty,
 
           currentRating,
+
           eloAfter,
         },
       );
     }
-
-
-    /*
-      ========================================================
-      RESULTADO
-      ========================================================
-    */
 
     return {
       elo_before:
@@ -287,6 +246,8 @@ export const calculateMatchCancellationElo =
 
       matches_played:
         currentMatches,
+
+      floor,
 
       configured_penalty:
         MATCH_CANCELLATION_PENALTY,
