@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -20,7 +21,47 @@ import {
 import "./RankingPage.css";
 
 
-const PLACEMENT_MATCHES = 5;
+const DEFAULT_FORMAT =
+  "singles";
+
+const DEFAULT_GENDER =
+  "male";
+
+const DEFAULT_PLACEMENT_MATCHES =
+  5;
+
+
+const VALID_FORMATS =
+  new Set([
+    "singles",
+    "doubles",
+  ]);
+
+const VALID_GENDERS =
+  new Set([
+    "male",
+    "female",
+  ]);
+
+
+const normalizeFormat = (
+  value,
+) =>
+  VALID_FORMATS.has(
+    value,
+  )
+    ? value
+    : DEFAULT_FORMAT;
+
+
+const normalizeGender = (
+  value,
+) =>
+  VALID_GENDERS.has(
+    value,
+  )
+    ? value
+    : DEFAULT_GENDER;
 
 
 const formatRecordDate = (
@@ -31,7 +72,9 @@ const formatRecordDate = (
   }
 
   const date =
-    new Date(value);
+    new Date(
+      value,
+    );
 
   if (
     Number.isNaN(
@@ -56,8 +99,120 @@ const formatRecordDate = (
       timeZone:
         "America/Argentina/Buenos_Aires",
     },
-  ).format(date);
+  ).format(
+    date,
+  );
 };
+
+
+const getPlayerName = (
+  player,
+) =>
+  player?.display_name ||
+  player?.name ||
+  [
+    player?.last_name,
+    player?.first_name,
+  ]
+    .filter(Boolean)
+    .join(" ") ||
+  `Jugador #${player?.id ?? ""}`;
+
+
+function RankingSelector({
+  format,
+  gender,
+  onFormatChange,
+  onGenderChange,
+}) {
+  return (
+    <div className="ranking-selector">
+      <div className="ranking-selector-group">
+        <span className="ranking-selector-label">
+          MODALIDAD
+        </span>
+
+        <div className="ranking-switch">
+          <button
+            type="button"
+            className={
+              format ===
+              "singles"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              onFormatChange(
+                "singles",
+              )
+            }
+          >
+            Singles
+          </button>
+
+          <button
+            type="button"
+            className={
+              format ===
+              "doubles"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              onFormatChange(
+                "doubles",
+              )
+            }
+          >
+            Dobles
+          </button>
+        </div>
+      </div>
+
+      <div className="ranking-selector-group">
+        <span className="ranking-selector-label">
+          CATEGORÍA
+        </span>
+
+        <div className="ranking-switch">
+          <button
+            type="button"
+            className={
+              gender ===
+              "male"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              onGenderChange(
+                "male",
+              )
+            }
+          >
+            Masculino
+          </button>
+
+          <button
+            type="button"
+            className={
+              gender ===
+              "female"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              onGenderChange(
+                "female",
+              )
+            }
+          >
+            Femenino
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 
 function ChallengeButton({
@@ -66,7 +221,19 @@ function ChallengeButton({
   sending,
   anySending,
   onChallenge,
+  format,
 }) {
+  if (
+    format ===
+    "doubles"
+  ) {
+    return (
+      <span className="ranking-coming-soon">
+        PRÓXIMAMENTE
+      </span>
+    );
+  }
+
   if (!availability) {
     return "—";
   }
@@ -89,6 +256,7 @@ function ChallengeButton({
       }
     >
       <button
+        type="button"
         className="ranking-challenge-button"
         disabled={disabled}
         onClick={() =>
@@ -130,20 +298,45 @@ export default function RankingPage() {
   ] =
     useSearchParams();
 
-  const initial =
-    params.get(
-      "gender",
-    ) ||
-    user?.gender ||
-    "male";
+
+  const initialFormat =
+    normalizeFormat(
+      params.get(
+        "format",
+      ),
+    );
+
+  const initialGender =
+    normalizeGender(
+      params.get(
+        "gender",
+      ) ||
+        user?.gender ||
+        DEFAULT_GENDER,
+    );
+
 
   const [
-    league,
-    setLeague,
+    format,
+    setFormat,
   ] =
     useState(
-      initial,
+      initialFormat,
     );
+
+  const [
+    gender,
+    setGender,
+  ] =
+    useState(
+      initialGender,
+    );
+
+  const [
+    competition,
+    setCompetition,
+  ] =
+    useState(null);
 
   const [
     officialPlayers,
@@ -192,8 +385,44 @@ export default function RankingPage() {
     setPlacementMatches,
   ] =
     useState(
-      PLACEMENT_MATCHES,
+      DEFAULT_PLACEMENT_MATCHES,
     );
+
+
+  const competitionLabel =
+    useMemo(
+      () => {
+        const formatLabel =
+          format ===
+          "doubles"
+            ? "Dobles"
+            : "Singles";
+
+        const genderLabel =
+          gender ===
+          "female"
+            ? "Femenino"
+            : "Masculino";
+
+        return `${formatLabel} ${genderLabel}`;
+      },
+      [
+        format,
+        gender,
+      ],
+    );
+
+
+  const canUseChallenges =
+    format ===
+      "singles" &&
+    Boolean(
+      user,
+    ) &&
+    user?.role !==
+      "admin" &&
+    user?.gender ===
+      gender;
 
 
   const load =
@@ -207,10 +436,21 @@ export default function RankingPage() {
           "",
         );
 
+        setAvailability(
+          {},
+        );
+
         setParams({
-          gender:
-            league,
+          format,
+          gender,
         });
+
+        const query =
+          `format=${encodeURIComponent(
+            format,
+          )}&gender=${encodeURIComponent(
+            gender,
+          )}`;
 
         const [
           rankingResponse,
@@ -218,30 +458,39 @@ export default function RankingPage() {
         ] =
           await Promise.all([
             api.get(
-              `/ranking?gender=${league}`,
+              `/ranking?${query}`,
             ),
 
             api.get(
-              `/ranking/historical-elo?gender=${league}`,
+              `/ranking/historical-elo?${query}`,
             ),
           ]);
 
-        const data =
+        const rankingData =
           rankingResponse.data;
+
+        const historicalData =
+          historicalResponse.data;
+
+        setCompetition(
+          rankingData
+            .competition ||
+            null,
+        );
 
         setPlacementMatches(
           Number(
-            data
+            rankingData
               .placement_matches,
           ) ||
-            PLACEMENT_MATCHES,
+            DEFAULT_PLACEMENT_MATCHES,
         );
 
         setOfficialPlayers(
-          data
+          rankingData
             .official_players ||
             (
-              data.players ||
+              rankingData.players ||
               []
             ).filter(
               (
@@ -252,10 +501,10 @@ export default function RankingPage() {
         );
 
         setProvisionalPlayers(
-          data
+          rankingData
             .provisional_players ||
             (
-              data.players ||
+              rankingData.players ||
               []
             ).filter(
               (
@@ -266,23 +515,34 @@ export default function RankingPage() {
         );
 
         setHistoricalRecords(
-          historicalResponse
-            .data
+          historicalData
             .records ||
             [],
         );
 
+        /*
+          Los desafíos actuales son singles.
+
+          No consultamos disponibilidad
+          en dobles hasta que exista el flujo
+          de selección/formación de pareja.
+        */
+
         if (
-          user &&
-          user.gender ===
-            league &&
-          user.role !==
-            "admin"
+          canUseChallenges
         ) {
           try {
             const response =
               await api.get(
                 "/challenge-availability",
+                {
+                  params: {
+                    competition_id:
+                      rankingData
+                        .competition
+                        ?.id,
+                  },
+                },
               );
 
             setAvailability(
@@ -295,12 +555,28 @@ export default function RankingPage() {
               {},
             );
           }
-        } else {
-          setAvailability(
-            {},
-          );
         }
       } catch (error) {
+        setCompetition(
+          null,
+        );
+
+        setOfficialPlayers(
+          [],
+        );
+
+        setProvisionalPlayers(
+          [],
+        );
+
+        setHistoricalRecords(
+          [],
+        );
+
+        setAvailability(
+          {},
+        );
+
         setMessage(
           error.response
             ?.data
@@ -320,19 +596,23 @@ export default function RankingPage() {
       load();
     },
     [
-      league,
+      format,
+      gender,
       user?.id,
       user?.gender,
+      user?.role,
     ],
   );
 
 
   const challenge =
     async (
-      id,
+      challengedId,
     ) => {
       if (
-        challengingId
+        challengingId ||
+        format !==
+          "singles"
       ) {
         return;
       }
@@ -343,7 +623,7 @@ export default function RankingPage() {
         );
 
         setChallengingId(
-          id,
+          challengedId,
         );
 
         const {
@@ -353,7 +633,11 @@ export default function RankingPage() {
             "/challenges",
             {
               challenged_id:
-                id,
+                challengedId,
+
+              competition_id:
+                competition
+                  ?.id,
             },
           );
 
@@ -393,6 +677,13 @@ export default function RankingPage() {
     (
       player,
     ) => {
+      if (
+        format ===
+        "doubles"
+      ) {
+        return null;
+      }
+
       let playerAvailability =
         availability[
           player.id
@@ -401,7 +692,7 @@ export default function RankingPage() {
       if (
         user &&
         user.gender !==
-          league
+          gender
       ) {
         playerAvailability = {
           can_challenge:
@@ -411,7 +702,7 @@ export default function RankingPage() {
             "different_league",
 
           message:
-            "Solo podés desafiar jugadores de tu propia liga.",
+            "Solo podés desafiar jugadores de tu propia categoría.",
         };
       }
 
@@ -461,7 +752,10 @@ export default function RankingPage() {
               ? "PROV."
               : String(
                   player
-                    .rank_position,
+                    .rank_position ??
+                    player
+                      .official_position ??
+                    "",
                 ).padStart(
                   2,
                   "0",
@@ -474,15 +768,17 @@ export default function RankingPage() {
               to={`/jugadores/${player.id}`}
             >
               {
-                player.name
+                getPlayerName(
+                  player,
+                )
               }
             </Link>
 
             {(player.id ===
               user?.id ||
-              inactive) && (
+              inactive ||
+              player.provisional) && (
               <span className="ranking-player-flags">
-
                 {player.id ===
                   user?.id && (
                   <em className="ranking-you">
@@ -490,12 +786,17 @@ export default function RankingPage() {
                   </em>
                 )}
 
+                {player.provisional && (
+                  <small className="ranking-provisional">
+                    NIVELATORIO
+                  </small>
+                )}
+
                 {inactive && (
                   <small className="ranking-inactive">
                     INACTIVO
                   </small>
                 )}
-
               </span>
             )}
           </strong>
@@ -542,6 +843,9 @@ export default function RankingPage() {
               onChallenge={
                 challenge
               }
+              format={
+                format
+              }
             />
           </span>
         </div>
@@ -554,8 +858,7 @@ export default function RankingPage() {
       <div className="site-width page-content">
 
         <section className="ranking-hero">
-
-          <div>
+          <div className="ranking-hero-copy">
             <div className="ranking-brand-tags">
               <span>
                 LA RED
@@ -579,57 +882,84 @@ export default function RankingPage() {
             </h1>
 
             <p>
-              La competencia de
-              La Red, actualizada
-              partido a partido.
+              Cuatro competencias
+              independientes. Cada
+              modalidad conserva su
+              propio Elo, partidos,
+              nivelatorios y posiciones.
             </p>
           </div>
 
+          <RankingSelector
+            format={
+              format
+            }
+            gender={
+              gender
+            }
+            onFormatChange={
+              setFormat
+            }
+            onGenderChange={
+              setGender
+            }
+          />
+        </section>
 
-          <div className="league-switch">
-            <button
-              className={
-                league ===
-                "male"
-                  ? "active"
-                  : ""
-              }
-              onClick={() =>
-                setLeague(
-                  "male",
-                )
-              }
-            >
-              Masculina
-            </button>
 
-            <button
-              className={
-                league ===
-                "female"
-                  ? "active"
-                  : ""
+        <section className="ranking-current-competition">
+          <div>
+            <span>
+              RANKING SELECCIONADO
+            </span>
+
+            <strong>
+              {
+                competitionLabel
               }
-              onClick={() =>
-                setLeague(
-                  "female",
-                )
-              }
-            >
-              Femenina
-            </button>
+            </strong>
           </div>
 
+          {competition && (
+            <div className="ranking-current-meta">
+              <span>
+                {
+                  competition.city
+                }
+              </span>
+
+              <span>
+                {competition.team_size ===
+                2
+                  ? "2 jugadores por lado"
+                  : "1 jugador por lado"}
+              </span>
+            </div>
+          )}
         </section>
+
+
+        {format ===
+          "doubles" && (
+          <div className="notice ranking-notice ranking-doubles-notice">
+            El ranking individual de
+            dobles ya está separado de
+            singles. La creación de
+            desafíos de dobles se
+            habilitará cuando quede
+            definido el armado de pareja
+            y la distribución Elo entre
+            compañeros.
+          </div>
+        )}
 
 
         {!user && (
           <div className="notice ranking-notice">
-            Podés consultar
-            libremente el ranking
-            y los perfiles. Iniciá
-            sesión para desafiar
-            jugadores.
+            Podés consultar libremente
+            los cuatro rankings y los
+            perfiles. Iniciá sesión para
+            competir.
           </div>
         )}
 
@@ -639,14 +969,13 @@ export default function RankingPage() {
           user.role !==
             "admin" && (
             <div className="notice ranking-notice">
-              Tu cuenta todavía
-              no está habilitada
-              para competir. Podés
-              consultar el ranking,
+              Tu cuenta todavía no está
+              habilitada para competir.
+              Podés consultar el ranking,
               pero los desafíos
               permanecerán bloqueados
-              hasta que tu identidad
-              sea verificada.
+              hasta que tu identidad sea
+              verificada.
             </div>
           )}
 
@@ -660,7 +989,11 @@ export default function RankingPage() {
 
         {loading ? (
           <div className="notice ranking-notice">
-            Cargando ranking...
+            Cargando{" "}
+            {
+              competitionLabel
+            }
+            ...
           </div>
         ) : (
           <>
@@ -670,7 +1003,10 @@ export default function RankingPage() {
               <div className="historical-elo-heading">
                 <div>
                   <span>
-                    LA RED · RÉCORDS
+                    LA RED ·{" "}
+                    {
+                      competitionLabel.toUpperCase()
+                    }
                   </span>
 
                   <h2>
@@ -679,10 +1015,9 @@ export default function RankingPage() {
                 </div>
 
                 <p>
-                  Los tres Elo más
-                  altos alcanzados
-                  por jugadores de
-                  esta liga.
+                  Los tres Elo más altos
+                  alcanzados dentro de
+                  esta competición.
                 </p>
               </div>
 
@@ -707,13 +1042,7 @@ export default function RankingPage() {
                           </span>
 
                           <span className="historical-medal">
-                            {index ===
-                            0
-                              ? "1"
-                              : index ===
-                                  1
-                                ? "2"
-                                : "3"}
+                            {index + 1}
                           </span>
                         </div>
 
@@ -722,7 +1051,9 @@ export default function RankingPage() {
                           to={`/jugadores/${record.id}`}
                         >
                           {
-                            record.name
+                            getPlayerName(
+                              record,
+                            )
                           }
                         </Link>
 
@@ -765,10 +1096,13 @@ export default function RankingPage() {
                   )}
                 </div>
               ) : (
-                <div className="notice ranking-notice">
-                  Todavía no hay
-                  récords históricos
-                  en esta liga.
+                <div className="ranking-empty-card">
+                  Todavía no hay récords
+                  históricos en{" "}
+                  {
+                    competitionLabel
+                  }
+                  .
                 </div>
               )}
 
@@ -780,7 +1114,9 @@ export default function RankingPage() {
               <div className="ranking-section-heading">
                 <div>
                   <span>
-                    LA RED TENIS
+                    {
+                      competitionLabel.toUpperCase()
+                    }
                   </span>
 
                   <h2>
@@ -789,9 +1125,13 @@ export default function RankingPage() {
                 </div>
 
                 <p>
-                  Jugadores con
-                  ubicación oficial
-                  dentro de la liga.
+                  Jugadores que ya
+                  completaron sus{" "}
+                  {
+                    placementMatches
+                  }{" "}
+                  partidos nivelatorios
+                  en esta competición.
                 </p>
               </div>
 
@@ -829,12 +1169,12 @@ export default function RankingPage() {
                 ) : (
                   <div className="ranking-empty">
                     Todavía no hay
-                    jugadores con{" "}
+                    jugadores oficiales
+                    en{" "}
                     {
-                      placementMatches
-                    }{" "}
-                    partidos para formar
-                    el ranking oficial.
+                      competitionLabel
+                    }
+                    .
                   </div>
                 )}
 
@@ -854,39 +1194,23 @@ export default function RankingPage() {
                     </span>
 
                     <h2>
-                      Provisionales
+                      Nivelatorios
                     </h2>
                   </div>
 
                   <p>
-                    Ya forman parte
-                    de La Red mientras
-                    completan sus
-                    primeros{" "}
+                    Estos jugadores
+                    todavía están
+                    completando sus{" "}
                     {
                       placementMatches
                     }{" "}
-                    partidos.
-                  </p>
-                </div>
-
-
-                <div className="ranking-provisional-info">
-                  <strong>
-                    PROV
-                  </strong>
-
-                  <p>
-                    Participan de los
-                    desafíos desde que
-                    están verificados.
-                    Al completar{" "}
+                    partidos de
+                    ubicación en{" "}
                     {
-                      placementMatches
-                    }{" "}
-                    partidos pasan
-                    automáticamente al
-                    ranking oficial.
+                      competitionLabel
+                    }
+                    .
                   </p>
                 </div>
 
@@ -915,9 +1239,11 @@ export default function RankingPage() {
                     </span>
                   </div>
 
-                  {provisionalPlayers.map(
-                    renderPlayer,
-                  )}
+                  {
+                    provisionalPlayers.map(
+                      renderPlayer,
+                    )
+                  }
 
                 </div>
 

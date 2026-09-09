@@ -1,23 +1,15 @@
 /* =========================================================
    LA RED — RANKING
-   REFERENCIA VISUAL: MIS PARTIDOS
+   TENIS · SINGLES + DOBLES
    ========================================================= */
 
 .ranking-page {
   color: #342720;
 }
 
-
-/* =========================================================
-   CONTENEDOR GENERAL
-   ========================================================= */
-
 .ranking-page .page-content {
   width: min(100%, 1120px);
-
-  margin-left: auto;
-  margin-right: auto;
-
+  margin: 0 auto;
   padding-left: 22px;
   padding-right: 22px;
 }
@@ -29,120 +21,72 @@
 
 .ranking-hero {
   display: flex;
-
   align-items: flex-end;
   justify-content: space-between;
+  gap: 32px;
 
-  gap: 28px;
-
-  margin-bottom: 28px;
-
+  margin-bottom: 18px;
   padding: 30px;
 
-  background:
-    rgba(
-      255,
-      253,
-      249,
-      0.96
-    );
+  background: rgba(255, 253, 249, 0.96);
 
-  border:
-    1px solid
-    #ddc8ba;
-
-  border-top:
-    4px solid
-    #c6683f;
-
+  border: 1px solid #ddc8ba;
+  border-top: 4px solid #c6683f;
   border-radius: 9px;
 
   box-shadow:
-    0
-    12px
-    28px
-    rgba(
-      80,
-      48,
-      30,
-      0.1
-    );
+    0 12px 28px
+    rgba(80, 48, 30, 0.1);
 
-  backdrop-filter:
-    blur(8px);
+  backdrop-filter: blur(8px);
 }
 
+.ranking-hero-copy {
+  min-width: 0;
+  flex: 1;
+}
 
 .ranking-brand-tags {
   display: flex;
-
   flex-wrap: wrap;
-
   gap: 7px;
-
   margin-bottom: 18px;
 }
-
 
 .ranking-brand-tags span {
   min-height: 26px;
 
   display: inline-flex;
-
   align-items: center;
 
-  padding:
-    0
-    9px;
+  padding: 0 9px;
 
-  background:
-    #fff4eb;
+  background: #fff4eb;
+  border: 1px solid #e0b99f;
+  border-radius: 999px;
 
-  border:
-    1px solid
-    #e0b99f;
+  color: #a95632;
 
-  border-radius:
-    999px;
-
-  color:
-    #a95632;
-
-  font-size:
-    9px;
-
-  font-weight:
-    900;
-
-  letter-spacing:
-    0.12em;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
 }
-
 
 .ranking-kicker {
   display: block;
-
   margin-bottom: 7px;
 
-  color:
-    #b65d38;
+  color: #b65d38;
 
-  font-size:
-    11px;
-
-  font-weight:
-    900;
-
-  letter-spacing:
-    0.14em;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
 }
-
 
 .ranking-hero h1 {
   margin: 0;
 
-  color:
-    #2f251f;
+  color: #2f251f;
 
   font-family:
     Georgia,
@@ -157,114 +101,165 @@
     );
 
   line-height: 0.98;
-
-  letter-spacing:
-    -0.035em;
+  letter-spacing: -0.035em;
 }
 
-
 .ranking-hero p {
-  max-width: 520px;
+  max-width: 560px;
 
-  margin:
-    16px
-    0
-    0;
+  margin: 16px 0 0;
 
-  color:
-    #5f5048;
+  color: #5f5048;
 
   font-size: 15px;
-
   font-weight: 600;
-
   line-height: 1.6;
 }
 
 
 /* =========================================================
-   SELECTOR DE LIGA
+   SELECTOR 2 x 2
    ========================================================= */
 
-.ranking-hero .league-switch {
-  display: inline-flex;
+.ranking-selector {
+  width: min(100%, 370px);
 
-  align-items: center;
+  display: grid;
+  gap: 14px;
+
+  flex: 0 0 auto;
+}
+
+.ranking-selector-group {
+  display: grid;
+  gap: 7px;
+}
+
+.ranking-selector-label {
+  color: #80675a;
+
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.ranking-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
 
   gap: 5px;
 
   padding: 5px;
 
-  flex: 0 0 auto;
+  background: #f7eee8;
 
-  background:
-    #f7eee8;
-
-  border:
-    1px solid
-    #ddc8ba;
-
+  border: 1px solid #ddc8ba;
   border-radius: 7px;
 }
 
-
-.ranking-hero .league-switch button {
-  min-width: 110px;
-
+.ranking-switch button {
   min-height: 43px;
 
-  padding:
-    0
-    18px;
+  padding: 0 16px;
 
   border: 0;
-
   border-radius: 5px;
 
-  background:
-    transparent;
+  background: transparent;
 
-  color:
-    #60483c;
+  color: #60483c;
 
   font-size: 12px;
-
   font-weight: 900;
 
   cursor: pointer;
 
   transition:
     background 0.16s ease,
-    color 0.16s ease;
+    color 0.16s ease,
+    transform 0.16s ease;
 }
 
-
-.ranking-hero .league-switch button:hover {
-  background:
-    #fffaf6;
-
-  color:
-    #392b24;
+.ranking-switch button:hover {
+  background: #fffaf6;
+  color: #392b24;
 }
 
-
-.ranking-hero .league-switch button.active {
-  background:
-    #c6683f;
-
-  color:
-    #ffffff;
+.ranking-switch button.active {
+  background: #c6683f;
+  color: #ffffff;
 
   box-shadow:
-    0
-    4px
-    10px
-    rgba(
-      100,
-      48,
-      27,
-      0.16
-    );
+    0 4px 10px
+    rgba(100, 48, 27, 0.16);
+}
+
+
+/* =========================================================
+   COMPETICIÓN ACTUAL
+   ========================================================= */
+
+.ranking-current-competition {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 18px;
+
+  margin-bottom: 18px;
+
+  padding: 15px 18px;
+
+  background: #342820;
+
+  border: 1px solid #4e3a30;
+  border-radius: 8px;
+
+  color: #fffaf6;
+}
+
+.ranking-current-competition > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ranking-current-competition span {
+  color: #d9b9a6;
+
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.ranking-current-competition strong {
+  color: #ffffff;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 18px;
+}
+
+.ranking-current-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+
+  gap: 8px;
+}
+
+.ranking-current-meta span {
+  padding: 6px 9px;
+
+  background: rgba(255, 255, 255, 0.07);
+
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+
+  color: #f1ddd0;
 }
 
 
@@ -275,25 +270,16 @@
 .ranking-notice {
   margin-bottom: 22px;
 
-  padding:
-    16px
-    18px;
+  padding: 16px 18px;
 
   background:
-    rgba(
-      255,
-      253,
-      249,
-      0.96
-    ) !important;
+    rgba(255, 253, 249, 0.96) !important;
 
   border:
-    1px solid
-    #ddc8ba !important;
+    1px solid #ddc8ba !important;
 
   border-left:
-    4px solid
-    #c6683f !important;
+    4px solid #c6683f !important;
 
   border-radius:
     7px !important;
@@ -302,13 +288,17 @@
     #514139 !important;
 
   font-size: 13px;
-
   line-height: 1.6;
+}
+
+.ranking-doubles-notice {
+  border-left-color:
+    #8b684e !important;
 }
 
 
 /* =========================================================
-   BLOQUES GENERALES
+   SECCIONES
    ========================================================= */
 
 .historical-elo-section,
@@ -318,67 +308,46 @@
   padding: 24px;
 
   background:
-    rgba(
-      255,
-      253,
-      249,
-      0.94
-    );
+    rgba(255, 253, 249, 0.94);
 
-  border:
-    1px solid
-    #ddc8ba;
-
-  border-top:
-    4px solid
-    #c6683f;
-
+  border: 1px solid #ddc8ba;
+  border-top: 4px solid #c6683f;
   border-radius: 9px;
 
   box-shadow:
-    0
-    10px
-    26px
-    rgba(
-      80,
-      48,
-      30,
-      0.09
-    );
+    0 10px 26px
+    rgba(80, 48, 30, 0.09);
 
-  backdrop-filter:
-    blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.provisional-section {
+  border-top-color: #92725d;
 }
 
 
 /* =========================================================
-   CABECERAS DE SECCIÓN
+   HEADINGS
    ========================================================= */
 
 .ranking-section-heading,
 .historical-elo-heading {
   display: flex;
-
   align-items: flex-end;
   justify-content: space-between;
 
   gap: 26px;
 
   margin-bottom: 20px;
-
   padding-bottom: 18px;
 
-  border-bottom:
-    1px solid
-    #eaded6;
+  border-bottom: 1px solid #eaded6;
 }
-
 
 .ranking-section-heading > div,
 .historical-elo-heading > div {
   min-width: 0;
 }
-
 
 .ranking-section-heading span,
 .historical-elo-heading span {
@@ -386,24 +355,18 @@
 
   margin-bottom: 7px;
 
-  color:
-    #b65d38;
+  color: #b65d38;
 
   font-size: 10px;
-
   font-weight: 900;
-
-  letter-spacing:
-    0.14em;
+  letter-spacing: 0.14em;
 }
-
 
 .ranking-section-heading h2,
 .historical-elo-heading h2 {
   margin: 0;
 
-  color:
-    #2f251f;
+  color: #2f251f;
 
   font-family:
     Georgia,
@@ -418,34 +381,26 @@
     );
 
   font-weight: 700;
-
   line-height: 1.05;
 }
-
 
 .ranking-section-heading p,
 .historical-elo-heading p {
   width: 100%;
-
-  max-width: 330px;
+  max-width: 340px;
 
   margin: 0;
 
-  color:
-    #67574e;
+  color: #67574e;
 
   font-size: 13px;
-
   font-weight: 600;
-
   line-height: 1.55;
-
-  text-align: left;
 }
 
 
 /* =========================================================
-   ELO HISTÓRICO
+   HISTÓRICO
    ========================================================= */
 
 .historical-elo-grid {
@@ -454,74 +409,43 @@
   grid-template-columns:
     repeat(
       3,
-      minmax(
-        0,
-        1fr
-      )
+      minmax(0, 1fr)
     );
 
   gap: 14px;
 }
 
-
 .historical-elo-card {
-  position: relative;
-
   min-width: 0;
-
   min-height: 226px;
 
   padding: 20px;
 
-  background:
-    #fffaf6;
+  background: #fffaf6;
 
-  border:
-    1px solid
-    #dfcabc;
-
-  border-top:
-    3px solid
-    #c6683f;
-
+  border: 1px solid #dfcabc;
+  border-top: 3px solid #c6683f;
   border-radius: 7px;
 
   box-shadow:
-    0
-    7px
-    18px
-    rgba(
-      80,
-      48,
-      30,
-      0.07
-    );
-
-  overflow: hidden;
+    0 7px 18px
+    rgba(80, 48, 30, 0.07);
 }
-
 
 .historical-place-1 {
-  border-top-color:
-    #a86e1e;
+  border-top-color: #a86e1e;
 }
-
 
 .historical-place-2 {
-  border-top-color:
-    #77736e;
+  border-top-color: #77736e;
 }
-
 
 .historical-place-3 {
-  border-top-color:
-    #a45f3d;
+  border-top-color: #a45f3d;
 }
-
 
 .historical-card-top {
   display: flex;
-
   align-items: center;
   justify-content: space-between;
 
@@ -530,60 +454,36 @@
   margin-bottom: 17px;
 }
 
-
 .historical-position {
   margin: 0 !important;
 
-  color:
-    #a65b3b !important;
+  color: #a65b3b !important;
 
-  font-size:
-    9px !important;
-
-  font-weight:
-    900 !important;
-
-  letter-spacing:
-    0.11em;
+  font-size: 9px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.11em;
 }
-
 
 .historical-medal {
   width: 32px;
   height: 32px;
 
-  margin: 0;
-
-  flex:
-    0
-    0
-    32px;
-
   display: grid;
-
   place-items: center;
 
-  background:
-    #f5ebe4;
+  flex: 0 0 32px;
 
-  border:
-    1px solid
-    #ddc8ba;
+  background: #f5ebe4;
 
+  border: 1px solid #ddc8ba;
   border-radius: 50%;
 
-  color:
-    #8f4d30;
+  color: #8f4d30;
 
-  font-family:
-    Georgia,
-    serif;
-
+  font-family: Georgia, serif;
   font-size: 14px;
-
   font-weight: 900;
 }
-
 
 .historical-player-name {
   display: block;
@@ -592,8 +492,7 @@
 
   overflow: hidden;
 
-  color:
-    #392b24;
+  color: #392b24;
 
   font-family:
     Georgia,
@@ -601,36 +500,27 @@
     serif;
 
   font-size: 20px;
-
   font-weight: 700;
-
   line-height: 1.2;
 
   text-decoration: none;
-
   text-overflow: ellipsis;
-
   white-space: nowrap;
 }
 
-
 .historical-player-name:hover {
-  color:
-    #c6683f;
+  color: #c6683f;
 }
-
 
 .historical-record-number {
   display: flex;
-
   align-items: baseline;
 
   gap: 7px;
 
   margin-top: 15px;
 
-  color:
-    #b75b35;
+  color: #b75b35;
 
   font-family:
     Georgia,
@@ -638,104 +528,67 @@
     serif;
 
   font-size: 38px;
-
   font-weight: 700;
-
   line-height: 1;
 }
 
-
 .historical-record-number small {
-  color:
-    #79675d;
+  color: #79675d;
 
-  font-family:
-    Arial,
-    sans-serif;
+  font-family: Arial, sans-serif;
 
   font-size: 9px;
-
   font-weight: 900;
-
-  letter-spacing:
-    0.12em;
+  letter-spacing: 0.12em;
 }
 
-
-.historical-record-meta {
+.historical-record-meta,
+.historical-current {
   display: flex;
-
   align-items: center;
   justify-content: space-between;
 
   gap: 12px;
 
-  margin-top: 19px;
-
-  padding-top: 12px;
-
-  border-top:
-    1px solid
-    #ece1da;
-
-  color:
-    #806d62;
+  color: #806d62;
 
   font-size: 10px;
 }
 
+.historical-record-meta {
+  margin-top: 19px;
+  padding-top: 12px;
 
-.historical-record-meta strong {
-  color:
-    #4f3c32;
+  border-top: 1px solid #ece1da;
+}
 
+.historical-current {
+  margin-top: 9px;
+}
+
+.historical-record-meta strong,
+.historical-current strong {
+  color: #4f3c32;
   text-align: right;
 }
 
-
-.historical-current {
-  display: flex;
-
-  align-items: center;
-  justify-content: space-between;
-
-  gap: 12px;
-
-  margin-top: 9px;
-
-  color:
-    #806d62;
-
-  font-size: 10px;
-}
-
-
 .historical-current strong {
-  color:
-    #3d2f28;
-
   font-size: 13px;
 }
 
 
 /* =========================================================
-   TABLA RANKING
+   RANKING
    ========================================================= */
 
 .ranking-box {
-  overflow:
-    visible;
+  overflow: visible;
 
-  background:
-    #fffaf6;
+  background: #fffaf6;
 
-  border:
-    1px solid
-    #dfcabc;
-
+  border: 1px solid #dfcabc;
   border-radius: 7px;
 }
-
 
 .ranking-head,
 .ranking-row {
@@ -743,10 +596,7 @@
 
   grid-template-columns:
     82px
-    minmax(
-      220px,
-      1fr
-    )
+    minmax(220px, 1fr)
     105px
     105px
     120px;
@@ -756,67 +606,43 @@
   align-items: center;
 }
 
-
 .ranking-head {
   min-height: 52px;
 
-  padding:
-    0
-    24px;
+  padding: 0 24px;
 
-  background:
-    #f1e4db;
+  background: #f1e4db;
 
-  border-bottom:
-    1px solid
-    #ddc8ba;
+  border-bottom: 1px solid #ddc8ba;
 
-  color:
-    #765647;
+  color: #765647;
 
   font-size: 9px;
-
   font-weight: 900;
-
-  letter-spacing:
-    0.11em;
+  letter-spacing: 0.11em;
 }
-
 
 .ranking-row {
   min-height: 88px;
 
-  padding:
-    16px
-    24px;
+  padding: 16px 24px;
 
-  border-bottom:
-    1px solid
-    #eee4de;
+  border-bottom: 1px solid #eee4de;
 
   transition:
-    background
-    0.15s ease,
-    transform
-    0.15s ease;
+    background 0.15s ease;
 }
-
 
 .ranking-row:last-child {
-  border-bottom:
-    0;
+  border-bottom: 0;
 }
-
 
 .ranking-row:hover {
-  background:
-    #fff4ec;
+  background: #fff4ec;
 }
 
-
 .ranking-row.inactive {
-  background:
-    #f5f2f0;
+  background: #f5f2f0;
 }
 
 
@@ -826,22 +652,15 @@
 
 .rank-digit {
   display: flex;
-
   align-items: center;
 
   min-height: 36px;
 
-  color:
-    #b75c37;
+  color: #b75c37;
 
-  font-family:
-    Georgia,
-    serif;
-
+  font-family: Georgia, serif;
   font-size: 18px;
-
   font-weight: 800;
-
   line-height: 1;
 }
 
@@ -854,48 +673,35 @@
   min-width: 0;
 
   display: flex;
-
   flex-direction: column;
-
   align-items: flex-start;
-
   justify-content: center;
 
   gap: 9px;
 }
-
 
 .ranking-player-link {
   max-width: 100%;
 
   overflow: hidden;
 
-  color:
-    #382b24;
+  color: #382b24;
 
   font-size: 16px;
-
   font-weight: 900;
-
   line-height: 1.25;
 
   text-decoration: none;
-
   text-overflow: ellipsis;
-
   white-space: nowrap;
 }
 
-
 .ranking-player-link:hover {
-  color:
-    #c6683f;
+  color: #c6683f;
 }
-
 
 .ranking-player-flags {
   display: flex;
-
   flex-wrap: wrap;
 
   gap: 7px;
@@ -903,483 +709,215 @@
   min-height: 22px;
 }
 
-
 .ranking-you,
 .ranking-provisional,
 .ranking-inactive {
   min-height: 22px;
 
   display: inline-flex;
-
   align-items: center;
 
-  padding:
-    0
-    8px;
+  padding: 0 8px;
 
-  border-radius:
-    999px;
+  border-radius: 999px;
 
   font-size: 8px;
-
   font-style: normal;
-
   font-weight: 900;
-
-  line-height: 1;
-
-  letter-spacing:
-    0.08em;
+  letter-spacing: 0.08em;
 }
-
 
 .ranking-you {
-  background:
-    #e8f3eb;
-
-  border:
-    1px solid
-    #b7d4bf;
-
-  color:
-    #317047;
+  background: #efe1d7;
+  color: #a04e2e;
 }
-
 
 .ranking-provisional {
-  background:
-    #fff1e7;
-
-  border:
-    1px solid
-    #e4b493;
-
-  color:
-    #a95734;
+  background: #eee7df;
+  color: #705b4d;
 }
 
-
 .ranking-inactive {
-  background:
-    #efeceb;
-
-  border:
-    1px solid
-    #c9c1bd;
-
-  color:
-    #756963;
+  background: #e8e5e2;
+  color: #716964;
 }
 
 
 /* =========================================================
-   ELO / PARTIDOS
+   NÚMEROS
    ========================================================= */
 
 .ranking-number {
   display: flex;
+  flex-direction: column;
 
-  align-items: baseline;
+  gap: 3px;
 
-  gap: 6px;
+  color: #b75b35;
 
-  color:
-    #382b24;
-
-  font-size: 18px;
-
-  font-weight: 900;
-}
-
-
-.ranking-number small {
-  color:
-    #8b776b;
-
-  font-size: 8px;
-
-  letter-spacing:
-    0.08em;
-}
-
-
-.ranking-matches {
-  color:
-    #66564d;
-
-  font-size: 15px;
-
+  font-family: Georgia, serif;
+  font-size: 22px;
   font-weight: 800;
 }
 
+.ranking-number small {
+  color: #857066;
 
-.ranking-action-cell {
-  display: flex;
+  font-family: Arial, sans-serif;
 
-  justify-content: flex-end;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.ranking-matches {
+  color: #4b3930;
+
+  font-size: 14px;
+  font-weight: 900;
 }
 
 
 /* =========================================================
-   BOTÓN DESAFIAR
+   ACCIONES
    ========================================================= */
 
+.ranking-action-cell {
+  min-width: 0;
+
+  display: flex;
+  justify-content: flex-start;
+}
+
 .ranking-action-wrap {
-  position:
-    relative;
+  position: relative;
 
-  display:
-    inline-flex;
+  display: inline-flex;
 }
-
-
-.ranking-action-wrap.disabled {
-  cursor:
-    help;
-}
-
 
 .ranking-challenge-button {
-  min-width: 100px;
+  min-width: 106px;
+  min-height: 38px;
 
-  min-height: 40px;
+  padding: 0 13px;
 
-  padding:
-    0
-    16px;
-
-  background:
-    #c6683f;
-
-  border:
-    1px solid
-    #b75935;
-
+  border: 1px solid #b85d38;
   border-radius: 5px;
 
-  color:
-    #ffffff;
+  background: #c6683f;
 
-  font-size: 10px;
+  color: #ffffff;
 
+  font-size: 9px;
   font-weight: 900;
-
-  letter-spacing:
-    0.06em;
+  letter-spacing: 0.06em;
 
   cursor: pointer;
 
-  box-shadow:
-    0
-    4px
-    9px
-    rgba(
-      110,
-      52,
-      27,
-      0.13
-    );
-
   transition:
-    background
-    0.15s ease,
-    transform
-    0.15s ease;
+    background 0.15s ease,
+    transform 0.15s ease;
 }
-
 
 .ranking-challenge-button:hover:not(:disabled) {
-  background:
-    #ad512f;
-
-  transform:
-    translateY(
-      -1px
-    );
+  background: #ad5533;
+  transform: translateY(-1px);
 }
-
 
 .ranking-challenge-button:disabled {
-  background:
-    #d8d1cd;
+  border-color: #d2c5bd;
+  background: #e7dfda;
+  color: #9b8c84;
 
-  border-color:
-    #d8d1cd;
-
-  color:
-    #8b817c;
-
-  opacity: 1;
-
-  cursor:
-    not-allowed;
-
-  box-shadow:
-    none;
+  cursor: not-allowed;
 }
-
-
-/* =========================================================
-   PROVISIONALES
-   ========================================================= */
-
-.ranking-provisional-info {
-  display: flex;
-
-  align-items: center;
-
-  gap: 16px;
-
-  margin-bottom: 18px;
-
-  padding:
-    18px
-    20px;
-
-  background:
-    #fff5ed;
-
-  border:
-    1px solid
-    #e2c4b0;
-
-  border-left:
-    4px solid
-    #c6683f;
-
-  border-radius:
-    7px;
-}
-
-
-.ranking-provisional-info strong {
-  flex:
-    0
-    0
-    auto;
-
-  padding:
-    9px
-    11px;
-
-  background:
-    #c6683f;
-
-  border-radius:
-    5px;
-
-  color:
-    #ffffff;
-
-  font-size: 11px;
-
-  letter-spacing:
-    0.08em;
-}
-
-
-.ranking-provisional-info p {
-  margin: 0;
-
-  color:
-    #66564d;
-
-  font-size: 13px;
-
-  line-height: 1.6;
-}
-
-
-/* =========================================================
-   EMPTY
-   ========================================================= */
-
-.ranking-empty {
-  padding:
-    28px
-    24px;
-
-  color:
-    #75665e;
-
-  font-size: 13px;
-
-  line-height: 1.6;
-}
-
-
-/* =========================================================
-   TOOLTIP
-   ========================================================= */
 
 .ranking-tooltip {
-  position:
-    absolute;
+  position: absolute;
+  z-index: 20;
 
-  left: 50%;
+  width: 220px;
 
-  bottom:
-    calc(
-      100% +
-      10px
-    );
+  right: 0;
+  bottom: calc(100% + 9px);
 
-  z-index: 100;
-
-  width: 275px;
-
-  padding:
-    11px
-    13px;
-
-  transform:
-    translateX(
-      -50%
-    )
-    translateY(
-      5px
-    );
-
-  background:
-    rgba(
-      255,
-      253,
-      249,
-      0.99
-    );
-
-  border:
-    1px solid
-    #c6683f;
-
-  border-radius: 7px;
-
-  color:
-    #4f392e;
-
-  font-size: 12px;
-
-  line-height: 1.5;
-
-  opacity: 0;
+  padding: 10px 12px;
 
   visibility: hidden;
+  opacity: 0;
+
+  background: #342820;
+
+  border-radius: 6px;
+
+  color: #fffaf6;
+
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
 
   pointer-events: none;
 
-  box-shadow:
-    0
-    12px
-    28px
-    rgba(
-      75,
-      43,
-      26,
-      0.18
-    );
-
   transition:
-    opacity
-    0.15s ease,
-    transform
-    0.15s ease;
+    opacity 0.15s ease;
 }
-
-
-.ranking-tooltip::after {
-  content:
-    "";
-
-  position:
-    absolute;
-
-  left: 50%;
-
-  top: 100%;
-
-  transform:
-    translateX(
-      -50%
-    );
-
-  border:
-    6px solid
-    transparent;
-
-  border-top-color:
-    #c6683f;
-}
-
 
 .ranking-action-wrap.disabled:hover
 .ranking-tooltip,
 .ranking-action-wrap.disabled:focus
-.ranking-tooltip,
-.ranking-action-wrap.disabled:focus-within
 .ranking-tooltip {
-  opacity: 1;
-
   visibility: visible;
+  opacity: 1;
+}
 
-  transform:
-    translateX(
-      -50%
-    )
-    translateY(
-      0
-    );
+.ranking-coming-soon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 34px;
+
+  padding: 0 10px;
+
+  background: #eee7e1;
+
+  border: 1px solid #d7c8be;
+  border-radius: 5px;
+
+  color: #806d61;
+
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
 }
 
 
 /* =========================================================
-   RESPONSIVE MEDIANO
+   VACÍOS
    ========================================================= */
 
-@media (
-  max-width:
-    980px
-) {
-  .ranking-page .page-content {
-    width:
-      min(
-        100%,
-        900px
-      );
-  }
+.ranking-empty {
+  padding: 28px 24px;
 
+  color: #76645a;
 
-  .historical-elo-grid {
-    grid-template-columns:
-      repeat(
-        2,
-        minmax(
-          0,
-          1fr
-        )
-      );
-  }
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
 
+.ranking-empty-card {
+  padding: 22px;
 
-  .historical-elo-card:first-child {
-    grid-column:
-      1 / -1;
-  }
+  background: #fffaf6;
 
+  border: 1px dashed #d8c5b8;
+  border-radius: 7px;
 
-  .ranking-head,
-  .ranking-row {
-    grid-template-columns:
-      74px
-      minmax(
-        200px,
-        1fr
-      )
-      95px
-      95px
-      110px;
+  color: #76645a;
 
-    gap: 15px;
-  }
+  font-size: 13px;
+  font-weight: 600;
 }
 
 
@@ -1388,127 +926,37 @@
    ========================================================= */
 
 @media (
-  max-width:
-    760px
+  max-width: 900px
 ) {
-  .ranking-page .page-content {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-
   .ranking-hero {
-    align-items: flex-start;
-
+    align-items: stretch;
     flex-direction: column;
-
-    padding: 24px;
   }
 
-
-  .ranking-hero .league-switch {
+  .ranking-selector {
     width: 100%;
-  }
 
-
-  .ranking-hero .league-switch button {
-    flex: 1;
-
-    min-width: 0;
-  }
-
-
-  .historical-elo-section,
-  .ranking-section {
-    padding: 20px;
-  }
-
-
-  .ranking-section-heading,
-  .historical-elo-heading {
-    align-items: flex-start;
-
-    flex-direction: column;
-
-    gap: 10px;
-  }
-
-
-  .ranking-section-heading p,
-  .historical-elo-heading p {
-    max-width: 100%;
-
-    text-align: left;
-  }
-
-
-  .historical-elo-grid {
     grid-template-columns:
-      1fr;
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
   }
-
-
-  .historical-elo-card:first-child {
-    grid-column:
-      auto;
-  }
-
-
-  .ranking-box {
-    overflow-x:
-      auto;
-  }
-
 
   .ranking-head,
   .ranking-row {
-    min-width: 740px;
+    grid-template-columns:
+      64px
+      minmax(180px, 1fr)
+      85px
+      85px
+      110px;
+
+    gap: 12px;
   }
 
-
-  .ranking-row {
-    min-height: 92px;
-  }
-
-
-  .ranking-tooltip {
-    left: auto;
-
-    right: 0;
-
-    width:
-      min(
-        260px,
-        calc(
-          100vw -
-          40px
-        )
-      );
-
-    transform:
-      translateY(
-        5px
-      );
-  }
-
-
-  .ranking-action-wrap.disabled:hover
-  .ranking-tooltip,
-  .ranking-action-wrap.disabled:focus
-  .ranking-tooltip,
-  .ranking-action-wrap.disabled:focus-within
-  .ranking-tooltip {
-    transform:
-      translateY(
-        0
-      );
-  }
-
-
-  .ranking-tooltip::after {
-    left: auto;
-
-    right: 24px;
+  .historical-elo-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1518,65 +966,167 @@
    ========================================================= */
 
 @media (
-  max-width:
-    520px
+  max-width: 700px
 ) {
   .ranking-page .page-content {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 13px;
+    padding-right: 13px;
   }
-
 
   .ranking-hero {
-    padding:
-      21px
-      17px;
+    padding: 21px 17px;
   }
-
 
   .ranking-hero h1 {
-    font-size: 45px;
+    font-size: 44px;
   }
 
+  .ranking-selector {
+    grid-template-columns: 1fr;
+  }
 
-  .ranking-brand-tags {
+  .ranking-current-competition {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ranking-current-competition
+  > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+
     gap: 5px;
   }
 
-
-  .ranking-brand-tags span {
-    min-height: 24px;
-
-    padding:
-      0
-      7px;
-
-    font-size: 8px;
+  .ranking-current-meta {
+    justify-content: flex-start;
   }
-
 
   .historical-elo-section,
   .ranking-section {
-    padding: 17px;
+    padding: 17px 13px;
   }
 
-
-  .historical-elo-heading h2,
-  .ranking-section-heading h2 {
-    font-size: 31px;
-  }
-
-
-  .historical-elo-card {
-    min-height: 0;
-
-    padding: 18px;
-  }
-
-
-  .ranking-provisional-info {
+  .ranking-section-heading,
+  .historical-elo-heading {
     align-items: flex-start;
-
     flex-direction: column;
+
+    gap: 10px;
+  }
+
+  .ranking-section-heading p,
+  .historical-elo-heading p {
+    max-width: none;
+  }
+
+  .ranking-box {
+    border: 0;
+    background: transparent;
+  }
+
+  .ranking-head {
+    display: none;
+  }
+
+  .ranking-row {
+    grid-template-columns:
+      55px
+      minmax(0, 1fr)
+      72px;
+
+    grid-template-areas:
+      "rank player elo"
+      "rank matches action";
+
+    gap: 10px 12px;
+
+    min-height: 112px;
+
+    margin-bottom: 9px;
+    padding: 14px;
+
+    background: #fffaf6;
+
+    border: 1px solid #dfcabc;
+    border-radius: 7px;
+  }
+
+  .ranking-row:last-child {
+    border-bottom:
+      1px solid #dfcabc;
+  }
+
+  .rank-digit {
+    grid-area: rank;
+  }
+
+  .ranking-player-cell {
+    grid-area: player;
+  }
+
+  .ranking-number {
+    grid-area: elo;
+
+    align-items: flex-end;
+  }
+
+  .ranking-matches {
+    grid-area: matches;
+  }
+
+  .ranking-action-cell {
+    grid-area: action;
+
+    justify-content: flex-end;
+  }
+
+  .ranking-challenge-button {
+    min-width: 94px;
+    min-height: 34px;
+  }
+
+  .ranking-tooltip {
+    right: 0;
+    width: 190px;
+  }
+}
+
+
+/* =========================================================
+   MOBILE CHICO
+   ========================================================= */
+
+@media (
+  max-width: 430px
+) {
+  .ranking-switch button {
+    min-height: 40px;
+    padding: 0 10px;
+
+    font-size: 11px;
+  }
+
+  .ranking-row {
+    grid-template-columns:
+      48px
+      minmax(0, 1fr)
+      66px;
+
+    padding: 12px 10px;
+  }
+
+  .ranking-player-link {
+    font-size: 14px;
+  }
+
+  .ranking-number {
+    font-size: 19px;
+  }
+
+  .ranking-coming-soon {
+    padding: 0 7px;
+
+    font-size: 7px;
   }
 }
