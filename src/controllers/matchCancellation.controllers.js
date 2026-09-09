@@ -3,13 +3,16 @@ import {
 } from "../db.js";
 
 import {
-  applyPendingInactivityDecay,
-} from "../services/playerActivity.service.js";
-
-import {
   MATCH_CANCELLATION_PENALTY,
   calculateMatchCancellationElo,
+  MatchCancellationError,
 } from "../services/matchCancellation.service.js";
+
+import {
+  ensurePlayerCompetitionStats,
+  getPlayerCompetitionStats,
+  CompetitionServiceError,
+} from "../services/competition.service.js";
 
 
 const MIN_REASON_LENGTH =
@@ -25,20 +28,21 @@ const MAX_REASON_LENGTH =
   ============================================================
 */
 
+
 const parsePositiveInteger = (
   value,
 ) => {
   const number =
     Number(value);
 
-  if (
-    !Number.isInteger(number) ||
-    number <= 0
-  ) {
-    return null;
-  }
-
-  return number;
+  return (
+    Number.isInteger(
+      number,
+    ) &&
+    number > 0
+  )
+    ? number
+    : null;
 };
 
 
@@ -47,7 +51,7 @@ const parseReason = (
 ) => {
   const reason =
     String(
-      value || "",
+      value ?? "",
     ).trim();
 
   if (
@@ -63,131 +67,236 @@ const parseReason = (
 };
 
 
-/*
-  ============================================================
-  JUGADOR
-  ============================================================
-*/
-
-const loadPlayer = async (
-  client,
-  userId,
-  {
-    forUpdate =
-      false,
-  } = {},
-) => {
-  const result =
-    await client.query(
-      `
-      SELECT
-        id,
-        name,
-        city,
-        gender,
-        role,
-        verification_status,
-        rating,
-        matches_played
-
-      FROM users
-
-      WHERE id = $1
-
-      ${
-        forUpdate
-          ? "FOR UPDATE"
-          : ""
-      }
-      `,
-      [
-        userId,
-      ],
-    );
-
-  return (
-    result.rows[0] ||
-    null
-  );
-};
+const rollbackQuietly =
+  async (
+    client,
+  ) => {
+    try {
+      await client.query(
+        "ROLLBACK",
+      );
+    } catch {
+      // nada
+    }
+  };
 
 
-/*
-  ============================================================
-  PARTIDO DEL JUGADOR
-  ============================================================
-*/
+const loadMatchForParticipant =
+  async (
+    client,
+    {
+      matchId,
+      userId,
+    },
+  ) => {
+    const result =
+      await client.query(
+        `
+        SELECT
+          m.*,
 
-const loadMatchForPlayer = async (
-  client,
-  matchId,
-  userId,
-) => {
-  const result =
-    await client.query(
-      `
-      SELECT
-        m.*,
+          c.id
+            AS competition_id_resolved,
 
-        p1.name
-          AS player1_name,
+          c.format
+            AS competition_format,
 
-        p2.name
-          AS player2_name
+          c.gender
+            AS competition_gender,
 
-      FROM matches m
+          c.city
+            AS competition_city,
 
-      JOIN users p1
-        ON p1.id =
-           m.player1_id
+          c.name
+            AS competition_name,
 
-      JOIN users p2
-        ON p2.id =
-           m.player2_id
+          c.team_size
+            AS competition_team_size,
 
-      WHERE
-        m.id = $1
+          c.placement_matches
+            AS competition_placement_matches,
 
-        AND (
-          m.player1_id = $2
-          OR
-          m.player2_id = $2
+          c.active
+            AS competition_active,
+
+          COALESCE(
+            (
+              SELECT
+                json_agg(
+                  json_build_object(
+                    'user_id',
+                      mp.user_id,
+
+                    'side',
+                      mp.side,
+
+                    'position',
+                      mp.position
+                  )
+
+                  ORDER BY
+                    mp.side,
+                    mp.position
+                )
+
+              FROM match_participants mp
+
+              WHERE
+                mp.match_id =
+                  m.id
+            ),
+            '[]'::json
+          )
+            AS participants
+
+        FROM matches m
+
+        JOIN competitions c
+          ON c.id =
+            m.competition_id
+
+        WHERE
+          m.id = $1
+
+          AND EXISTS (
+            SELECT 1
+
+            FROM match_participants mine
+
+            WHERE
+              mine.match_id =
+                m.id
+
+              AND mine.user_id =
+                $2
+          )
+
+        FOR UPDATE OF m
+        `,
+        [
+          matchId,
+          userId,
+        ],
+      );
+
+    if (
+      result.rowCount !==
+      1
+    ) {
+      return null;
+    }
+
+    const row =
+      result.rows[0];
+
+    return {
+      ...row,
+
+      competition: {
+        id:
+          Number(
+            row
+              .competition_id_resolved,
+          ),
+
+        format:
+          row
+            .competition_format,
+
+        gender:
+          row
+            .competition_gender,
+
+        city:
+          row
+            .competition_city,
+
+        name:
+          row
+            .competition_name,
+
+        team_size:
+          Number(
+            row
+              .competition_team_size,
+          ),
+
+        placement_matches:
+          Number(
+            row
+              .competition_placement_matches,
+          ),
+
+        active:
+          Boolean(
+            row
+              .competition_active,
+          ),
+      },
+
+      participants:
+        Array.isArray(
+          row.participants,
         )
+          ? row.participants.map(
+              (
+                participant,
+              ) => ({
+                user_id:
+                  Number(
+                    participant
+                      .user_id,
+                  ),
 
-      FOR UPDATE OF m
-      `,
-      [
-        matchId,
-        userId,
-      ],
-    );
+                side:
+                  Number(
+                    participant.side,
+                  ),
 
-  return (
-    result.rows[0] ||
-    null
-  );
-};
+                position:
+                  Number(
+                    participant
+                      .position,
+                  ),
+              }),
+            )
+          : [],
+    };
+  };
 
 
-/*
-  ============================================================
-  VALIDAR PARTIDO CANCELABLE
-  ============================================================
+const assertSinglesCancellationFlow =
+  (
+    match,
+  ) => {
+    if (
+      match
+        ?.competition
+        ?.format ===
+        "singles" &&
+      Number(
+        match
+          ?.competition
+          ?.team_size,
+      ) === 1
+    ) {
+      return;
+    }
 
-  Una vez cargado un resultado el partido
-  ya entró en proceso deportivo.
+    const error =
+      new Error(
+        "La cancelación de partidos de dobles todavía no está habilitada.",
+      );
 
-  No permitimos cancelación desde:
+    error.status =
+      409;
 
-  awaiting_confirmation
-  completed
-  cancelled
+    error.reason =
+      "doubles_cancellation_not_implemented";
 
-  para evitar que alguien use -15 Elo como
-  forma de escapar de una derrota que ya
-  se jugó o fue informada.
-  ============================================================
-*/
+    throw error;
+  };
+
 
 const getCancellationProblem = (
   match,
@@ -276,16 +385,45 @@ const getCancellationProblem = (
 };
 
 
-/*
-  ============================================================
-  CERRAR DESAFÍO
-  ============================================================
-*/
+const validateCancellationMatch =
+  (
+    match,
+  ) => {
+    assertSinglesCancellationFlow(
+      match,
+    );
+
+    const problem =
+      getCancellationProblem(
+        match,
+      );
+
+    if (
+      problem
+    ) {
+      const error =
+        new Error(
+          problem.message,
+        );
+
+      error.status =
+        problem.status;
+
+      error.reason =
+        problem.reason;
+
+      throw error;
+    }
+  };
+
 
 const closeChallengeAsCancelled =
   async (
     client,
-    challengeId,
+    {
+      challengeId,
+      competitionId,
+    },
   ) => {
     if (
       !challengeId
@@ -308,10 +446,43 @@ const closeChallengeAsCancelled =
         WHERE
           id = $1
 
+          AND competition_id =
+            $2
+
           AND status =
             'accepted'
 
-        RETURNING id
+        RETURNING
+          id,
+          status
+        `,
+        [
+          challengeId,
+          competitionId,
+        ],
+      );
+
+    if (
+      result.rowCount ===
+      1
+    ) {
+      return;
+    }
+
+    const current =
+      await client.query(
+        `
+        SELECT
+          id,
+          status,
+          competition_id
+
+        FROM challenges
+
+        WHERE
+          id = $1
+
+        LIMIT 1
         `,
         [
           challengeId,
@@ -319,93 +490,309 @@ const closeChallengeAsCancelled =
       );
 
     if (
-      !result.rowCount
+      current.rowCount ===
+        1 &&
+      current.rows[0]
+        .status ===
+        "cancelled" &&
+      Number(
+        current.rows[0]
+          .competition_id,
+      ) ===
+        Number(
+          competitionId,
+        )
     ) {
-      const current =
-        await client.query(
-          `
-          SELECT
-            id,
-            status
+      return;
+    }
 
-          FROM challenges
+    const error =
+      new Error(
+        "El desafío asociado no está en un estado válido para cancelarse.",
+      );
 
-          WHERE id = $1
-          `,
-          [
-            challengeId,
-          ],
-        );
+    error.status =
+      409;
 
-      if (
-        current.rowCount &&
-        current.rows[0].status ===
-          "cancelled"
-      ) {
-        return;
-      }
+    error.reason =
+      "challenge_state_invalid";
 
+    throw error;
+  };
+
+
+const createAuditEvent =
+  async (
+    client,
+    {
+      userId,
+      matchId,
+      challengeId,
+      eventType,
+      details,
+    },
+  ) => {
+    await client.query(
+      `
+      INSERT INTO audit_events (
+        user_id,
+        match_id,
+        challenge_id,
+        event_type,
+        details
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5
+      )
+      `,
+      [
+        userId,
+        matchId,
+        challengeId,
+        eventType,
+
+        JSON.stringify(
+          details ??
+            {},
+        ),
+      ],
+    );
+  };
+
+
+const getLockedCompetitionStats =
+  async (
+    client,
+    {
+      userId,
+      competitionId,
+    },
+  ) => {
+    await ensurePlayerCompetitionStats(
+      client,
+      {
+        userId,
+        competitionId,
+      },
+    );
+
+    const stats =
+      await getPlayerCompetitionStats(
+        client,
+        {
+          userId,
+          competitionId,
+          forUpdate:
+            true,
+        },
+      );
+
+    if (
+      !stats
+    ) {
       const error =
         new Error(
-          "El desafío asociado no está en un estado válido para cancelarse.",
+          "No se pudieron obtener las estadísticas del jugador en esta competición.",
         );
 
       error.status =
         409;
 
       error.reason =
-        "challenge_state_invalid";
+        "competition_stats_missing";
 
       throw error;
     }
+
+    return stats;
   };
 
 
-/*
-  ============================================================
-  AUDITORÍA
-  ============================================================
-*/
-
-const createAuditEvent = async (
-  client,
-  {
-    userId,
-    matchId,
-    challengeId,
-    eventType,
-    details,
-  },
-) => {
-  await client.query(
-    `
-    INSERT INTO audit_events (
-      user_id,
-      match_id,
-      challenge_id,
-      event_type,
-      details
-    )
-
-    VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      $5
-    )
-    `,
-    [
+const updateCompetitionRating =
+  async (
+    client,
+    {
       userId,
+      competitionId,
+      elo,
+    },
+  ) => {
+    const result =
+      await client.query(
+        `
+        UPDATE player_competition_stats
+
+        SET
+          rating =
+            $1,
+
+          updated_at =
+            CURRENT_TIMESTAMP
+
+        WHERE
+          user_id = $2
+
+          AND competition_id =
+            $3
+
+          AND rating =
+            $4
+
+        RETURNING
+          id,
+          user_id,
+          competition_id,
+          rating,
+          matches_played,
+          wins,
+          losses,
+          games_won,
+          games_lost,
+          updated_at
+        `,
+        [
+          elo.elo_after,
+          userId,
+          competitionId,
+          elo.elo_before,
+        ],
+      );
+
+    if (
+      result.rowCount !==
+      1
+    ) {
+      const error =
+        new Error(
+          "Tu Elo cambió durante la cancelación. Actualizá la página e intentá nuevamente.",
+        );
+
+      error.status =
+        409;
+
+      error.reason =
+        "rating_state_changed";
+
+      throw error;
+    }
+
+    return result.rows[0];
+  };
+
+
+const insertCancellationEloEvent =
+  async (
+    client,
+    {
+      userId,
+      competitionId,
       matchId,
       challengeId,
-      eventType,
-      JSON.stringify(
-        details || {},
-      ),
-    ],
-  );
-};
+      elo,
+    },
+  ) => {
+    const result =
+      await client.query(
+        `
+        INSERT INTO elo_events (
+          user_id,
+          competition_id,
+          match_id,
+          challenge_id,
+          event_type,
+          elo_before,
+          elo_change,
+          elo_after,
+          description
+        )
+
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          'match_cancellation',
+          $5,
+          $6,
+          $7,
+          $8
+        )
+
+        RETURNING *
+        `,
+        [
+          userId,
+          competitionId,
+          matchId,
+          challengeId,
+          elo.elo_before,
+          elo.elo_change,
+          elo.elo_after,
+
+          `Penalización por cancelación unilateral del partido #${matchId}: -${elo.effective_penalty} Elo`,
+        ],
+      );
+
+    return (
+      result.rows[0] ??
+      null
+    );
+  };
+
+
+const sendControllerError =
+  (
+    error,
+    res,
+    next,
+  ) => {
+    if (
+      error instanceof
+        MatchCancellationError ||
+      error instanceof
+        CompetitionServiceError
+    ) {
+      return res
+        .status(409)
+        .json({
+          message:
+            error.message,
+
+          reason:
+            error.reason,
+
+          details:
+            error.details ??
+            null,
+        });
+    }
+
+    if (
+      error?.status
+    ) {
+      return res
+        .status(
+          error.status,
+        )
+        .json({
+          message:
+            error.message,
+
+          reason:
+            error.reason ??
+            "match_cancellation_error",
+        });
+    }
+
+    return next(
+      error,
+    );
+  };
 
 
 /*
@@ -413,15 +800,28 @@ const createAuditEvent = async (
   CANCELACIÓN UNILATERAL
   ============================================================
 
-  - cualquier participante puede cancelar;
-  - solamente mientras status = pending;
-  - pierde hasta 15 Elo;
-  - respeta pisos;
-  - crea elo_event;
+  SINGLES:
+
+  - participante cancela;
+  - solamente pending;
+  - hasta -15 Elo;
+  - Elo de player_competition_stats;
+  - evento con competition_id;
+  - no incrementa partidos;
+  - no cambia W/L ni games;
   - cierra partido;
   - cierra desafío.
+
+  IMPORTANTE:
+
+  El decay global de playerActivity.service.js
+  ya NO se ejecuta acá.
+
+  La actividad será migrada por competición
+  en el próximo bloque.
   ============================================================
 */
+
 
 export const cancelMatchUnilaterally =
   async (
@@ -451,7 +851,9 @@ export const cancelMatchUnilaterally =
           req.body?.reason,
         );
 
-      if (!userId) {
+      if (
+        !userId
+      ) {
         return res
           .status(401)
           .json({
@@ -463,7 +865,9 @@ export const cancelMatchUnilaterally =
           });
       }
 
-      if (!matchId) {
+      if (
+        !matchId
+      ) {
         return res
           .status(400)
           .json({
@@ -475,7 +879,9 @@ export const cancelMatchUnilaterally =
           });
       }
 
-      if (!reason) {
+      if (
+        !reason
+      ) {
         return res
           .status(400)
           .json({
@@ -494,105 +900,20 @@ export const cancelMatchUnilaterally =
       inTransaction =
         true;
 
-      /*
-        Primero leemos al jugador para
-        conocer su liga.
-      */
-
-      let player =
-        await loadPlayer(
+      const match =
+        await loadMatchForParticipant(
           client,
-          userId,
-        );
-
-      if (!player) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        inTransaction =
-          false;
-
-        return res
-          .status(404)
-          .json({
-            message:
-              "Jugador no encontrado.",
-
-            reason:
-              "player_not_found",
-          });
-      }
-
-      if (
-        player.role !==
-          "player" ||
-        player
-          .verification_status !==
-          "verified"
-      ) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        inTransaction =
-          false;
-
-        return res
-          .status(403)
-          .json({
-            message:
-              "Tu cuenta debe estar verificada para cancelar partidos.",
-
-            reason:
-              "player_not_verified",
-          });
-      }
-
-      /*
-        Antes de calcular la penalización
-        dejamos aplicado todo decay pendiente
-        de la liga.
-
-        Así -15 siempre parte del Elo real.
-      */
-
-      await applyPendingInactivityDecay(
-        client,
-        {
-          city:
-            player.city,
-
-          gender:
-            player.gender,
-        },
-      );
-
-      /*
-        Recargamos y bloqueamos al jugador
-        después del decay.
-      */
-
-      player =
-        await loadPlayer(
-          client,
-          userId,
           {
-            forUpdate:
-              true,
+            matchId,
+            userId,
           },
         );
 
-      const match =
-        await loadMatchForPlayer(
+      if (
+        !match
+      ) {
+        await rollbackQuietly(
           client,
-          matchId,
-          userId,
-        );
-
-      if (!match) {
-        await client.query(
-          "ROLLBACK",
         );
 
         inTransaction =
@@ -609,98 +930,50 @@ export const cancelMatchUnilaterally =
           });
       }
 
-      const problem =
-        getCancellationProblem(
-          match,
+      validateCancellationMatch(
+        match,
+      );
+
+      const competitionId =
+        Number(
+          match
+            .competition
+            .id,
         );
 
-      if (problem) {
-        await client.query(
-          "ROLLBACK",
+      const stats =
+        await getLockedCompetitionStats(
+          client,
+          {
+            userId,
+            competitionId,
+          },
         );
-
-        inTransaction =
-          false;
-
-        return res
-          .status(
-            problem.status,
-          )
-          .json({
-            message:
-              problem.message,
-
-            reason:
-              problem.reason,
-          });
-      }
 
       const elo =
         calculateMatchCancellationElo({
           rating:
-            player.rating,
+            stats.rating,
 
           matchesPlayed:
-            player
+            stats
               .matches_played,
+
+          placementMatches:
+            match
+              .competition
+              .placement_matches,
         });
 
-      /*
-        Actualizar Elo.
-      */
-
-      const updatedPlayer =
-        await client.query(
-          `
-          UPDATE users
-
-          SET
-            rating = $1,
-
-            updated_at =
-              CURRENT_TIMESTAMP
-
-          WHERE
-            id = $2
-
-            AND rating = $3
-
-          RETURNING
-            id,
-            rating,
-            matches_played
-          `,
-          [
-            elo.elo_after,
+      const updatedStats =
+        await updateCompetitionRating(
+          client,
+          {
             userId,
-            elo.elo_before,
-          ],
+            competitionId,
+            elo,
+          },
         );
-
-      if (
-        !updatedPlayer.rowCount
-      ) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        inTransaction =
-          false;
-
-        return res
-          .status(409)
-          .json({
-            message:
-              "Tu Elo cambió durante la cancelación. Actualizá la página e intentá nuevamente.",
-
-            reason:
-              "rating_state_changed",
-          });
-      }
-
-      /*
-        Cancelar partido.
-      */
 
       const cancelled =
         await client.query(
@@ -741,6 +1014,9 @@ export const cancelMatchUnilaterally =
           WHERE
             id = $4
 
+            AND competition_id =
+              $5
+
             AND status =
               'pending'
 
@@ -757,79 +1033,50 @@ export const cancelMatchUnilaterally =
             reason,
             elo.effective_penalty,
             matchId,
+            competitionId,
           ],
         );
 
       if (
-        !cancelled.rowCount
+        cancelled.rowCount !==
+        1
       ) {
-        await client.query(
-          "ROLLBACK",
-        );
+        const error =
+          new Error(
+            "El estado del partido cambió antes de poder cancelarlo.",
+          );
 
-        inTransaction =
-          false;
+        error.status =
+          409;
 
-        return res
-          .status(409)
-          .json({
-            message:
-              "El estado del partido cambió antes de poder cancelarlo.",
+        error.reason =
+          "match_state_changed";
 
-            reason:
-              "match_state_changed",
-          });
+        throw error;
       }
 
       await closeChallengeAsCancelled(
         client,
-        match.challenge_id,
+        {
+          challengeId:
+            match.challenge_id,
+
+          competitionId,
+        },
       );
 
-      /*
-        Registrar movimiento Elo.
-
-        Aunque la penalización efectiva sea 0
-        porque el jugador ya está en el piso,
-        dejamos el evento para conservar la
-        trazabilidad de la acción.
-      */
-
-      await client.query(
-        `
-        INSERT INTO elo_events (
-          user_id,
-          match_id,
-          challenge_id,
-          event_type,
-          elo_before,
-          elo_change,
-          elo_after,
-          description
-        )
-
-        VALUES (
-          $1,
-          $2,
-          $3,
-          'match_cancellation',
-          $4,
-          $5,
-          $6,
-          $7
-        )
-        `,
-        [
-          userId,
-          matchId,
-          match.challenge_id,
-          elo.elo_before,
-          elo.elo_change,
-          elo.elo_after,
-
-          `Penalización por cancelación unilateral del partido #${matchId}: -${elo.effective_penalty} Elo`,
-        ],
-      );
+      const eloEvent =
+        await insertCancellationEloEvent(
+          client,
+          {
+            userId,
+            competitionId,
+            matchId,
+            challengeId:
+              match.challenge_id,
+            elo,
+          },
+        );
 
       await createAuditEvent(
         client,
@@ -843,6 +1090,19 @@ export const cancelMatchUnilaterally =
             "match_cancelled_unilateral",
 
           details: {
+            competition_id:
+              competitionId,
+
+            competition_format:
+              match
+                .competition
+                .format,
+
+            competition_gender:
+              match
+                .competition
+                .gender,
+
             reason,
 
             configured_elo_penalty:
@@ -860,15 +1120,26 @@ export const cancelMatchUnilaterally =
             provisional:
               elo.provisional,
 
-            player1_id:
-              Number(
-                match.player1_id,
-              ),
+            matches_played:
+              elo
+                .matches_played,
 
-            player2_id:
-              Number(
-                match.player2_id,
-              ),
+            placement_matches:
+              elo
+                .placement_matches,
+
+            participant_ids:
+              match
+                .participants
+                .map(
+                  (
+                    participant,
+                  ) =>
+                    Number(
+                      participant
+                        .user_id,
+                    ),
+                ),
           },
         },
       );
@@ -883,11 +1154,36 @@ export const cancelMatchUnilaterally =
       return res.json({
         message:
           elo.effective_penalty > 0
-            ? `Partido cancelado. Se descontaron ${elo.effective_penalty} puntos Elo.`
-            : "Partido cancelado. Tu Elo ya estaba en el mínimo permitido.",
+            ? `Partido cancelado. Se descontaron ${elo.effective_penalty} puntos Elo en ${match.competition.name}.`
+            : "Partido cancelado. No hubo descuento adicional porque alcanzaste el piso Elo permitido.",
 
         match:
           cancelled.rows[0],
+
+        competition: {
+          id:
+            competitionId,
+
+          format:
+            match
+              .competition
+              .format,
+
+          gender:
+            match
+              .competition
+              .gender,
+
+          city:
+            match
+              .competition
+              .city,
+
+          name:
+            match
+              .competition
+              .name,
+        },
 
         cancellation: {
           type:
@@ -902,39 +1198,37 @@ export const cancelMatchUnilaterally =
           elo_change:
             elo.elo_change,
 
-          rating:
+          rating_before:
+            elo.elo_before,
+
+          rating_after:
             elo.elo_after,
+
+          provisional:
+            elo.provisional,
         },
+
+        competition_stats:
+          updatedStats,
+
+        elo_event_id:
+          eloEvent?.id ??
+          null,
       });
     } catch (error) {
-      if (inTransaction) {
-        try {
-          await client.query(
-            "ROLLBACK",
-          );
-        } catch {
-          // conexión liberada abajo
-        }
-      }
-
       if (
-        error.status
+        inTransaction
       ) {
-        return res
-          .status(
-            error.status,
-          )
-          .json({
-            message:
-              error.message,
-
-            reason:
-              error.reason ||
-              "match_cancellation_error",
-          });
+        await rollbackQuietly(
+          client,
+        );
       }
 
-      next(error);
+      return sendControllerError(
+        error,
+        res,
+        next,
+      );
     } finally {
       client.release();
     }
@@ -945,13 +1239,8 @@ export const cancelMatchUnilaterally =
   ============================================================
   SOLICITAR CANCELACIÓN MUTUA
   ============================================================
-
-  No modifica Elo.
-
-  El partido sigue activo hasta que
-  el rival confirme.
-  ============================================================
 */
+
 
 export const requestMutualCancellation =
   async (
@@ -981,7 +1270,9 @@ export const requestMutualCancellation =
           req.body?.reason,
         );
 
-      if (!userId) {
+      if (
+        !userId
+      ) {
         return res
           .status(401)
           .json({
@@ -993,7 +1284,9 @@ export const requestMutualCancellation =
           });
       }
 
-      if (!matchId) {
+      if (
+        !matchId
+      ) {
         return res
           .status(400)
           .json({
@@ -1005,7 +1298,9 @@ export const requestMutualCancellation =
           });
       }
 
-      if (!reason) {
+      if (
+        !reason
+      ) {
         return res
           .status(400)
           .json({
@@ -1025,15 +1320,19 @@ export const requestMutualCancellation =
         true;
 
       const match =
-        await loadMatchForPlayer(
+        await loadMatchForParticipant(
           client,
-          matchId,
-          userId,
+          {
+            matchId,
+            userId,
+          },
         );
 
-      if (!match) {
-        await client.query(
-          "ROLLBACK",
+      if (
+        !match
+      ) {
+        await rollbackQuietly(
+          client,
         );
 
         inTransaction =
@@ -1050,38 +1349,16 @@ export const requestMutualCancellation =
           });
       }
 
-      const problem =
-        getCancellationProblem(
-          match,
-        );
-
-      if (problem) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        inTransaction =
-          false;
-
-        return res
-          .status(
-            problem.status,
-          )
-          .json({
-            message:
-              problem.message,
-
-            reason:
-              problem.reason,
-          });
-      }
+      validateCancellationMatch(
+        match,
+      );
 
       if (
         match
           .cancellation_requested_at
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         inTransaction =
@@ -1134,6 +1411,9 @@ export const requestMutualCancellation =
           WHERE
             id = $3
 
+            AND competition_id =
+              $4
+
             AND status =
               'pending'
 
@@ -1152,28 +1432,28 @@ export const requestMutualCancellation =
             userId,
             reason,
             matchId,
+            match
+              .competition
+              .id,
           ],
         );
 
       if (
-        !result.rowCount
+        result.rowCount !==
+        1
       ) {
-        await client.query(
-          "ROLLBACK",
-        );
+        const error =
+          new Error(
+            "El estado del partido cambió antes de poder enviar la solicitud.",
+          );
 
-        inTransaction =
-          false;
+        error.status =
+          409;
 
-        return res
-          .status(409)
-          .json({
-            message:
-              "El estado del partido cambió antes de poder enviar la solicitud.",
+        error.reason =
+          "match_state_changed";
 
-            reason:
-              "match_state_changed",
-          });
+        throw error;
       }
 
       await createAuditEvent(
@@ -1188,6 +1468,13 @@ export const requestMutualCancellation =
             "match_mutual_cancellation_requested",
 
           details: {
+            competition_id:
+              Number(
+                match
+                  .competition
+                  .id,
+              ),
+
             reason,
 
             requested_by:
@@ -1211,17 +1498,19 @@ export const requestMutualCancellation =
           result.rows[0],
       });
     } catch (error) {
-      if (inTransaction) {
-        try {
-          await client.query(
-            "ROLLBACK",
-          );
-        } catch {
-          // conexión liberada abajo
-        }
+      if (
+        inTransaction
+      ) {
+        await rollbackQuietly(
+          client,
+        );
       }
 
-      next(error);
+      return sendControllerError(
+        error,
+        res,
+        next,
+      );
     } finally {
       client.release();
     }
@@ -1233,6 +1522,7 @@ export const requestMutualCancellation =
   CONFIRMAR CANCELACIÓN MUTUA
   ============================================================
 */
+
 
 export const confirmMutualCancellation =
   async (
@@ -1280,15 +1570,19 @@ export const confirmMutualCancellation =
         true;
 
       const match =
-        await loadMatchForPlayer(
+        await loadMatchForParticipant(
           client,
-          matchId,
-          userId,
+          {
+            matchId,
+            userId,
+          },
         );
 
-      if (!match) {
-        await client.query(
-          "ROLLBACK",
+      if (
+        !match
+      ) {
+        await rollbackQuietly(
+          client,
         );
 
         inTransaction =
@@ -1305,31 +1599,9 @@ export const confirmMutualCancellation =
           });
       }
 
-      const problem =
-        getCancellationProblem(
-          match,
-        );
-
-      if (problem) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        inTransaction =
-          false;
-
-        return res
-          .status(
-            problem.status,
-          )
-          .json({
-            message:
-              problem.message,
-
-            reason:
-              problem.reason,
-          });
-      }
+      validateCancellationMatch(
+        match,
+      );
 
       if (
         !match
@@ -1337,8 +1609,8 @@ export const confirmMutualCancellation =
         !match
           .cancellation_requested_by
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         inTransaction =
@@ -1362,8 +1634,8 @@ export const confirmMutualCancellation =
         ) ===
         userId
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         inTransaction =
@@ -1410,6 +1682,9 @@ export const confirmMutualCancellation =
           WHERE
             id = $2
 
+            AND competition_id =
+              $3
+
             AND status =
               'pending'
 
@@ -1430,33 +1705,41 @@ export const confirmMutualCancellation =
           [
             userId,
             matchId,
+            match
+              .competition
+              .id,
           ],
         );
 
       if (
-        !result.rowCount
+        result.rowCount !==
+        1
       ) {
-        await client.query(
-          "ROLLBACK",
-        );
+        const error =
+          new Error(
+            "La solicitud cambió de estado antes de poder confirmarla.",
+          );
 
-        inTransaction =
-          false;
+        error.status =
+          409;
 
-        return res
-          .status(409)
-          .json({
-            message:
-              "La solicitud cambió de estado antes de poder confirmarla.",
+        error.reason =
+          "cancellation_request_state_changed";
 
-            reason:
-              "cancellation_request_state_changed",
-          });
+        throw error;
       }
 
       await closeChallengeAsCancelled(
         client,
-        match.challenge_id,
+        {
+          challengeId:
+            match.challenge_id,
+
+          competitionId:
+            match
+              .competition
+              .id,
+        },
       );
 
       await createAuditEvent(
@@ -1471,6 +1754,13 @@ export const confirmMutualCancellation =
             "match_cancelled_mutual",
 
           details: {
+            competition_id:
+              Number(
+                match
+                  .competition
+                  .id,
+              ),
+
             requested_by:
               Number(
                 match
@@ -1481,7 +1771,8 @@ export const confirmMutualCancellation =
               userId,
 
             reason:
-              match.cancel_reason,
+              match
+                .cancel_reason,
 
             elo_penalty:
               0,
@@ -1512,34 +1803,19 @@ export const confirmMutualCancellation =
         },
       });
     } catch (error) {
-      if (inTransaction) {
-        try {
-          await client.query(
-            "ROLLBACK",
-          );
-        } catch {
-          // conexión liberada abajo
-        }
-      }
-
       if (
-        error.status
+        inTransaction
       ) {
-        return res
-          .status(
-            error.status,
-          )
-          .json({
-            message:
-              error.message,
-
-            reason:
-              error.reason ||
-              "match_cancellation_error",
-          });
+        await rollbackQuietly(
+          client,
+        );
       }
 
-      next(error);
+      return sendControllerError(
+        error,
+        res,
+        next,
+      );
     } finally {
       client.release();
     }
@@ -1550,11 +1826,8 @@ export const confirmMutualCancellation =
   ============================================================
   RECHAZAR SOLICITUD DE CANCELACIÓN MUTUA
   ============================================================
-
-  El partido continúa normalmente.
-  Nadie pierde Elo.
-  ============================================================
 */
+
 
 export const rejectMutualCancellation =
   async (
@@ -1602,15 +1875,19 @@ export const rejectMutualCancellation =
         true;
 
       const match =
-        await loadMatchForPlayer(
+        await loadMatchForParticipant(
           client,
-          matchId,
-          userId,
+          {
+            matchId,
+            userId,
+          },
         );
 
-      if (!match) {
-        await client.query(
-          "ROLLBACK",
+      if (
+        !match
+      ) {
+        await rollbackQuietly(
+          client,
         );
 
         inTransaction =
@@ -1627,31 +1904,9 @@ export const rejectMutualCancellation =
           });
       }
 
-      const problem =
-        getCancellationProblem(
-          match,
-        );
-
-      if (problem) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        inTransaction =
-          false;
-
-        return res
-          .status(
-            problem.status,
-          )
-          .json({
-            message:
-              problem.message,
-
-            reason:
-              problem.reason,
-          });
-      }
+      validateCancellationMatch(
+        match,
+      );
 
       if (
         !match
@@ -1659,8 +1914,8 @@ export const rejectMutualCancellation =
         !match
           .cancellation_requested_by
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         inTransaction =
@@ -1684,8 +1939,8 @@ export const rejectMutualCancellation =
         ) ===
         userId
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         inTransaction =
@@ -1709,7 +1964,8 @@ export const rejectMutualCancellation =
         );
 
       const originalReason =
-        match.cancel_reason;
+        match
+          .cancel_reason;
 
       const result =
         await client.query(
@@ -1729,6 +1985,9 @@ export const rejectMutualCancellation =
           WHERE
             id = $1
 
+            AND competition_id =
+              $2
+
             AND status =
               'pending'
 
@@ -1736,35 +1995,35 @@ export const rejectMutualCancellation =
               IS NOT NULL
 
             AND cancellation_requested_by
-              <> $2
+              <> $3
 
           RETURNING *
           `,
           [
             matchId,
+            match
+              .competition
+              .id,
             userId,
           ],
         );
 
       if (
-        !result.rowCount
+        result.rowCount !==
+        1
       ) {
-        await client.query(
-          "ROLLBACK",
-        );
+        const error =
+          new Error(
+            "La solicitud cambió de estado antes de poder rechazarla.",
+          );
 
-        inTransaction =
-          false;
+        error.status =
+          409;
 
-        return res
-          .status(409)
-          .json({
-            message:
-              "La solicitud cambió de estado antes de poder rechazarla.",
+        error.reason =
+          "cancellation_request_state_changed";
 
-            reason:
-              "cancellation_request_state_changed",
-          });
+        throw error;
       }
 
       await createAuditEvent(
@@ -1779,6 +2038,13 @@ export const rejectMutualCancellation =
             "match_mutual_cancellation_rejected",
 
           details: {
+            competition_id:
+              Number(
+                match
+                  .competition
+                  .id,
+              ),
+
             requested_by:
               requesterId,
 
@@ -1809,17 +2075,19 @@ export const rejectMutualCancellation =
           result.rows[0],
       });
     } catch (error) {
-      if (inTransaction) {
-        try {
-          await client.query(
-            "ROLLBACK",
-          );
-        } catch {
-          // conexión liberada abajo
-        }
+      if (
+        inTransaction
+      ) {
+        await rollbackQuietly(
+          client,
+        );
       }
 
-      next(error);
+      return sendControllerError(
+        error,
+        res,
+        next,
+      );
     } finally {
       client.release();
     }

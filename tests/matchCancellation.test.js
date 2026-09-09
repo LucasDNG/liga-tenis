@@ -29,6 +29,9 @@ test(
 
         matchesPlayed:
           3,
+
+        placementMatches:
+          5,
       });
 
     assert.equal(
@@ -60,6 +63,11 @@ test(
       result.floor,
       0,
     );
+
+    assert.equal(
+      result.placement_matches,
+      5,
+    );
   },
 );
 
@@ -74,6 +82,9 @@ test(
 
         matchesPlayed:
           0,
+
+        placementMatches:
+          5,
       });
 
     assert.equal(
@@ -122,6 +133,9 @@ test(
 
         matchesPlayed:
           4,
+
+        placementMatches:
+          5,
       });
 
     assert.equal(
@@ -148,7 +162,70 @@ test(
 
 
 test(
-  "con 5 partidos ya se considera oficial",
+  "con 5 partidos ya se considera oficial cuando la competición exige 5",
+  () => {
+    const result =
+      calculateMatchCancellationElo({
+        rating:
+          1200,
+
+        matchesPlayed:
+          5,
+
+        placementMatches:
+          5,
+      });
+
+    assert.equal(
+      result.provisional,
+      false,
+    );
+  },
+);
+
+
+test(
+  "la provisionalidad depende de placement_matches de la competición",
+  () => {
+    const provisional =
+      calculateMatchCancellationElo({
+        rating:
+          1200,
+
+        matchesPlayed:
+          5,
+
+        placementMatches:
+          6,
+      });
+
+    const official =
+      calculateMatchCancellationElo({
+        rating:
+          1200,
+
+        matchesPlayed:
+          5,
+
+        placementMatches:
+          5,
+      });
+
+    assert.equal(
+      provisional.provisional,
+      true,
+    );
+
+    assert.equal(
+      official.provisional,
+      false,
+    );
+  },
+);
+
+
+test(
+  "mantiene compatibilidad usando placement global si no se envía placementMatches",
   () => {
     const result =
       calculateMatchCancellationElo({
@@ -162,6 +239,11 @@ test(
     assert.equal(
       result.provisional,
       false,
+    );
+
+    assert.equal(
+      result.placement_matches,
+      5,
     );
   },
 );
@@ -177,6 +259,9 @@ test(
 
         matchesPlayed:
           20,
+
+        placementMatches:
+          5,
       });
 
     assert.equal(
@@ -212,6 +297,9 @@ test(
 
         matchesPlayed:
           10,
+
+        placementMatches:
+          5,
       });
 
     assert.equal(
@@ -247,6 +335,9 @@ test(
 
         matchesPlayed:
           12,
+
+        placementMatches:
+          5,
       });
 
     assert.equal(
@@ -277,6 +368,9 @@ test(
 
         matchesPlayed:
           30,
+
+        placementMatches:
+          5,
       });
 
     assert.equal(
@@ -312,6 +406,9 @@ test(
 
         matchesPlayed:
           30,
+
+        placementMatches:
+          5,
       });
 
     assert.equal(
@@ -338,6 +435,9 @@ test(
 
           matchesPlayed:
             10,
+
+          placementMatches:
+            5,
         }),
       (error) => {
         assert.ok(
@@ -368,11 +468,47 @@ test(
 
           matchesPlayed:
             -1,
+
+          placementMatches:
+            5,
         }),
       (error) => {
         assert.equal(
           error.reason,
           "invalid_numeric_value",
+        );
+
+        return true;
+      },
+    );
+  },
+);
+
+
+test(
+  "rechaza placementMatches inválido",
+  () => {
+    assert.throws(
+      () =>
+        calculateMatchCancellationElo({
+          rating:
+            1500,
+
+          matchesPlayed:
+            5,
+
+          placementMatches:
+            0,
+        }),
+      (error) => {
+        assert.ok(
+          error instanceof
+            MatchCancellationError,
+        );
+
+        assert.equal(
+          error.reason,
+          "invalid_positive_integer",
         );
 
         return true;
@@ -393,6 +529,9 @@ test(
 
           matchesPlayed:
             5,
+
+          placementMatches:
+            5,
         }),
       MatchCancellationError,
     );
@@ -404,6 +543,24 @@ test(
             1500,
 
           matchesPlayed:
+            5.5,
+
+          placementMatches:
+            5,
+        }),
+      MatchCancellationError,
+    );
+
+    assert.throws(
+      () =>
+        calculateMatchCancellationElo({
+          rating:
+            1500,
+
+          matchesPlayed:
+            5,
+
+          placementMatches:
             5.5,
         }),
       MatchCancellationError,

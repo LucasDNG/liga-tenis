@@ -4,45 +4,9 @@ import {
 } from "./placementLevel.service.js";
 
 
-/*
-  ============================================================
-  LA RED
-  CANCELACIÓN DE PARTIDO ACEPTADO
-  ============================================================
-
-  Reglas actuales:
-
-  - rechazo de desafío:
-      -8 Elo
-
-  - cancelación unilateral de partido aceptado:
-      -15 Elo
-
-  - cancelación mutua:
-      0 Elo
-
-  - cancelación administrativa justificada:
-      0 Elo
-
-  Este servicio solamente calcula la penalización
-  unilateral de -15 Elo.
-
-  NO modifica PostgreSQL.
-  NO cambia estados.
-  NO crea eventos.
-  ============================================================
-*/
-
-
 export const MATCH_CANCELLATION_PENALTY =
   15;
 
-
-/*
-  ============================================================
-  ERROR
-  ============================================================
-*/
 
 export class MatchCancellationError
   extends Error {
@@ -66,20 +30,12 @@ export class MatchCancellationError
 }
 
 
-/*
-  ============================================================
-  VALIDACIÓN
-  ============================================================
-*/
-
 const asNonNegativeInteger = (
   value,
   field,
 ) => {
   const number =
-    Number(
-      value,
-    );
+    Number(value);
 
   if (
     !Number.isInteger(
@@ -101,31 +57,39 @@ const asNonNegativeInteger = (
 };
 
 
-/*
-  ============================================================
-  PENALIZACIÓN
-  ============================================================
+const asPositiveInteger = (
+  value,
+  field,
+) => {
+  const number =
+    Number(value);
 
-  PROVISIONAL
-  -----------
-  Piso 0.
+  if (
+    !Number.isInteger(
+      number,
+    ) ||
+    number <= 0
+  ) {
+    throw new MatchCancellationError(
+      `El campo ${field} debe ser un entero positivo.`,
+      "invalid_positive_integer",
+      {
+        field,
+        value,
+      },
+    );
+  }
 
-  OFICIAL NORMAL
-  --------------
-  Piso 100.
+  return number;
+};
 
-  OFICIAL QUE YA ESTABA DEBAJO DE 100
-  ------------------------------------
-  Piso 0.
-
-  Una penalización nunca puede regalar Elo.
-  ============================================================
-*/
 
 export const calculateMatchCancellationElo =
   ({
     rating,
     matchesPlayed,
+    placementMatches =
+      PLACEMENT_MATCHES,
   }) => {
     const currentRating =
       asNonNegativeInteger(
@@ -139,9 +103,15 @@ export const calculateMatchCancellationElo =
         "matchesPlayed",
       );
 
+    const requiredPlacementMatches =
+      asPositiveInteger(
+        placementMatches,
+        "placementMatches",
+      );
+
     const provisional =
       currentMatches <
-      PLACEMENT_MATCHES;
+      requiredPlacementMatches;
 
     let floor;
 
@@ -162,25 +132,32 @@ export const calculateMatchCancellationElo =
     const eloAfter =
       Math.max(
         floor,
-
         currentRating -
           MATCH_CANCELLATION_PENALTY,
       );
 
-    const eloChange =
+    let eloChange =
       eloAfter -
       currentRating;
+
+    /*
+      Evitamos -0 porque después termina
+      llegando a auditorías/eventos JSON.
+    */
+
+    if (
+      Object.is(
+        eloChange,
+        -0,
+      )
+    ) {
+      eloChange = 0;
+    }
 
     const effectivePenalty =
       Math.abs(
         eloChange,
       );
-
-    /*
-      ========================================================
-      INVARIANTES
-      ========================================================
-    */
 
     if (
       !Number.isInteger(
@@ -247,6 +224,9 @@ export const calculateMatchCancellationElo =
       matches_played:
         currentMatches,
 
+      placement_matches:
+        requiredPlacementMatches,
+
       floor,
 
       configured_penalty:
@@ -256,3 +236,9 @@ export const calculateMatchCancellationElo =
         effectivePenalty,
     };
   };
+
+
+export default {
+  MATCH_CANCELLATION_PENALTY,
+  calculateMatchCancellationElo,
+};
