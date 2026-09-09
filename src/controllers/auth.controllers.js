@@ -253,10 +253,16 @@ export const signUp = async (
       dato legado.
 
       El ranking competitivo real
-      se calcula dinámicamente por:
-      rating DESC,
-      matches_played DESC,
-      id ASC.
+      se calcula dinámicamente.
+
+      Todo jugador nuevo empieza:
+
+      rating = 0
+      matches_played = 0
+
+      Sus primeros 5 partidos
+      pertenecen al sistema
+      nivelatorio.
     */
 
     const result =
@@ -309,7 +315,7 @@ export const signUp = async (
             0
           ) + 1,
 
-          1500,
+          0,
           0,
           $10,
           $11,

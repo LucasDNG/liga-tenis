@@ -5,8 +5,13 @@ import {
   LEAGUES,
 } from "../constants/league.js";
 
-
-const PLACEMENT_MATCHES = 5;
+import {
+  PLACEMENT_MATCHES,
+  createEmptySportStats,
+  formatRankingPlayerName,
+  getLeagueSportStats,
+  getOfficialRanking,
+} from "../services/rankingOrder.service.js";
 
 
 /*
@@ -30,7 +35,100 @@ const getLeague = (req) => {
 
 /*
   ============================================================
+  NORMALIZAR JUGADOR PARA RESPUESTA
+  ============================================================
+*/
+
+const normalizePlayerResponse = (
+  player,
+) => ({
+  ...player,
+
+  id:
+    Number(
+      player.id,
+    ),
+
+  rating:
+    Number(
+      player.rating,
+    ),
+
+  matches_played:
+    Number(
+      player.matches_played,
+    ),
+
+  wins:
+    Number(
+      player.wins ?? 0,
+    ),
+
+  losses:
+    Number(
+      player.losses ?? 0,
+    ),
+
+  match_balance:
+    Number(
+      player.match_balance ?? 0,
+    ),
+
+  games_won:
+    Number(
+      player.games_won ?? 0,
+    ),
+
+  games_lost:
+    Number(
+      player.games_lost ?? 0,
+    ),
+
+  game_balance:
+    Number(
+      player.game_balance ?? 0,
+    ),
+
+  rank_position:
+    player.rank_position === null ||
+    player.rank_position === undefined
+      ? null
+      : Number(
+          player.rank_position,
+        ),
+
+  provisional:
+    Boolean(
+      player.provisional,
+    ),
+
+  display_name:
+    formatRankingPlayerName(
+      player,
+    ),
+});
+
+
+/*
+  ============================================================
   RANKING ACTUAL
+  ============================================================
+
+  OFICIALES:
+
+  1. Elo DESC
+  2. victorias - derrotas DESC
+  3. games ganados - games perdidos DESC
+  4. apellido ASC
+  5. nombre ASC
+  6. ID ASC
+
+  PROVISIONALES:
+
+  - visibles desde la verificación;
+  - no consumen puesto oficial;
+  - conservan estadísticas deportivas;
+  - todavía no reciben placement porcentual.
   ============================================================
 */
 
@@ -39,6 +137,9 @@ export const getRanking = async (
   res,
   next,
 ) => {
+  const client =
+    await pool.connect();
+
   try {
     const gender =
       getLeague(req);
@@ -53,102 +154,227 @@ export const getRanking = async (
     }
 
     /*
+      ========================================================
       RANKING OFICIAL
-
-      Solo:
-      - jugadores
-      - verificados
-      - misma ciudad/liga
-      - 5+ partidos
+      ========================================================
     */
-    const officialResult =
-      await pool.query(
-        `
-        SELECT
-          id,
-          name,
-          first_name,
-          last_name,
+
+    const officialRanking =
+      await getOfficialRanking(
+        client,
+        {
+          city:
+            LEAGUE_CITY,
+
           gender,
-          rating,
-          matches_played,
-
-          false AS provisional,
-
-          ROW_NUMBER() OVER (
-            ORDER BY
-              rating DESC,
-              matches_played DESC,
-              id ASC
-          )::int AS rank_position
-
-        FROM users
-
-        WHERE
-          city = $1
-          AND gender = $2
-          AND role = 'player'
-          AND verification_status =
-            'verified'
-          AND matches_played >= $3
-
-        ORDER BY
-          rating DESC,
-          matches_played DESC,
-          id ASC
-        `,
-        [
-          LEAGUE_CITY,
-          gender,
-          PLACEMENT_MATCHES,
-        ],
+        },
       );
+
+    const officialPlayers =
+      officialRanking.map(
+        (player) =>
+          normalizePlayerResponse({
+            ...player,
+
+            provisional:
+              false,
+
+            rank_position:
+              player.official_position,
+          }),
+      );
+
 
     /*
+      ========================================================
       PROVISIONALES
-
-      Son públicos y visibles desde que
-      están verificados.
-
-      No consumen una posición oficial.
+      ========================================================
     */
-    const provisionalResult =
-      await pool.query(
-        `
-        SELECT
-          id,
-          name,
-          first_name,
-          last_name,
-          gender,
-          rating,
-          matches_played,
 
-          true AS provisional,
+    const [
+      provisionalResult,
+      statsById,
+    ] =
+      await Promise.all([
+        client.query(
+          `
+          SELECT
+            id,
+            name,
+            first_name,
+            last_name,
+            gender,
+            rating,
+            matches_played
 
-          NULL::int AS rank_position
+          FROM users
 
-        FROM users
+          WHERE
+            city = $1
 
-        WHERE
-          city = $1
-          AND gender = $2
-          AND role = 'player'
-          AND verification_status =
-            'verified'
-          AND matches_played < $3
+            AND gender = $2
 
-        ORDER BY
-          rating DESC,
-          matches_played DESC,
-          id ASC
-        `,
-        [
-          LEAGUE_CITY,
-          gender,
-          PLACEMENT_MATCHES,
-        ],
-      );
+            AND role = 'player'
+
+            AND verification_status =
+              'verified'
+
+            AND matches_played < $3
+
+          ORDER BY
+            id ASC
+          `,
+          [
+            LEAGUE_CITY,
+            gender,
+            PLACEMENT_MATCHES,
+          ],
+        ),
+
+        getLeagueSportStats(
+          client,
+          {
+            city:
+              LEAGUE_CITY,
+
+            gender,
+          },
+        ),
+      ]);
+
+    const provisionalPlayers =
+      provisionalResult.rows
+        .map(
+          (player) => {
+            const id =
+              Number(
+                player.id,
+              );
+
+            const stats =
+              statsById.get(
+                id,
+              ) ||
+              createEmptySportStats(
+                id,
+              );
+
+            return normalizePlayerResponse({
+              ...player,
+
+              id,
+
+              provisional:
+                true,
+
+              rank_position:
+                null,
+
+              wins:
+                stats.wins,
+
+              losses:
+                stats.losses,
+
+              match_balance:
+                stats.match_balance,
+
+              games_won:
+                stats.games_won,
+
+              games_lost:
+                stats.games_lost,
+
+              game_balance:
+                stats.game_balance,
+            });
+          },
+        )
+        .sort(
+          (a, b) => {
+            /*
+              Los provisionales todavía no tienen
+              una posición competitiva definitiva
+              del nuevo sistema.
+
+              Esta lista pública se ordena solamente
+              para presentación:
+
+              1. más nivelatorios jugados;
+              2. apellido;
+              3. nombre;
+              4. ID.
+
+              NO representa ranking oficial.
+            */
+
+            const matchesDifference =
+              Number(
+                b.matches_played,
+              ) -
+              Number(
+                a.matches_played,
+              );
+
+            if (
+              matchesDifference !== 0
+            ) {
+              return matchesDifference;
+            }
+
+            const lastNameComparison =
+              String(
+                a.last_name ?? "",
+              ).localeCompare(
+                String(
+                  b.last_name ?? "",
+                ),
+                "es",
+                {
+                  sensitivity:
+                    "base",
+                },
+              );
+
+            if (
+              lastNameComparison !== 0
+            ) {
+              return lastNameComparison;
+            }
+
+            const firstNameComparison =
+              String(
+                a.first_name ?? "",
+              ).localeCompare(
+                String(
+                  b.first_name ?? "",
+                ),
+                "es",
+                {
+                  sensitivity:
+                    "base",
+                },
+              );
+
+            if (
+              firstNameComparison !== 0
+            ) {
+              return firstNameComparison;
+            }
+
+            return (
+              Number(a.id) -
+              Number(b.id)
+            );
+          },
+        );
+
+
+    /*
+      ========================================================
+      RESPUESTA
+      ========================================================
+    */
 
     res.json({
       league:
@@ -160,19 +386,30 @@ export const getRanking = async (
       placement_matches:
         PLACEMENT_MATCHES,
 
+      ranking_order: [
+        "rating",
+        "match_balance",
+        "game_balance",
+        "last_name",
+        "first_name",
+        "id",
+      ],
+
       official_players:
-        officialResult.rows,
+        officialPlayers,
 
       provisional_players:
-        provisionalResult.rows,
+        provisionalPlayers,
 
       players: [
-        ...officialResult.rows,
-        ...provisionalResult.rows,
+        ...officialPlayers,
+        ...provisionalPlayers,
       ],
     });
   } catch (error) {
     next(error);
+  } finally {
+    client.release();
   }
 };
 
@@ -182,19 +419,15 @@ export const getRanking = async (
   TOP 3 ELO HISTÓRICO
   ============================================================
 
-  Regla:
+  Se conserva por ahora la regla histórica existente.
 
-  - un solo récord por jugador
-  - toma el Elo máximo válido conseguido
-  - movimientos revertidos/anulados NO cuentan
-  - una caída posterior no borra el récord
-  - devuelve los 3 jugadores con mayor pico histórico
+  - un récord por jugador;
+  - máximo Elo válido;
+  - eventos revertidos no cuentan;
+  - una caída posterior no borra el récord.
 
-  También incluimos el rating actual como respaldo para
-  datos viejos que pudieran existir antes de elo_events.
-
-  Después del reset final de producción, todo quedará
-  naturalmente registrado por eventos desde Elo 0.
+  El sistema histórico será auditado nuevamente cuando
+  adaptemos replay al nuevo placement.
   ============================================================
 */
 
@@ -233,8 +466,11 @@ export const getHistoricalElo = async (
 
           WHERE
             city = $1
+
             AND gender = $2
+
             AND role = 'player'
+
             AND verification_status =
               'verified'
         ),
@@ -277,8 +513,10 @@ export const getHistoricalElo = async (
             ep.first_name,
             ep.last_name,
             ep.gender,
+
             ep.rating
               AS current_elo,
+
             ep.matches_played,
 
             CASE
@@ -326,7 +564,8 @@ export const getHistoricalElo = async (
           ROW_NUMBER() OVER (
             ORDER BY
               peak_elo DESC,
-              matches_played DESC,
+              last_name ASC,
+              first_name ASC,
               id ASC
           )::int
             AS historical_position
@@ -335,7 +574,8 @@ export const getHistoricalElo = async (
 
         ORDER BY
           peak_elo DESC,
-          matches_played DESC,
+          last_name ASC,
+          first_name ASC,
           id ASC
 
         LIMIT 3
@@ -346,6 +586,43 @@ export const getHistoricalElo = async (
         ],
       );
 
+    const records =
+      result.rows.map(
+        (record) => ({
+          ...record,
+
+          id:
+            Number(
+              record.id,
+            ),
+
+          current_elo:
+            Number(
+              record.current_elo,
+            ),
+
+          matches_played:
+            Number(
+              record.matches_played,
+            ),
+
+          peak_elo:
+            Number(
+              record.peak_elo,
+            ),
+
+          historical_position:
+            Number(
+              record.historical_position,
+            ),
+
+          display_name:
+            formatRankingPlayerName(
+              record,
+            ),
+        }),
+      );
+
     res.json({
       league:
         gender,
@@ -353,8 +630,7 @@ export const getHistoricalElo = async (
       city:
         LEAGUE_CITY,
 
-      records:
-        result.rows,
+      records,
     });
   } catch (error) {
     next(error);

@@ -6,65 +6,118 @@ import {
   checkEloConcentration,
 } from "../services/antifraud.service.js";
 
+import {
+  PLACEMENT_MATCHES,
+  OFFICIAL_ELO_FLOOR,
+} from "../services/placementLevel.service.js";
 
-const PLACEMENT_MATCHES = 5;
-const PLACEMENT_K = 64;
-const NORMAL_K = 32;
+import {
+  preparePlacementMatchContext,
+  recordPlacementMatchResult,
+} from "../services/placementMatch.service.js";
 
-const OFFICIAL_ELO_FLOOR = 100;
-
-const RANKED_LOSS_TO_PROVISIONAL_MIN = 200;
-const RANKED_LOSS_TO_PROVISIONAL_PERCENT = 0.12;
-const RANKED_LOSS_TO_PROVISIONAL_MAX = 300;
-
-const TOO_FAST_RESULT_MINUTES = 40;
+import {
+  getOfficialRanking,
+} from "../services/rankingOrder.service.js";
 
 
 /*
   ============================================================
-  VALIDACIÓN DE GAME
+  LA RED
+  PARTIDOS
+  ============================================================
+
+  MODELO ACTUAL
+
+  PROVISIONAL:
+  - primeros 5 partidos son nivelatorios;
+  - no usa K64;
+  - no acumula Elo partido a partido;
+  - las victorias construyen placement_percentile;
+  - las derrotas solamente afectan el récord;
+  - rival oficial vale su percentil oficial pre-partido;
+  - rival provisional vale su placement demostrado
+    pre-partido;
+  - al completar el quinto partido se asigna Elo oficial
+    según la zona real del ranking.
+
+  OFICIAL:
+  - conserva Elo normal K32;
+  - conserva regla vigente de derrota contra provisional;
+  - conserva regla especial de destronamiento del #1.
+
+  El replay se ajustará en el bloque posterior.
   ============================================================
 */
 
-const parseGameValue = (value) => {
+
+const NORMAL_K = 32;
+
+const RANKED_LOSS_TO_PROVISIONAL_MIN =
+  200;
+
+const RANKED_LOSS_TO_PROVISIONAL_PERCENT =
+  0.12;
+
+const RANKED_LOSS_TO_PROVISIONAL_MAX =
+  300;
+
+const TOO_FAST_RESULT_MINUTES =
+  40;
+
+
+/*
+  ============================================================
+  SCORE
+  ============================================================
+*/
+
+const parseGameValue = (
+  value,
+) => {
   if (
     value === null ||
     value === undefined ||
     value === "" ||
-    typeof value === "boolean"
+    typeof value ===
+      "boolean"
   ) {
     return null;
   }
 
   if (
-    typeof value !== "number" &&
-    typeof value !== "string"
+    typeof value !==
+      "number" &&
+    typeof value !==
+      "string"
   ) {
     return null;
   }
 
   if (
-    typeof value === "string" &&
-    value.trim() === ""
+    typeof value ===
+      "string" &&
+    value.trim() ===
+      ""
   ) {
     return null;
   }
 
-  const number = Number(value);
+  const number =
+    Number(value);
 
-  return Number.isInteger(number)
+  return Number.isInteger(
+    number,
+  )
     ? number
     : null;
 };
 
 
-/*
-  ============================================================
-  VALIDACIÓN DE SET
-  ============================================================
-*/
-
-const isValidSet = (a, b) => {
+const isValidSet = (
+  a,
+  b,
+) => {
   if (
     !Number.isInteger(a) ||
     !Number.isInteger(b) ||
@@ -74,8 +127,11 @@ const isValidSet = (a, b) => {
     return false;
   }
 
-  const max = Math.max(a, b);
-  const min = Math.min(a, b);
+  const max =
+    Math.max(a, b);
+
+  const min =
+    Math.min(a, b);
 
   if (
     max === 6 &&
@@ -86,7 +142,10 @@ const isValidSet = (a, b) => {
 
   if (
     max === 7 &&
-    (min === 5 || min === 6)
+    (
+      min === 5 ||
+      min === 6
+    )
   ) {
     return true;
   }
@@ -95,13 +154,9 @@ const isValidSet = (a, b) => {
 };
 
 
-/*
-  ============================================================
-  SCORE COMPLETO
-  ============================================================
-*/
-
-const parseScore = (score) => {
+const parseScore = (
+  score,
+) => {
   if (
     !Array.isArray(score) ||
     (
@@ -115,62 +170,88 @@ const parseScore = (score) => {
     };
   }
 
-  const normalizedScore = [];
-  const setWinners = [];
+  const normalizedScore =
+    [];
+
+  const setWinners =
+    [];
 
   for (
-    let i = 0;
-    i < score.length;
-    i++
+    let index = 0;
+    index <
+    score.length;
+    index += 1
   ) {
-    const currentSet = score[i];
+    const currentSet =
+      score[index];
 
     if (
       !currentSet ||
-      typeof currentSet !== "object" ||
-      Array.isArray(currentSet)
+      typeof currentSet !==
+        "object" ||
+      Array.isArray(
+        currentSet,
+      )
     ) {
       return {
         error:
-          `El Set ${i + 1} no tiene un formato válido.`,
+          `El Set ${index + 1} no tiene un formato válido.`,
       };
     }
 
-    const a =
-      parseGameValue(currentSet.p1);
+    const player1Games =
+      parseGameValue(
+        currentSet.p1,
+      );
 
-    const b =
-      parseGameValue(currentSet.p2);
+    const player2Games =
+      parseGameValue(
+        currentSet.p2,
+      );
 
     if (
-      a === null ||
-      b === null
+      player1Games ===
+        null ||
+      player2Games ===
+        null
     ) {
       return {
         error:
-          `Completá correctamente los dos valores del Set ${i + 1}.`,
+          `Completá correctamente los dos valores del Set ${index + 1}.`,
       };
     }
 
-    if (!isValidSet(a, b)) {
+    if (
+      !isValidSet(
+        player1Games,
+        player2Games,
+      )
+    ) {
       return {
         error:
-          `El Set ${i + 1} no es válido. Ejemplos: 6-4, 7-5 o 7-6.`,
+          `El Set ${index + 1} no es válido. Ejemplos: 6-4, 7-5 o 7-6.`,
       };
     }
 
     normalizedScore.push({
-      p1: a,
-      p2: b,
+      p1:
+        player1Games,
+
+      p2:
+        player2Games,
     });
 
     setWinners.push(
-      a > b ? 1 : 2,
+      player1Games >
+        player2Games
+        ? 1
+        : 2,
     );
   }
 
   if (
-    normalizedScore.length === 2
+    normalizedScore.length ===
+    2
   ) {
     if (
       setWinners[0] !==
@@ -211,14 +292,16 @@ const parseScore = (score) => {
 
 /*
   ============================================================
-  HELPERS ELO
+  HELPERS ELO OFICIAL
   ============================================================
 */
 
 const isProvisional = (
   matchesPlayed,
 ) =>
-  matchesPlayed <
+  Number(
+    matchesPlayed,
+  ) <
   PLACEMENT_MATCHES;
 
 
@@ -243,7 +326,6 @@ const expectedScore = (
 const normalEloChange = ({
   ownRating,
   opponentRating,
-  k,
   won,
 }) => {
   const expected =
@@ -253,9 +335,13 @@ const normalEloChange = ({
     );
 
   return Math.round(
-    k *
+    NORMAL_K *
       (
-        (won ? 1 : 0) -
+        (
+          won
+            ? 1
+            : 0
+        ) -
         expected
       ),
   );
@@ -263,7 +349,9 @@ const normalEloChange = ({
 
 
 const getRankedLossToProvisionalPenalty =
-  (rating) => {
+  (
+    rating,
+  ) => {
     const percentage =
       Math.round(
         rating *
@@ -272,6 +360,7 @@ const getRankedLossToProvisionalPenalty =
 
     return Math.min(
       RANKED_LOSS_TO_PROVISIONAL_MAX,
+
       Math.max(
         RANKED_LOSS_TO_PROVISIONAL_MIN,
         percentage,
@@ -280,76 +369,222 @@ const getRankedLossToProvisionalPenalty =
   };
 
 
+const getOfficialLossFloor = (
+  rating,
+) =>
+  rating >=
+  OFFICIAL_ELO_FLOOR
+    ? OFFICIAL_ELO_FLOOR
+    : 0;
+
+
 /*
   ============================================================
-  RANKING OFICIAL PRE-PARTIDO
+  ELO DE UN OFICIAL
+  ============================================================
+
+  El provisional NO utiliza este cálculo.
+
+  Si el oficial gana:
+  - K32.
+
+  Si el oficial pierde contra otro oficial:
+  - K32.
+
+  Si el oficial pierde contra provisional:
+  - conserva la penalización especial vigente.
   ============================================================
 */
 
-const getOfficialRankingSnapshot =
-  async (
-    client,
-    city,
-    gender,
-  ) => {
-    const result =
-      await client.query(
-        `
-        SELECT
-          id,
-          name,
+const calculateOfficialMatchRating = ({
+  player,
+  opponent,
+  won,
+}) => {
+  const rating =
+    Number(
+      player.rating,
+    );
+
+  const opponentRating =
+    Number(
+      opponent.rating,
+    );
+
+  const opponentProvisional =
+    isProvisional(
+      opponent
+        .matches_played,
+    );
+
+  if (
+    won
+  ) {
+    const delta =
+      normalEloChange({
+        ownRating:
           rating,
-          matches_played,
 
-          ROW_NUMBER() OVER (
-            ORDER BY
-              rating DESC,
-              matches_played DESC,
-              id ASC
-          )::int AS position
+        opponentRating,
 
-        FROM users
+        won:
+          true,
+      });
 
-        WHERE
-          role = 'player'
-          AND verification_status = 'verified'
-          AND city = $1
-          AND gender = $2
-          AND matches_played >= $3
+    return {
+      rating_before:
+        rating,
 
-        ORDER BY
-          position ASC
-        `,
-        [
-          city,
-          gender,
-          PLACEMENT_MATCHES,
-        ],
+      rating_after:
+        Math.max(
+          OFFICIAL_ELO_FLOOR,
+          rating +
+            delta,
+        ),
+
+      calculation:
+        opponentProvisional
+          ? "ranked_beats_placement"
+          : "normal_ranked",
+
+      special_provisional_penalty:
+        null,
+    };
+  }
+
+  if (
+    opponentProvisional
+  ) {
+    const penalty =
+      getRankedLossToProvisionalPenalty(
+        rating,
       );
 
-    return result.rows.map(
-      (row) => ({
-        ...row,
+    return {
+      rating_before:
+        rating,
 
-        id:
-          Number(row.id),
+      rating_after:
+        Math.max(
+          getOfficialLossFloor(
+            rating,
+          ),
+          rating -
+            penalty,
+        ),
 
-        rating:
-          Number(row.rating),
+      calculation:
+        "ranked_loses_to_placement",
 
-        matches_played:
-          Number(row.matches_played),
+      special_provisional_penalty:
+        penalty,
+    };
+  }
 
-        position:
-          Number(row.position),
-      }),
+  const delta =
+    normalEloChange({
+      ownRating:
+        rating,
+
+      opponentRating,
+
+      won:
+        false,
+    });
+
+  return {
+    rating_before:
+      rating,
+
+    rating_after:
+      Math.max(
+        getOfficialLossFloor(
+          rating,
+        ),
+        rating +
+          delta,
+      ),
+
+    calculation:
+      "normal_ranked",
+
+    special_provisional_penalty:
+      null,
+  };
+};
+
+
+/*
+  ============================================================
+  EVENTO ELO
+  ============================================================
+*/
+
+const insertEloEvent =
+  async (
+    client,
+    {
+      userId,
+      matchId,
+      challengeId,
+      eventType,
+      eloBefore,
+      eloAfter,
+      description,
+    },
+  ) => {
+    const before =
+      Number(
+        eloBefore,
+      );
+
+    const after =
+      Number(
+        eloAfter,
+      );
+
+    await client.query(
+      `
+      INSERT INTO elo_events (
+        user_id,
+        match_id,
+        challenge_id,
+        event_type,
+        elo_before,
+        elo_change,
+        elo_after,
+        description
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8
+      )
+      `,
+      [
+        userId,
+        matchId,
+        challengeId,
+        eventType,
+        before,
+        after -
+          before,
+        after,
+        description,
+      ],
     );
   };
 
 
 /*
   ============================================================
-  PARTIDOS DEL USUARIO
+  MIS PARTIDOS
   ============================================================
 */
 
@@ -366,27 +601,37 @@ export const getMyMatches =
           SELECT
             m.*,
 
-            p1.name AS player1_name,
-            p1.phone AS player1_phone,
+            p1.name
+              AS player1_name,
 
-            p2.name AS player2_name,
-            p2.phone AS player2_phone,
+            p1.phone
+              AS player1_phone,
 
-            w.name AS winner_name,
+            p2.name
+              AS player2_name,
 
-            confirmer.name AS
-              result_confirmed_by_name
+            p2.phone
+              AS player2_phone,
+
+            w.name
+              AS winner_name,
+
+            confirmer.name
+              AS result_confirmed_by_name
 
           FROM matches m
 
           JOIN users p1
-            ON p1.id = m.player1_id
+            ON p1.id =
+               m.player1_id
 
           JOIN users p2
-            ON p2.id = m.player2_id
+            ON p2.id =
+               m.player2_id
 
           LEFT JOIN users w
-            ON w.id = m.winner_id
+            ON w.id =
+               m.winner_id
 
           LEFT JOIN users confirmer
             ON confirmer.id =
@@ -398,13 +643,17 @@ export const getMyMatches =
               OR
               m.player2_id = $1
             )
-            AND m.annulled_at IS NULL
+
+            AND m.annulled_at
+              IS NULL
 
           ORDER BY
             m.created_at DESC,
             m.id DESC
           `,
-          [req.userId],
+          [
+            req.userId,
+          ],
         );
 
       res.json({
@@ -437,13 +686,19 @@ export const submitMatchResult =
         "BEGIN",
       );
 
-      const { score } =
+      const {
+        score,
+      } =
         req.body;
 
       const parsed =
-        parseScore(score);
+        parseScore(
+          score,
+        );
 
-      if (parsed.error) {
+      if (
+        parsed.error
+      ) {
         await client.query(
           "ROLLBACK",
         );
@@ -459,9 +714,6 @@ export const submitMatchResult =
           });
       }
 
-      const normalizedScore =
-        parsed.normalizedScore;
-
       const matchResult =
         await client.query(
           `
@@ -471,8 +723,13 @@ export const submitMatchResult =
 
           WHERE
             id = $1
-            AND status = 'pending'
-            AND annulled_at IS NULL
+
+            AND status =
+              'pending'
+
+            AND annulled_at
+              IS NULL
+
             AND (
               player1_id = $2
               OR
@@ -488,7 +745,8 @@ export const submitMatchResult =
         );
 
       if (
-        !matchResult.rowCount
+        !matchResult
+          .rowCount
       ) {
         await client.query(
           "ROLLBACK",
@@ -509,7 +767,8 @@ export const submitMatchResult =
         matchResult.rows[0];
 
       if (
-        !match.scheduled_at
+        !match
+          .scheduled_at
       ) {
         await client.query(
           "ROLLBACK",
@@ -555,7 +814,8 @@ export const submitMatchResult =
         Date.now();
 
       if (
-        scheduledTime > now
+        scheduledTime >
+        now
       ) {
         await client.query(
           "ROLLBACK",
@@ -571,14 +831,23 @@ export const submitMatchResult =
               "match_not_started",
 
             available_at:
-              match.scheduled_at,
+              match
+                .scheduled_at,
           });
       }
 
       const winnerId =
-        parsed.winnerSide === 1
-          ? match.player1_id
-          : match.player2_id;
+        parsed
+          .winnerSide ===
+        1
+          ? Number(
+              match
+                .player1_id,
+            )
+          : Number(
+              match
+                .player2_id,
+            );
 
       const updated =
         await client.query(
@@ -586,18 +855,29 @@ export const submitMatchResult =
           UPDATE matches
 
           SET
-            proposed_winner_id = $1,
-            proposed_score = $2,
-            result_submitted_by = $3,
+            proposed_winner_id =
+              $1,
+
+            proposed_score =
+              $2,
+
+            result_submitted_by =
+              $3,
+
             result_submitted_at =
               CURRENT_TIMESTAMP,
+
             status =
               'awaiting_confirmation'
 
           WHERE
             id = $4
-            AND status = 'pending'
-            AND annulled_at IS NULL
+
+            AND status =
+              'pending'
+
+            AND annulled_at
+              IS NULL
 
           RETURNING *
           `,
@@ -605,16 +885,19 @@ export const submitMatchResult =
             winnerId,
 
             JSON.stringify(
-              normalizedScore,
+              parsed
+                .normalizedScore,
             ),
 
             req.userId,
+
             match.id,
           ],
         );
 
       if (
-        !updated.rowCount
+        !updated
+          .rowCount
       ) {
         await client.query(
           "ROLLBACK",
@@ -659,7 +942,8 @@ export const submitMatchResult =
               winnerId,
 
             score:
-              normalizedScore,
+              parsed
+                .normalizedScore,
           }),
         ],
       );
@@ -670,11 +954,12 @@ export const submitMatchResult =
             now -
             scheduledTime
           ) /
-            60000,
+          60000,
         );
 
       if (
-        minutesSinceStart >= 0 &&
+        minutesSinceStart >=
+          0 &&
         minutesSinceStart <
           TOO_FAST_RESULT_MINUTES
       ) {
@@ -697,7 +982,7 @@ export const submitMatchResult =
         "COMMIT",
       );
 
-      res.json({
+      return res.json({
         message:
           "Resultado enviado. Esperando confirmación del rival.",
 
@@ -710,7 +995,7 @@ export const submitMatchResult =
           "ROLLBACK",
         );
       } catch {
-        // conexión liberada abajo
+        // sin acción
       }
 
       next(error);
@@ -749,10 +1034,16 @@ export const rejectMatchResult =
 
           WHERE
             id = $1
+
             AND status =
               'awaiting_confirmation'
-            AND annulled_at IS NULL
-            AND result_submitted_by <> $2
+
+            AND annulled_at
+              IS NULL
+
+            AND result_submitted_by
+              <> $2
+
             AND (
               player1_id = $2
               OR
@@ -794,10 +1085,17 @@ export const rejectMatchResult =
           UPDATE matches
 
           SET
-            proposed_winner_id = NULL,
-            proposed_score = NULL,
-            result_submitted_by = NULL,
-            result_submitted_at = NULL,
+            proposed_winner_id =
+              NULL,
+
+            proposed_score =
+              NULL,
+
+            result_submitted_by =
+              NULL,
+
+            result_submitted_at =
+              NULL,
 
             result_rejection_count =
               COALESCE(
@@ -805,17 +1103,23 @@ export const rejectMatchResult =
                 0
               ) + 1,
 
-            status = 'pending'
+            status =
+              'pending'
 
           WHERE
             id = $1
+
             AND status =
               'awaiting_confirmation'
-            AND annulled_at IS NULL
+
+            AND annulled_at
+              IS NULL
 
           RETURNING *
           `,
-          [current.id],
+          [
+            current.id,
+          ],
         );
 
       if (
@@ -883,9 +1187,10 @@ export const rejectMatchResult =
       );
 
       if (
-        match
-          .result_rejection_count >=
-        2
+        Number(
+          match
+            .result_rejection_count,
+        ) >= 2
       ) {
         await createMatchAuditFlag(
           client,
@@ -906,7 +1211,7 @@ export const rejectMatchResult =
         "COMMIT",
       );
 
-      res.json({
+      return res.json({
         message:
           "Resultado rechazado. Puede cargarse nuevamente.",
 
@@ -920,7 +1225,7 @@ export const rejectMatchResult =
           "ROLLBACK",
         );
       } catch {
-        // conexión liberada abajo
+        // sin acción
       }
 
       next(error);
@@ -963,10 +1268,16 @@ export const confirmMatchResult =
 
           WHERE
             id = $1
+
             AND status =
               'awaiting_confirmation'
-            AND result_submitted_by <> $2
-            AND annulled_at IS NULL
+
+            AND result_submitted_by
+              <> $2
+
+            AND annulled_at
+              IS NULL
+
             AND (
               player1_id = $2
               OR
@@ -1007,7 +1318,8 @@ export const confirmMatchResult =
       */
 
       let proposedScore =
-        match.proposed_score;
+        match
+          .proposed_score;
 
       if (
         typeof proposedScore ===
@@ -1019,7 +1331,8 @@ export const confirmMatchResult =
               proposedScore,
             );
         } catch {
-          proposedScore = null;
+          proposedScore =
+            null;
         }
       }
 
@@ -1028,7 +1341,9 @@ export const confirmMatchResult =
           proposedScore,
         );
 
-      if (parsed.error) {
+      if (
+        parsed.error
+      ) {
         await client.query(
           "ROLLBACK",
         );
@@ -1045,21 +1360,28 @@ export const confirmMatchResult =
       }
 
       proposedScore =
-        parsed.normalizedScore;
+        parsed
+          .normalizedScore;
 
       const expectedWinnerId =
-        parsed.winnerSide === 1
+        parsed
+          .winnerSide ===
+        1
           ? Number(
-              match.player1_id,
+              match
+                .player1_id,
             )
           : Number(
-              match.player2_id,
+              match
+                .player2_id,
             );
 
       if (
         Number(
-          match.proposed_winner_id,
-        ) !== expectedWinnerId
+          match
+            .proposed_winner_id,
+        ) !==
+        expectedWinnerId
       ) {
         await client.query(
           "ROLLBACK",
@@ -1080,12 +1402,14 @@ export const confirmMatchResult =
         BLOQUEAR JUGADORES
       */
 
-      const players =
+      const playersResult =
         await client.query(
           `
           SELECT
             id,
             name,
+            first_name,
+            last_name,
             rating,
             matches_played,
             city,
@@ -1095,12 +1419,14 @@ export const confirmMatchResult =
 
           FROM users
 
-          WHERE id IN (
-            $1,
-            $2
-          )
+          WHERE
+            id IN (
+              $1,
+              $2
+            )
 
-          ORDER BY id ASC
+          ORDER BY
+            id ASC
 
           FOR UPDATE
           `,
@@ -1111,7 +1437,8 @@ export const confirmMatchResult =
         );
 
       if (
-        players.rowCount !== 2
+        playersResult
+          .rowCount !== 2
       ) {
         await client.query(
           "ROLLBACK",
@@ -1129,20 +1456,26 @@ export const confirmMatchResult =
       }
 
       const player1 =
-        players.rows.find(
+        playersResult.rows.find(
           (player) =>
-            Number(player.id) ===
             Number(
-              match.player1_id,
+              player.id,
+            ) ===
+            Number(
+              match
+                .player1_id,
             ),
         );
 
       const player2 =
-        players.rows.find(
+        playersResult.rows.find(
           (player) =>
-            Number(player.id) ===
             Number(
-              match.player2_id,
+              player.id,
+            ) ===
+            Number(
+              match
+                .player2_id,
             ),
         );
 
@@ -1166,11 +1499,15 @@ export const confirmMatchResult =
       }
 
       if (
-        player1.role !== "player" ||
-        player2.role !== "player" ||
-        player1.verification_status !==
+        player1.role !==
+          "player" ||
+        player2.role !==
+          "player" ||
+        player1
+          .verification_status !==
           "verified" ||
-        player2.verification_status !==
+        player2
+          .verification_status !==
           "verified" ||
         player1.city !==
           player2.city ||
@@ -1192,74 +1529,80 @@ export const confirmMatchResult =
           });
       }
 
-      const winnerId =
+      const player1Id =
         Number(
-          match.proposed_winner_id,
+          player1.id,
         );
+
+      const player2Id =
+        Number(
+          player2.id,
+        );
+
+      const winnerId =
+        expectedWinnerId;
 
       const loserId =
         winnerId ===
-        Number(
-          match.player1_id,
-        )
-          ? Number(
-              match.player2_id,
-            )
-          : Number(
-              match.player1_id,
-            );
+        player1Id
+          ? player2Id
+          : player1Id;
 
       const winnerPlayer =
         winnerId ===
-        Number(player1.id)
+        player1Id
           ? player1
           : player2;
 
       const loserPlayer =
         loserId ===
-        Number(player1.id)
+        player1Id
           ? player1
           : player2;
 
-      const winnerRating =
+      const player1RatingBefore =
         Number(
-          winnerPlayer.rating,
+          player1.rating,
         );
 
-      const loserRating =
+      const player2RatingBefore =
         Number(
-          loserPlayer.rating,
+          player2.rating,
         );
 
-      const winnerMatchesPlayed =
+      const player1MatchesBefore =
         Number(
-          winnerPlayer
+          player1
             .matches_played,
         );
 
-      const loserMatchesPlayed =
+      const player2MatchesBefore =
         Number(
-          loserPlayer
+          player2
             .matches_played,
         );
 
       if (
         !Number.isInteger(
-          winnerRating,
+          player1RatingBefore,
         ) ||
         !Number.isInteger(
-          loserRating,
+          player2RatingBefore,
         ) ||
-        winnerRating < 0 ||
-        loserRating < 0 ||
+        player1RatingBefore <
+          0 ||
+        player2RatingBefore <
+          0 ||
         !Number.isInteger(
-          winnerMatchesPlayed,
+          player1MatchesBefore,
         ) ||
         !Number.isInteger(
-          loserMatchesPlayed,
+          player2MatchesBefore,
         ) ||
-        winnerMatchesPlayed < 0 ||
-        loserMatchesPlayed < 0
+        player1MatchesBefore <
+          0 ||
+        player2MatchesBefore <
+          0
       ) {
         await client.query(
           "ROLLBACK",
@@ -1269,416 +1612,89 @@ export const confirmMatchResult =
           .status(409)
           .json({
             message:
-              "Los datos de ranking de los jugadores no son válidos.",
+              "Los datos deportivos de los jugadores no son válidos.",
 
             reason:
               "invalid_rating_data",
           });
       }
 
-      const winnerProvisional =
+      const player1Provisional =
         isProvisional(
-          winnerMatchesPlayed,
+          player1MatchesBefore,
         );
 
-      const loserProvisional =
+      const player2Provisional =
         isProvisional(
-          loserMatchesPlayed,
+          player2MatchesBefore,
         );
-
-      const winnerMatchesAfter =
-        winnerMatchesPlayed + 1;
-
-      const loserMatchesAfter =
-        loserMatchesPlayed + 1;
-
-      const winnerCompletedPlacement =
-        winnerProvisional &&
-        winnerMatchesAfter ===
-          PLACEMENT_MATCHES;
-
-      const loserCompletedPlacement =
-        loserProvisional &&
-        loserMatchesAfter ===
-          PLACEMENT_MATCHES;
 
       /*
-        SNAPSHOT DEL RANKING
+        ========================================================
+        RANKING OFICIAL PRE-PARTIDO
+        ========================================================
+
+        Debe tomarse antes de:
+
+        - guardar el partido;
+        - incrementar matches_played;
+        - graduar un provisional.
       */
 
       const rankingBefore =
-        await getOfficialRankingSnapshot(
+        await getOfficialRanking(
           client,
-          winnerPlayer.city,
-          winnerPlayer.gender,
+          {
+            city:
+              player1.city,
+
+            gender:
+              player1.gender,
+          },
         );
 
-      const winnerRankBefore =
+      const player1RankBefore =
         rankingBefore.find(
-          (player) =>
-            player.id === winnerId,
-        )?.position || null;
-
-      const loserRankBefore =
-        rankingBefore.find(
-          (player) =>
-            player.id === loserId,
-        )?.position || null;
-
-      const numberTwoBefore =
-        rankingBefore.find(
-          (player) =>
-            player.position === 2,
-        ) || null;
-
-      /*
-        ========================================================
-        GANADOR
-        ========================================================
-      */
-
-      let winnerAfterMatch =
-        winnerRating;
-
-      let winnerCalculationType =
-        "normal";
-
-      if (
-        winnerProvisional &&
-        loserProvisional
-      ) {
-        const winnerDelta =
-          normalEloChange({
-            ownRating:
-              winnerRating,
-
-            opponentRating:
-              loserRating,
-
-            k:
-              PLACEMENT_K,
-
-            won: true,
-          });
-
-        winnerAfterMatch =
-          Math.max(
-            0,
-            winnerRating +
-              winnerDelta,
-          );
-
-        winnerCalculationType =
-          "placement_vs_placement";
-      }
-
-      else if (
-        winnerProvisional &&
-        !loserProvisional
-      ) {
-        const ratingGap =
-          Math.max(
-            0,
-            loserRating -
-              winnerRating,
-          );
-
-        const placementBonus =
-          Math.min(
-            236,
-            Math.round(
-              ratingGap *
-                0.18,
-            ),
-          );
-
-        const winnerDelta =
-          Math.min(
-            300,
-            PLACEMENT_K +
-              placementBonus,
-          );
-
-        winnerAfterMatch =
-          winnerRating +
-          winnerDelta;
-
-        winnerCalculationType =
-          "placement_beats_ranked";
-      }
-
-      else {
-        const winnerDelta =
-          normalEloChange({
-            ownRating:
-              winnerRating,
-
-            opponentRating:
-              loserRating,
-
-            k:
-              NORMAL_K,
-
-            won: true,
-          });
-
-        winnerAfterMatch =
-          Math.max(
-            OFFICIAL_ELO_FLOOR,
-            winnerRating +
-              winnerDelta,
-          );
-
-        winnerCalculationType =
-          loserProvisional
-            ? "ranked_beats_placement"
-            : "normal_ranked";
-      }
-
-      /*
-        ========================================================
-        PERDEDOR
-        ========================================================
-      */
-
-      let loserAfterMatch =
-        loserRating;
-
-      let loserCalculationType =
-        "normal";
-
-      let specialProvisionalPenalty =
+          (row) =>
+            Number(
+              row.id,
+            ) ===
+            player1Id,
+        )?.official_position ??
         null;
 
-      if (
-        loserProvisional
-      ) {
-        /*
-          Si ambos siguen en placement,
-          ambos usan K64.
-
-          Si pierde contra un oficial,
-          la derrota usa K32.
-        */
-
-        const lossK =
-          winnerProvisional
-            ? PLACEMENT_K
-            : NORMAL_K;
-
-        const lossDelta =
-          normalEloChange({
-            ownRating:
-              loserRating,
-
-            opponentRating:
-              winnerRating,
-
-            k:
-              lossK,
-
-            won: false,
-          });
-
-        loserAfterMatch =
-          Math.max(
-            0,
-            loserRating +
-              lossDelta,
-          );
-
-        loserCalculationType =
-          winnerProvisional
-            ? "placement_loses_to_placement"
-            : "placement_loses_to_ranked";
-      }
-
-      else if (
-        winnerProvisional
-      ) {
-        specialProvisionalPenalty =
-          getRankedLossToProvisionalPenalty(
-            loserRating,
-          );
-
-        loserAfterMatch =
-          Math.max(
-            OFFICIAL_ELO_FLOOR,
-            loserRating -
-              specialProvisionalPenalty,
-          );
-
-        loserCalculationType =
-          "ranked_loses_to_placement";
-      }
-
-      else {
-        const lossDelta =
-          normalEloChange({
-            ownRating:
-              loserRating,
-
-            opponentRating:
-              winnerRating,
-
-            k:
-              NORMAL_K,
-
-            won: false,
-          });
-
-        /*
-          Un oficial normal nunca debería
-          arrancar debajo de 100.
-
-          La única excepción teórica es
-          el choque extremo con la regla
-          literal del #1.
-
-          Si ya viniera debajo de 100,
-          una derrota jamás puede regalarle
-          Elo para subirlo artificialmente.
-        */
-
-        if (
-          loserRating >=
-          OFFICIAL_ELO_FLOOR
-        ) {
-          loserAfterMatch =
-            Math.max(
-              OFFICIAL_ELO_FLOOR,
-              loserRating +
-                lossDelta,
-            );
-        } else {
-          loserAfterMatch =
-            Math.max(
-              0,
-              loserRating +
-                lossDelta,
-            );
-        }
-
-        loserCalculationType =
-          "normal_ranked";
-      }
-
-      /*
-        ========================================================
-        REGLA #1
-        ========================================================
-      */
-
-      let dethroneApplied =
-        false;
-
-      let dethroneCeiling =
+      const player2RankBefore =
+        rankingBefore.find(
+          (row) =>
+            Number(
+              row.id,
+            ) ===
+            player2Id,
+        )?.official_position ??
         null;
 
-      if (
-        loserRankBefore === 1 &&
-        numberTwoBefore &&
-        numberTwoBefore.id !==
-          loserId
-      ) {
-        dethroneCeiling =
-          numberTwoBefore.rating -
-          1;
-
-        if (
-          loserAfterMatch >
-          dethroneCeiling
-        ) {
-          loserAfterMatch =
-            dethroneCeiling;
-
-          dethroneApplied =
-            true;
-        }
-      }
-
       /*
-        DELTAS PUROS DEL PARTIDO
+        ========================================================
+        REFERENCIAS DE PLACEMENT PRE-PARTIDO
+        ========================================================
+
+        ESTE ORDEN ES IMPORTANTE.
+
+        Si ambos son provisionales, el valor de P1 y P2
+        se calcula antes de guardar el resultado actual.
       */
 
-      const realWinnerDelta =
-        winnerAfterMatch -
-        winnerRating;
-
-      const realLoserDelta =
-        loserAfterMatch -
-        loserRating;
-
-      if (
-        !Number.isInteger(
-          winnerAfterMatch,
-        ) ||
-        !Number.isInteger(
-          loserAfterMatch,
-        ) ||
-        winnerAfterMatch < 0 ||
-        loserAfterMatch < 0 ||
-        realWinnerDelta < 0 ||
-        realLoserDelta > 0
-      ) {
-        await client.query(
-          "ROLLBACK",
+      const placementContext =
+        await preparePlacementMatchContext(
+          client,
+          {
+            player1,
+            player2,
+          },
         );
 
-        return res
-          .status(409)
-          .json({
-            message:
-              "El cálculo Elo produjo un resultado inválido. No se aplicó ningún cambio.",
-
-            reason:
-              "elo_invariant_failed",
-          });
-      }
-
       /*
-        ========================================================
-        NORMALIZACIÓN AL COMPLETAR PLACEMENT
-
-        El movimiento del partido se conserva
-        íntegro.
-
-        Después del quinto partido, si un
-        jugador termina debajo de 100, recibe
-        un evento separado de graduación para
-        comenzar su etapa oficial en Elo 100.
-
-        Esto evita que una derrota posterior
-        pueda regalarle Elo por el piso.
-        ========================================================
-      */
-
-      const winnerPlacementFloorAdjustment =
-        winnerCompletedPlacement &&
-        winnerAfterMatch <
-          OFFICIAL_ELO_FLOOR
-          ? OFFICIAL_ELO_FLOOR -
-            winnerAfterMatch
-          : 0;
-
-      const loserPlacementFloorAdjustment =
-        loserCompletedPlacement &&
-        loserAfterMatch <
-          OFFICIAL_ELO_FLOOR
-          ? OFFICIAL_ELO_FLOOR -
-            loserAfterMatch
-          : 0;
-
-      const winnerFinalRating =
-        winnerAfterMatch +
-        winnerPlacementFloorAdjustment;
-
-      const loserFinalRating =
-        loserAfterMatch +
-        loserPlacementFloorAdjustment;
-
-      /*
-        EVITAR DOBLE ELO
+        EVITAR DOBLE PROCESAMIENTO
       */
 
       const existingElo =
@@ -1690,12 +1706,15 @@ export const confirmMatchResult =
 
           WHERE
             match_id = $1
+
             AND event_type =
               'match_result'
 
           LIMIT 1
           `,
-          [match.id],
+          [
+            match.id,
+          ],
         );
 
       if (
@@ -1717,72 +1736,279 @@ export const confirmMatchResult =
       }
 
       /*
-        ACTUALIZAR JUGADORES
+        ========================================================
+        REGISTRAR EVIDENCIA NIVELATORIA
+        ========================================================
+
+        Esto devuelve el placement final si alguno está
+        disputando su quinto partido.
       */
 
-      const updatedWinner =
-        await client.query(
-          `
-          UPDATE users
+      const placementResult =
+        await recordPlacementMatchResult(
+          client,
+          {
+            matchId:
+              match.id,
 
-          SET
-            rating = $1,
-            matches_played =
-              matches_played + 1,
-            updated_at =
-              CURRENT_TIMESTAMP
+            player1,
 
-          WHERE
-            id = $2
-            AND rating = $3
-            AND matches_played = $4
+            player2,
 
-          RETURNING
-            id,
-            rating,
-            matches_played
-          `,
-          [
-            winnerFinalRating,
             winnerId,
-            winnerRating,
-            winnerMatchesPlayed,
-          ],
+
+            preparedContext:
+              placementContext,
+
+            officialRankingBefore:
+              rankingBefore,
+          },
         );
 
-      const updatedLoser =
-        await client.query(
-          `
-          UPDATE users
+      const player1Placement =
+        placementResult
+          .player1;
 
-          SET
-            rating = $1,
-            matches_played =
-              matches_played + 1,
-            updated_at =
-              CURRENT_TIMESTAMP
+      const player2Placement =
+        placementResult
+          .player2;
 
-          WHERE
-            id = $2
-            AND rating = $3
-            AND matches_played = $4
+      /*
+        ========================================================
+        CALCULAR ELO FINAL DE P1
+        ========================================================
+      */
 
-          RETURNING
-            id,
-            rating,
-            matches_played
-          `,
-          [
-            loserFinalRating,
-            loserId,
-            loserRating,
-            loserMatchesPlayed,
-          ],
-        );
+      let player1RatingAfter =
+        player1RatingBefore;
+
+      let player1Calculation =
+        player1Provisional
+          ? "placement_in_progress"
+          : "normal_ranked";
+
+      let player1SpecialPenalty =
+        null;
 
       if (
-        updatedWinner.rowCount !== 1 ||
-        updatedLoser.rowCount !== 1
+        player1Provisional
+      ) {
+        /*
+          Durante partidos #1 a #4:
+          el Elo no se mueve.
+
+          En partido #5:
+          recibe Elo de la zona objetivo.
+        */
+
+        if (
+          player1Placement
+            ?.completed
+        ) {
+          player1RatingAfter =
+            Number(
+              player1Placement
+                .target_elo,
+            );
+
+          player1Calculation =
+            "placement_completed";
+        }
+      } else {
+        const officialResult =
+          calculateOfficialMatchRating({
+            player:
+              player1,
+
+            opponent:
+              player2,
+
+            won:
+              winnerId ===
+              player1Id,
+          });
+
+        player1RatingAfter =
+          officialResult
+            .rating_after;
+
+        player1Calculation =
+          officialResult
+            .calculation;
+
+        player1SpecialPenalty =
+          officialResult
+            .special_provisional_penalty;
+      }
+
+      /*
+        ========================================================
+        CALCULAR ELO FINAL DE P2
+        ========================================================
+      */
+
+      let player2RatingAfter =
+        player2RatingBefore;
+
+      let player2Calculation =
+        player2Provisional
+          ? "placement_in_progress"
+          : "normal_ranked";
+
+      let player2SpecialPenalty =
+        null;
+
+      if (
+        player2Provisional
+      ) {
+        if (
+          player2Placement
+            ?.completed
+        ) {
+          player2RatingAfter =
+            Number(
+              player2Placement
+                .target_elo,
+            );
+
+          player2Calculation =
+            "placement_completed";
+        }
+      } else {
+        const officialResult =
+          calculateOfficialMatchRating({
+            player:
+              player2,
+
+            opponent:
+              player1,
+
+            won:
+              winnerId ===
+              player2Id,
+          });
+
+        player2RatingAfter =
+          officialResult
+            .rating_after;
+
+        player2Calculation =
+          officialResult
+            .calculation;
+
+        player2SpecialPenalty =
+          officialResult
+            .special_provisional_penalty;
+      }
+
+      /*
+        ========================================================
+        REGLA #1
+        ========================================================
+
+        Solo aplica a un jugador que ya era oficial
+        antes del partido.
+
+        Si quien era #1 pierde:
+        debe quedar debajo del Elo pre-partido del #2.
+
+        No se aplica a un provisional que termina placement.
+      */
+
+      const loserRankBefore =
+        loserId ===
+        player1Id
+          ? player1RankBefore
+          : player2RankBefore;
+
+      const loserWasProvisional =
+        loserId ===
+        player1Id
+          ? player1Provisional
+          : player2Provisional;
+
+      const numberTwoBefore =
+        rankingBefore.find(
+          (row) =>
+            Number(
+              row
+                .official_position,
+            ) === 2,
+        ) ||
+        null;
+
+      let dethroneApplied =
+        false;
+
+      let dethroneCeiling =
+        null;
+
+      if (
+        !loserWasProvisional &&
+        Number(
+          loserRankBefore,
+        ) === 1 &&
+        numberTwoBefore &&
+        Number(
+          numberTwoBefore.id,
+        ) !==
+          loserId
+      ) {
+        dethroneCeiling =
+          Number(
+            numberTwoBefore
+              .rating,
+          ) -
+          1;
+
+        if (
+          loserId ===
+          player1Id &&
+          player1RatingAfter >
+            dethroneCeiling
+        ) {
+          player1RatingAfter =
+            Math.max(
+              0,
+              dethroneCeiling,
+            );
+
+          dethroneApplied =
+            true;
+        }
+
+        if (
+          loserId ===
+          player2Id &&
+          player2RatingAfter >
+            dethroneCeiling
+        ) {
+          player2RatingAfter =
+            Math.max(
+              0,
+              dethroneCeiling,
+            );
+
+          dethroneApplied =
+            true;
+        }
+      }
+
+      /*
+        INVARIANTES
+      */
+
+      if (
+        !Number.isInteger(
+          player1RatingAfter,
+        ) ||
+        !Number.isInteger(
+          player2RatingAfter,
+        ) ||
+        player1RatingAfter <
+          0 ||
+        player2RatingAfter <
+          0
       ) {
         await client.query(
           "ROLLBACK",
@@ -1792,7 +2018,104 @@ export const confirmMatchResult =
           .status(409)
           .json({
             message:
-              "Los datos de ranking cambiaron durante la confirmación. No se aplicó el resultado.",
+              "El cálculo deportivo produjo un Elo inválido. No se aplicó ningún cambio.",
+
+            reason:
+              "elo_invariant_failed",
+          });
+      }
+
+      /*
+        ========================================================
+        ACTUALIZAR USUARIOS
+        ========================================================
+      */
+
+      const updatedPlayer1 =
+        await client.query(
+          `
+          UPDATE users
+
+          SET
+            rating = $1,
+
+            matches_played =
+              matches_played + 1,
+
+            updated_at =
+              CURRENT_TIMESTAMP
+
+          WHERE
+            id = $2
+
+            AND rating = $3
+
+            AND matches_played =
+              $4
+
+          RETURNING
+            id,
+            rating,
+            matches_played
+          `,
+          [
+            player1RatingAfter,
+            player1Id,
+            player1RatingBefore,
+            player1MatchesBefore,
+          ],
+        );
+
+      const updatedPlayer2 =
+        await client.query(
+          `
+          UPDATE users
+
+          SET
+            rating = $1,
+
+            matches_played =
+              matches_played + 1,
+
+            updated_at =
+              CURRENT_TIMESTAMP
+
+          WHERE
+            id = $2
+
+            AND rating = $3
+
+            AND matches_played =
+              $4
+
+          RETURNING
+            id,
+            rating,
+            matches_played
+          `,
+          [
+            player2RatingAfter,
+            player2Id,
+            player2RatingBefore,
+            player2MatchesBefore,
+          ],
+        );
+
+      if (
+        updatedPlayer1
+          .rowCount !== 1 ||
+        updatedPlayer2
+          .rowCount !== 1
+      ) {
+        await client.query(
+          "ROLLBACK",
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Los datos deportivos cambiaron durante la confirmación. No se aplicó el resultado.",
 
             reason:
               "rating_state_changed",
@@ -1800,7 +2123,9 @@ export const confirmMatchResult =
       }
 
       /*
+        ========================================================
         COMPLETAR PARTIDO
+        ========================================================
       */
 
       const completedMatch =
@@ -1811,19 +2136,30 @@ export const confirmMatchResult =
           SET
             winner_id =
               proposed_winner_id,
-            score = $1,
-            status = 'completed',
+
+            score =
+              $1,
+
+            status =
+              'completed',
+
             completed_at =
               CURRENT_TIMESTAMP,
+
             result_confirmed_at =
               CURRENT_TIMESTAMP,
-            result_confirmed_by = $2
+
+            result_confirmed_by =
+              $2
 
           WHERE
             id = $3
+
             AND status =
               'awaiting_confirmation'
-            AND annulled_at IS NULL
+
+            AND annulled_at
+              IS NULL
 
           RETURNING *
           `,
@@ -1833,12 +2169,14 @@ export const confirmMatchResult =
             ),
 
             req.userId,
+
             match.id,
           ],
         );
 
       if (
-        !completedMatch.rowCount
+        !completedMatch
+          .rowCount
       ) {
         await client.query(
           "ROLLBACK",
@@ -1868,19 +2206,23 @@ export const confirmMatchResult =
             UPDATE challenges
 
             SET
-              status = 'completed',
+              status =
+                'completed',
+
               resolved_at =
                 CURRENT_TIMESTAMP
 
             WHERE
               id = $1
+
               AND status =
                 'accepted'
 
             RETURNING id
             `,
             [
-              match.challenge_id,
+              match
+                .challenge_id,
             ],
           );
 
@@ -1907,183 +2249,186 @@ export const confirmMatchResult =
         ========================================================
         EVENTOS MATCH_RESULT
         ========================================================
+
+        Seguimos generando exactamente un match_result
+        por jugador.
+
+        Provisional #1 a #4:
+          delta 0.
+
+        Provisional #5:
+          match_result delta 0
+          +
+          placement_completed con asignación final.
+
+        Esto mantiene separado:
+
+        - resultado deportivo;
+        - graduación del placement.
       */
 
-      await client.query(
-        `
-        INSERT INTO elo_events (
-          user_id,
-          match_id,
-          challenge_id,
-          event_type,
-          elo_before,
-          elo_change,
-          elo_after,
-          description
-        )
+      const player1MatchResultAfter =
+        player1Provisional
+          ? player1RatingBefore
+          : player1RatingAfter;
 
-        VALUES (
-          $1,
-          $2,
-          $3,
-          'match_result',
-          $4,
-          $5,
-          $6,
-          $7
-        )
-        `,
-        [
-          winnerId,
-          match.id,
-          match.challenge_id,
-          winnerRating,
-          realWinnerDelta,
-          winnerAfterMatch,
+      const player2MatchResultAfter =
+        player2Provisional
+          ? player2RatingBefore
+          : player2RatingAfter;
 
-          winnerProvisional
-            ? `Victoria de colocación en partido #${match.id}`
-            : `Victoria en partido #${match.id}`,
-        ],
+      await insertEloEvent(
+        client,
+        {
+          userId:
+            player1Id,
+
+          matchId:
+            match.id,
+
+          challengeId:
+            match.challenge_id,
+
+          eventType:
+            "match_result",
+
+          eloBefore:
+            player1RatingBefore,
+
+          eloAfter:
+            player1MatchResultAfter,
+
+          description:
+            player1Provisional
+              ? `Nivelatorio ${player1MatchesBefore + 1}/${PLACEMENT_MATCHES} en partido #${match.id}`
+              : winnerId ===
+                  player1Id
+                ? `Victoria en partido #${match.id}`
+                : dethroneApplied &&
+                    loserId ===
+                      player1Id
+                  ? `Derrota siendo #1 en partido #${match.id}. Se aplicó regla de destronamiento.`
+                  : `Derrota en partido #${match.id}`,
+        },
       );
 
-      await client.query(
-        `
-        INSERT INTO elo_events (
-          user_id,
-          match_id,
-          challenge_id,
-          event_type,
-          elo_before,
-          elo_change,
-          elo_after,
-          description
-        )
+      await insertEloEvent(
+        client,
+        {
+          userId:
+            player2Id,
 
-        VALUES (
-          $1,
-          $2,
-          $3,
-          'match_result',
-          $4,
-          $5,
-          $6,
-          $7
-        )
-        `,
-        [
-          loserId,
-          match.id,
-          match.challenge_id,
-          loserRating,
-          realLoserDelta,
-          loserAfterMatch,
+          matchId:
+            match.id,
 
-          dethroneApplied
-            ? `Derrota siendo #1 en partido #${match.id}. Se aplicó regla de destronamiento.`
-            : !loserProvisional &&
-                winnerProvisional
-              ? `Derrota contra provisional en partido #${match.id}. Penalización especial.`
-              : loserProvisional
-                ? `Derrota de colocación en partido #${match.id}`
-                : `Derrota en partido #${match.id}`,
-        ],
+          challengeId:
+            match.challenge_id,
+
+          eventType:
+            "match_result",
+
+          eloBefore:
+            player2RatingBefore,
+
+          eloAfter:
+            player2MatchResultAfter,
+
+          description:
+            player2Provisional
+              ? `Nivelatorio ${player2MatchesBefore + 1}/${PLACEMENT_MATCHES} en partido #${match.id}`
+              : winnerId ===
+                  player2Id
+                ? `Victoria en partido #${match.id}`
+                : dethroneApplied &&
+                    loserId ===
+                      player2Id
+                  ? `Derrota siendo #1 en partido #${match.id}. Se aplicó regla de destronamiento.`
+                  : `Derrota en partido #${match.id}`,
+        },
       );
 
       /*
         ========================================================
-        EVENTOS DE GRADUACIÓN
-
-        No son otro resultado de partido.
-        Son una normalización al pasar
-        definitivamente a ranking oficial.
+        GRADUACIÓN P1
         ========================================================
       */
 
       if (
-        winnerPlacementFloorAdjustment >
-        0
+        player1Provisional &&
+        player1Placement
+          ?.completed
       ) {
-        await client.query(
-          `
-          INSERT INTO elo_events (
-            user_id,
-            match_id,
-            challenge_id,
-            event_type,
-            elo_before,
-            elo_change,
-            elo_after,
-            description
-          )
+        await insertEloEvent(
+          client,
+          {
+            userId:
+              player1Id,
 
-          VALUES (
-            $1,
-            $2,
-            $3,
-            'placement_completed',
-            $4,
-            $5,
-            $6,
-            $7
-          )
-          `,
-          [
-            winnerId,
-            match.id,
-            match.challenge_id,
-            winnerAfterMatch,
-            winnerPlacementFloorAdjustment,
-            winnerFinalRating,
+            matchId:
+              match.id,
 
-            `Finalización de colocación tras partido #${match.id}. Se aplicó piso oficial de Elo ${OFFICIAL_ELO_FLOOR}.`,
-          ],
-        );
-      }
+            challengeId:
+              match
+                .challenge_id,
 
-      if (
-        loserPlacementFloorAdjustment >
-        0
-      ) {
-        await client.query(
-          `
-          INSERT INTO elo_events (
-            user_id,
-            match_id,
-            challenge_id,
-            event_type,
-            elo_before,
-            elo_change,
-            elo_after,
-            description
-          )
+            eventType:
+              "placement_completed",
 
-          VALUES (
-            $1,
-            $2,
-            $3,
-            'placement_completed',
-            $4,
-            $5,
-            $6,
-            $7
-          )
-          `,
-          [
-            loserId,
-            match.id,
-            match.challenge_id,
-            loserAfterMatch,
-            loserPlacementFloorAdjustment,
-            loserFinalRating,
+            eloBefore:
+              player1RatingBefore,
 
-            `Finalización de colocación tras partido #${match.id}. Se aplicó piso oficial de Elo ${OFFICIAL_ELO_FLOOR}.`,
-          ],
+            eloAfter:
+              player1RatingAfter,
+
+            description:
+              `Nivelatorios completados. Percentil ${player1Placement.placement_percentile}% · posición objetivo #${player1Placement.target_position} · Elo oficial ${player1RatingAfter}.`,
+          },
         );
       }
 
       /*
+        ========================================================
+        GRADUACIÓN P2
+        ========================================================
+      */
+
+      if (
+        player2Provisional &&
+        player2Placement
+          ?.completed
+      ) {
+        await insertEloEvent(
+          client,
+          {
+            userId:
+              player2Id,
+
+            matchId:
+              match.id,
+
+            challengeId:
+              match
+                .challenge_id,
+
+            eventType:
+              "placement_completed",
+
+            eloBefore:
+              player2RatingBefore,
+
+            eloAfter:
+              player2RatingAfter,
+
+            description:
+              `Nivelatorios completados. Percentil ${player2Placement.placement_percentile}% · posición objetivo #${player2Placement.target_position} · Elo oficial ${player2RatingAfter}.`,
+          },
+        );
+      }
+
+      /*
+        ========================================================
         AUDITORÍA
+        ========================================================
       */
 
       await client.query(
@@ -2119,93 +2464,164 @@ export const confirmMatchResult =
             score:
               proposedScore,
 
-            winner: {
-              elo_before:
-                winnerRating,
+            player1: {
+              id:
+                player1Id,
 
-              elo_change:
-                realWinnerDelta,
+              elo_before:
+                player1RatingBefore,
 
               elo_after:
-                winnerAfterMatch,
-
-              final_elo_after:
-                winnerFinalRating,
-
-              placement_floor_adjustment:
-                winnerPlacementFloorAdjustment,
-
-              matches_before:
-                winnerMatchesPlayed,
-
-              matches_after:
-                winnerMatchesAfter,
-
-              provisional_before:
-                winnerProvisional,
-
-              completed_placement:
-                winnerCompletedPlacement,
-
-              official_position_before:
-                winnerRankBefore,
-
-              calculation:
-                winnerCalculationType,
-            },
-
-            loser: {
-              elo_before:
-                loserRating,
+                player1RatingAfter,
 
               elo_change:
-                realLoserDelta,
-
-              elo_after:
-                loserAfterMatch,
-
-              final_elo_after:
-                loserFinalRating,
-
-              placement_floor_adjustment:
-                loserPlacementFloorAdjustment,
+                player1RatingAfter -
+                player1RatingBefore,
 
               matches_before:
-                loserMatchesPlayed,
+                player1MatchesBefore,
 
               matches_after:
-                loserMatchesAfter,
+                player1MatchesBefore +
+                1,
 
               provisional_before:
-                loserProvisional,
-
-              completed_placement:
-                loserCompletedPlacement,
-
-              official_position_before:
-                loserRankBefore,
+                player1Provisional,
 
               calculation:
-                loserCalculationType,
+                player1Calculation,
+
+              official_position_before:
+                player1RankBefore,
+
+              special_provisional_penalty:
+                player1SpecialPenalty,
+
+              placement:
+                player1Placement
+                  ?.applies
+                  ? {
+                      completed:
+                        Boolean(
+                          player1Placement
+                            .completed,
+                        ),
+
+                      match_number:
+                        player1Placement
+                          .placement_match_number,
+
+                      wins:
+                        player1Placement
+                          .wins,
+
+                      losses:
+                        player1Placement
+                          .losses,
+
+                      placement_percentile:
+                        player1Placement
+                          .placement_percentile,
+
+                      target_position:
+                        player1Placement
+                          .target_position,
+
+                      target_elo:
+                        player1Placement
+                          .target_elo,
+                    }
+                  : null,
             },
 
-            special_provisional_penalty:
-              specialProvisionalPenalty,
+            player2: {
+              id:
+                player2Id,
+
+              elo_before:
+                player2RatingBefore,
+
+              elo_after:
+                player2RatingAfter,
+
+              elo_change:
+                player2RatingAfter -
+                player2RatingBefore,
+
+              matches_before:
+                player2MatchesBefore,
+
+              matches_after:
+                player2MatchesBefore +
+                1,
+
+              provisional_before:
+                player2Provisional,
+
+              calculation:
+                player2Calculation,
+
+              official_position_before:
+                player2RankBefore,
+
+              special_provisional_penalty:
+                player2SpecialPenalty,
+
+              placement:
+                player2Placement
+                  ?.applies
+                  ? {
+                      completed:
+                        Boolean(
+                          player2Placement
+                            .completed,
+                        ),
+
+                      match_number:
+                        player2Placement
+                          .placement_match_number,
+
+                      wins:
+                        player2Placement
+                          .wins,
+
+                      losses:
+                        player2Placement
+                          .losses,
+
+                      placement_percentile:
+                        player2Placement
+                          .placement_percentile,
+
+                      target_position:
+                        player2Placement
+                          .target_position,
+
+                      target_elo:
+                        player2Placement
+                          .target_elo,
+                    }
+                  : null,
+            },
 
             number_one_dethrone: {
               applied:
                 dethroneApplied,
 
               loser_was_number_one:
-                loserRankBefore === 1,
+                Number(
+                  loserRankBefore,
+                ) === 1,
 
               number_two_id:
                 numberTwoBefore
-                  ?.id || null,
+                  ?.id ??
+                null,
 
               number_two_rating_before:
                 numberTwoBefore
-                  ?.rating || null,
+                  ?.rating ??
+                null,
 
               ceiling:
                 dethroneCeiling,
@@ -2225,10 +2641,10 @@ export const confirmMatchResult =
             match.id,
 
           player1Id:
-            match.player1_id,
+            player1Id,
 
           player2Id:
-            match.player2_id,
+            player2Id,
         },
       );
 
@@ -2247,69 +2663,138 @@ export const confirmMatchResult =
         "COMMIT",
       );
 
-      res.json({
+      const winnerRatingAfter =
+        winnerId ===
+        player1Id
+          ? player1RatingAfter
+          : player2RatingAfter;
+
+      const loserRatingAfter =
+        loserId ===
+        player1Id
+          ? player1RatingAfter
+          : player2RatingAfter;
+
+      const winnerRatingBefore =
+        winnerId ===
+        player1Id
+          ? player1RatingBefore
+          : player2RatingBefore;
+
+      const loserRatingBefore =
+        loserId ===
+        player1Id
+          ? player1RatingBefore
+          : player2RatingBefore;
+
+      return res.json({
         message:
           "Resultado confirmado y ranking actualizado",
 
         elo_change: {
           winner:
-            realWinnerDelta,
+            winnerRatingAfter -
+            winnerRatingBefore,
 
           loser:
-            realLoserDelta,
+            loserRatingAfter -
+            loserRatingBefore,
         },
 
         rating_after: {
           winner:
-            winnerFinalRating,
+            winnerRatingAfter,
 
           loser:
-            loserFinalRating,
+            loserRatingAfter,
         },
 
         placement: {
-          winner: {
-            was_provisional:
-              winnerProvisional,
+          player1:
+            player1Placement
+              ?.applies
+              ? {
+                  match:
+                    player1Placement
+                      .placement_match_number,
 
-            matches:
-              winnerMatchesAfter,
+                  completed:
+                    Boolean(
+                      player1Placement
+                        .completed,
+                    ),
 
-            completed:
-              winnerCompletedPlacement,
+                  wins:
+                    player1Placement
+                      .wins,
 
-            floor_adjustment:
-              winnerPlacementFloorAdjustment,
-          },
+                  losses:
+                    player1Placement
+                      .losses,
 
-          loser: {
-            was_provisional:
-              loserProvisional,
+                  percentile:
+                    player1Placement
+                      .placement_percentile,
 
-            matches:
-              loserMatchesAfter,
+                  target_position:
+                    player1Placement
+                      .target_position,
 
-            completed:
-              loserCompletedPlacement,
+                  target_elo:
+                    player1Placement
+                      .target_elo,
+                }
+              : null,
 
-            floor_adjustment:
-              loserPlacementFloorAdjustment,
-          },
+          player2:
+            player2Placement
+              ?.applies
+              ? {
+                  match:
+                    player2Placement
+                      .placement_match_number,
+
+                  completed:
+                    Boolean(
+                      player2Placement
+                        .completed,
+                    ),
+
+                  wins:
+                    player2Placement
+                      .wins,
+
+                  losses:
+                    player2Placement
+                      .losses,
+
+                  percentile:
+                    player2Placement
+                      .placement_percentile,
+
+                  target_position:
+                    player2Placement
+                      .target_position,
+
+                  target_elo:
+                    player2Placement
+                      .target_elo,
+                }
+              : null,
         },
 
         special_rules: {
-          ranked_loss_to_provisional:
-            specialProvisionalPenalty !==
-            null,
-
-          provisional_penalty:
-            specialProvisionalPenalty,
-
           number_one_dethroned:
             dethroneApplied,
 
           dethrone_ceiling:
             dethroneCeiling,
+
+          player1_provisional_penalty:
+            player1SpecialPenalty,
+
+          player2_provisional_penalty:
+            player2SpecialPenalty,
         },
 
         rotation_unlocked:
@@ -2321,7 +2806,7 @@ export const confirmMatchResult =
           "ROLLBACK",
         );
       } catch {
-        // conexión liberada abajo
+        // sin acción
       }
 
       next(error);

@@ -6,7 +6,9 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "seed": "node database/seed-test-users.js",
-    "simulate:elo": "node scripts/simulate-elo.js"
+    "simulate:elo": "node scripts/simulate-elo.js",
+    "test": "node --test",
+    "test:placement": "node --test tests/placementLevel.test.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
