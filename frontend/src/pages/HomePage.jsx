@@ -15,10 +15,86 @@ import {
 const PLACEMENT_MATCHES = 5;
 
 
-const leagueName = {
-  male: "Masculina",
-  female: "Femenina",
-};
+const RANKINGS = [
+  {
+    key:
+      "singles-male",
+
+    format:
+      "singles",
+
+    gender:
+      "male",
+
+    label:
+      "Singles M",
+
+    fullLabel:
+      "Singles Masculino",
+  },
+  {
+    key:
+      "singles-female",
+
+    format:
+      "singles",
+
+    gender:
+      "female",
+
+    label:
+      "Singles F",
+
+    fullLabel:
+      "Singles Femenino",
+  },
+  {
+    key:
+      "doubles-male",
+
+    format:
+      "doubles",
+
+    gender:
+      "male",
+
+    label:
+      "Dobles M",
+
+    fullLabel:
+      "Dobles Masculino",
+  },
+  {
+    key:
+      "doubles-female",
+
+    format:
+      "doubles",
+
+    gender:
+      "female",
+
+    label:
+      "Dobles F",
+
+    fullLabel:
+      "Dobles Femenino",
+  },
+];
+
+
+const getPlayerName = (
+  player,
+) =>
+  player?.display_name ||
+  player?.name ||
+  [
+    player?.last_name,
+    player?.first_name,
+  ]
+    .filter(Boolean)
+    .join(" ") ||
+  `Jugador #${player?.id ?? ""}`;
 
 
 function WhatsAppIcon() {
@@ -48,63 +124,173 @@ function WhatsAppIcon() {
 
 export default function HomePage() {
   const [
-    league,
-    setLeague,
-  ] = useState("male");
+    rankingKey,
+    setRankingKey,
+  ] =
+    useState(
+      "singles-male",
+    );
 
   const [
     players,
     setPlayers,
-  ] = useState([]);
+  ] =
+    useState([]);
 
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] =
+    useState(true);
+
+  const [
+    rankingError,
+    setRankingError,
+  ] =
+    useState("");
 
   const [
     placementMatches,
     setPlacementMatches,
-  ] = useState(
-    PLACEMENT_MATCHES,
+  ] =
+    useState(
+      PLACEMENT_MATCHES,
+    );
+
+
+  const selectedRanking =
+    RANKINGS.find(
+      (
+        ranking,
+      ) =>
+        ranking.key ===
+        rankingKey,
+    ) ||
+    RANKINGS[0];
+
+
+  useEffect(
+    () => {
+      let active =
+        true;
+
+      const load =
+        async () => {
+          setLoading(
+            true,
+          );
+
+          setRankingError(
+            "",
+          );
+
+          try {
+            const {
+              data,
+            } =
+              await api.get(
+                "/ranking",
+                {
+                  params: {
+                    format:
+                      selectedRanking.format,
+
+                    gender:
+                      selectedRanking.gender,
+                  },
+                },
+              );
+
+            if (!active) {
+              return;
+            }
+
+            setPlacementMatches(
+              Number(
+                data.placement_matches,
+              ) ||
+                PLACEMENT_MATCHES,
+            );
+
+            /*
+              El backend puede devolver:
+              - players
+              - official_players + provisional_players
+
+              Para el Top 10 usamos "players" cuando
+              existe porque conserva el orden oficial
+              definido por el backend.
+
+              Si no viene, armamos la lista con las
+              dos colecciones disponibles.
+            */
+
+            const rankingPlayers =
+              Array.isArray(
+                data.players,
+              )
+                ? data.players
+                : [
+                    ...(
+                      data.provisional_players ||
+                      []
+                    ),
+                    ...(
+                      data.official_players ||
+                      []
+                    ),
+                  ];
+
+            setPlayers(
+              rankingPlayers.slice(
+                0,
+                10,
+              ),
+            );
+          } catch (error) {
+            if (!active) {
+              return;
+            }
+
+            setPlayers(
+              [],
+            );
+
+            setRankingError(
+              error.response
+                ?.data
+                ?.message ||
+                "No se pudo cargar este ranking.",
+            );
+          } finally {
+            if (active) {
+              setLoading(
+                false,
+              );
+            }
+          }
+        };
+
+      load();
+
+      return () => {
+        active =
+          false;
+      };
+    },
+    [
+      selectedRanking.format,
+      selectedRanking.gender,
+    ],
   );
 
 
-  useEffect(() => {
-    const load =
-      async () => {
-        setLoading(true);
-
-        try {
-          const {
-            data,
-          } =
-            await api.get(
-              `/ranking?gender=${league}`,
-            );
-
-          setPlacementMatches(
-            Number(
-              data.placement_matches,
-            ) ||
-              PLACEMENT_MATCHES,
-          );
-
-          setPlayers(
-            (
-              data.players || []
-            ).slice(
-              0,
-              10,
-            ),
-          );
-        } finally {
-          setLoading(false);
-        }
-      };
-
-    load();
-  }, [league]);
+  const rankingUrl =
+    `/ranking?format=${encodeURIComponent(
+      selectedRanking.format,
+    )}&gender=${encodeURIComponent(
+      selectedRanking.gender,
+    )}`;
 
 
   return (
@@ -131,6 +317,7 @@ export default function HomePage() {
               </span>
             </div>
 
+
             <h1 className="home-title">
               <span className="home-title-main">
                 La Red
@@ -141,6 +328,7 @@ export default function HomePage() {
               </span>
             </h1>
 
+
             <p>
               Una liga abierta para
               jugadores de San Pedro.
@@ -149,6 +337,7 @@ export default function HomePage() {
               hacerte un lugar en
               La Red.
             </p>
+
 
             <div className="hero-actions-dark">
 
@@ -168,6 +357,7 @@ export default function HomePage() {
 
             </div>
 
+
             <div className="feature-line">
 
               <div>
@@ -186,6 +376,7 @@ export default function HomePage() {
                 </span>
               </div>
 
+
               <div>
                 <b className="feature-icon whatsapp">
                   <WhatsAppIcon />
@@ -200,6 +391,7 @@ export default function HomePage() {
                   por WhatsApp
                 </span>
               </div>
+
 
               <div>
                 <b className="feature-icon">
@@ -216,6 +408,7 @@ export default function HomePage() {
                   entre rivales
                 </span>
               </div>
+
 
               <div>
                 <b className="feature-icon">
@@ -250,46 +443,72 @@ export default function HomePage() {
                 </h2>
               </div>
 
+
               <Link
-                to={`/ranking?gender=${league}`}
+                to={
+                  rankingUrl
+                }
               >
                 Ver ranking completo →
               </Link>
 
             </div>
 
-            <div className="league-switch">
 
-              {[
-                "male",
-                "female",
-              ].map(
-                (value) => (
+            <div
+              className="league-switch"
+              style={{
+                gridTemplateColumns:
+                  "repeat(4, minmax(0, 1fr))",
+              }}
+            >
+
+              {RANKINGS.map(
+                (
+                  ranking,
+                ) => (
                   <button
-                    key={value}
+                    type="button"
+                    key={
+                      ranking.key
+                    }
                     className={
-                      league ===
-                      value
+                      rankingKey ===
+                      ranking.key
                         ? "active"
                         : ""
                     }
+                    title={
+                      ranking.fullLabel
+                    }
+                    aria-label={
+                      ranking.fullLabel
+                    }
                     onClick={() =>
-                      setLeague(
-                        value,
+                      setRankingKey(
+                        ranking.key,
                       )
                     }
+                    style={{
+                      padding:
+                        "0 6px",
+
+                      fontSize:
+                        "11px",
+
+                      whiteSpace:
+                        "nowrap",
+                    }}
                   >
-                    Liga{" "}
                     {
-                      leagueName[
-                        value
-                      ]
+                      ranking.label
                     }
                   </button>
                 ),
               )}
 
             </div>
+
 
             <div className="top-list">
 
@@ -299,68 +518,101 @@ export default function HomePage() {
                   Cargando ranking...
                 </p>
 
+              ) : rankingError ? (
+
+                <p className="dim">
+                  {
+                    rankingError
+                  }
+                </p>
+
               ) : players.length ===
                 0 ? (
 
                 <p className="dim">
                   Todavía no hay
-                  jugadores en esta
-                  liga.
+                  jugadores en{" "}
+                  {
+                    selectedRanking
+                      .fullLabel
+                  }.
                 </p>
 
               ) : (
 
                 players.map(
-                  (player) => (
-                    <div
-                      className="top-row"
-                      key={
-                        player.id
-                      }
-                    >
-                      <span>
-                        {player.provisional
-                          ? "PROV."
-                          : String(
-                              player.rank_position,
-                            ).padStart(
-                              2,
-                              "0",
-                            )}
-                      </span>
+                  (
+                    player,
+                    index,
+                  ) => {
+                    const provisional =
+                      Boolean(
+                        player.provisional,
+                      );
 
-                      <strong>
-                        {
-                          player.name
+                    const position =
+                      player.rank_position ??
+                      player.official_position ??
+                      index + 1;
+
+                    return (
+                      <div
+                        className="top-row"
+                        key={
+                          `${selectedRanking.key}-${player.id}`
                         }
+                      >
+                        <span>
+                          {provisional
+                            ? "PROV."
+                            : String(
+                                position,
+                              ).padStart(
+                                2,
+                                "0",
+                              )}
+                        </span>
 
-                        {player.provisional && (
+                        <strong>
+                          {getPlayerName(
+                            player,
+                          )}
+
+                          {provisional && (
+                            <small>
+                              {" "}
+                              ·{" "}
+                              {
+                                Number(
+                                  player.matches_played,
+                                ) ||
+                                0
+                              }
+                              /
+                              {
+                                placementMatches
+                              }
+                            </small>
+                          )}
+                        </strong>
+
+                        <b>
+                          {
+                            Number(
+                              player.rating,
+                            ) ||
+                            0
+                          }
+
+                          {" "}
+
                           <small>
-                            {" "}
-                            · {
-                              player.matches_played
-                            }/
-                            {
-                              placementMatches
-                            }
+                            ELO
                           </small>
-                        )}
-                      </strong>
-
-                      <b>
-                        {
-                          player.rating
-                        }
-
-                        {" "}
-
-                        <small>
-                          ELO
-                        </small>
-                      </b>
-
-                    </div>
-                  ),
+                        </b>
+                      </div>
+                    );
+                  },
                 )
 
               )}
