@@ -10,8 +10,13 @@ import {
 } from "../src/services/eloEventPersistence.service.js";
 
 
+const COMPETITION_ID =
+  3;
+
+
 const event = ({
   userId = 1,
+  competitionId = COMPETITION_ID,
   matchId = 100,
   challengeId = null,
   eventType = "match_result",
@@ -22,6 +27,9 @@ const event = ({
 } = {}) => ({
   user_id:
     userId,
+
+  competition_id:
+    competitionId,
 
   match_id:
     matchId,
@@ -70,26 +78,29 @@ const clientMock = () => {
             user_id:
               params[0],
 
-            match_id:
+            competition_id:
               params[1],
 
-            challenge_id:
+            match_id:
               params[2],
 
-            event_type:
+            challenge_id:
               params[3],
 
-            elo_before:
+            event_type:
               params[4],
 
-            elo_change:
+            elo_before:
               params[5],
 
-            elo_after:
+            elo_change:
               params[6],
 
-            description:
+            elo_after:
               params[7],
+
+            description:
+              params[8],
           },
         ],
       };
@@ -112,6 +123,9 @@ test(
         user_id:
           1,
 
+        competition_id:
+          COMPETITION_ID,
+
         match_id:
           100,
 
@@ -132,6 +146,35 @@ test(
 
         description:
           "Test",
+      },
+    );
+  },
+);
+
+
+test(
+  "rechaza evento sin competition_id",
+  () => {
+    assert.throws(
+      () =>
+        normalizeEloEvent(
+          event({
+            competitionId:
+              null,
+          }),
+        ),
+      (error) => {
+        assert.ok(
+          error instanceof
+            EloEventPersistenceError,
+        );
+
+        assert.equal(
+          error.reason,
+          "invalid_positive_integer",
+        );
+
+        return true;
       },
     );
   },
@@ -174,7 +217,7 @@ test(
 
 
 test(
-  "insertEloEvent usa las ocho columnas esperadas",
+  "insertEloEvent usa nueve columnas incluyendo competition_id",
   async () => {
     const client =
       clientMock();
@@ -198,10 +241,16 @@ test(
       /INSERT INTO elo_events/i,
     );
 
+    assert.match(
+      client.calls[0].sql,
+      /competition_id/i,
+    );
+
     assert.deepEqual(
       client.calls[0].params,
       [
         1,
+        COMPETITION_ID,
         100,
         77,
         "match_result",
@@ -216,6 +265,11 @@ test(
       inserted.event_type,
       "match_result",
     );
+
+    assert.equal(
+      inserted.competition_id,
+      COMPETITION_ID,
+    );
   },
 );
 
@@ -225,6 +279,9 @@ test(
   () => {
     const plan =
       validateMatchEloEventPlan({
+        competition_id:
+          COMPETITION_ID,
+
         match_id:
           100,
 
@@ -257,6 +314,11 @@ test(
       });
 
     assert.equal(
+      plan.competition_id,
+      COMPETITION_ID,
+    );
+
+    assert.equal(
       plan.match_result_count,
       2,
     );
@@ -270,11 +332,54 @@ test(
 
 
 test(
+  "rechaza plan sin competition_id",
+  () => {
+    assert.throws(
+      () =>
+        validateMatchEloEventPlan({
+          match_id:
+            100,
+
+          events: [
+            event({
+              userId:
+                1,
+            }),
+
+            event({
+              userId:
+                2,
+
+              change:
+                -16,
+
+              after:
+                1484,
+            }),
+          ],
+        }),
+      (error) => {
+        assert.equal(
+          error.reason,
+          "invalid_positive_integer",
+        );
+
+        return true;
+      },
+    );
+  },
+);
+
+
+test(
   "rechaza plan con un solo match_result",
   () => {
     assert.throws(
       () =>
         validateMatchEloEventPlan({
+          competition_id:
+            COMPETITION_ID,
+
           match_id:
             100,
 
@@ -301,6 +406,9 @@ test(
     assert.throws(
       () =>
         validateMatchEloEventPlan({
+          competition_id:
+            COMPETITION_ID,
+
           match_id:
             100,
 
@@ -342,11 +450,60 @@ test(
 
 
 test(
+  "rechaza evento perteneciente a otra competición",
+  () => {
+    assert.throws(
+      () =>
+        validateMatchEloEventPlan({
+          competition_id:
+            COMPETITION_ID,
+
+          match_id:
+            100,
+
+          events: [
+            event({
+              userId:
+                1,
+            }),
+
+            event({
+              userId:
+                2,
+
+              competitionId:
+                99,
+
+              change:
+                -16,
+
+              after:
+                1484,
+            }),
+          ],
+        }),
+      (error) => {
+        assert.equal(
+          error.reason,
+          "event_competition_id_mismatch",
+        );
+
+        return true;
+      },
+    );
+  },
+);
+
+
+test(
   "rechaza evento perteneciente a otro partido",
   () => {
     assert.throws(
       () =>
         validateMatchEloEventPlan({
+          competition_id:
+            COMPETITION_ID,
+
           match_id:
             100,
 
@@ -394,10 +551,65 @@ test(
 
 
 test(
+  "rechaza challenge_id distinto dentro del mismo plan",
+  () => {
+    assert.throws(
+      () =>
+        validateMatchEloEventPlan({
+          competition_id:
+            COMPETITION_ID,
+
+          match_id:
+            100,
+
+          challenge_id:
+            55,
+
+          events: [
+            event({
+              userId:
+                1,
+
+              challengeId:
+                55,
+            }),
+
+            event({
+              userId:
+                2,
+
+              challengeId:
+                56,
+
+              change:
+                -16,
+
+              after:
+                1484,
+            }),
+          ],
+        }),
+      (error) => {
+        assert.equal(
+          error.reason,
+          "event_challenge_id_mismatch",
+        );
+
+        return true;
+      },
+    );
+  },
+);
+
+
+test(
   "acepta quinto placement con dos match_result y placement_completed",
   () => {
     const plan =
       validateMatchEloEventPlan({
+        competition_id:
+          COMPETITION_ID,
+
         match_id:
           200,
 
@@ -487,6 +699,14 @@ test(
       plan.events.length,
       3,
     );
+
+    assert.ok(
+      plan.events.every(
+        (item) =>
+          item.competition_id ===
+          COMPETITION_ID,
+      ),
+    );
   },
 );
 
@@ -497,6 +717,9 @@ test(
     assert.throws(
       () =>
         validateMatchEloEventPlan({
+          competition_id:
+            COMPETITION_ID,
+
           match_id:
             200,
 
@@ -573,6 +796,9 @@ test(
       await persistMatchEloEventPlan(
         client,
         {
+          competition_id:
+            COMPETITION_ID,
+
           match_id:
             300,
 
@@ -630,6 +856,11 @@ test(
       );
 
     assert.equal(
+      result.competition_id,
+      COMPETITION_ID,
+    );
+
+    assert.equal(
       result.inserted_count,
       2,
     );
@@ -655,6 +886,18 @@ test(
         .params[0],
       20,
     );
+
+    assert.equal(
+      client.calls[0]
+        .params[1],
+      COMPETITION_ID,
+    );
+
+    assert.equal(
+      client.calls[1]
+        .params[1],
+      COMPETITION_ID,
+    );
   },
 );
 
@@ -669,6 +912,9 @@ test(
       await persistMatchEloEventPlan(
         client,
         {
+          competition_id:
+            COMPETITION_ID,
+
           match_id:
             400,
 
@@ -750,13 +996,21 @@ test(
     assert.deepEqual(
       client.calls.map(
         (call) =>
-          call.params[3],
+          call.params[4],
       ),
       [
         "match_result",
         "match_result",
         "placement_completed",
       ],
+    );
+
+    assert.ok(
+      client.calls.every(
+        (call) =>
+          call.params[1] ===
+          COMPETITION_ID,
+      ),
     );
   },
 );

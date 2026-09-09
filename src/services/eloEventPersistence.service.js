@@ -4,46 +4,19 @@
   PERSISTENCIA DE EVENTOS ELO
   ============================================================
 
-  Este servicio tiene una única responsabilidad:
-
-  persistir en PostgreSQL eventos Elo
-  que YA fueron calculados por otros servicios.
+  Persiste eventos Elo ya calculados.
 
   NO calcula Elo.
   NO decide placement.
   NO decide ganador.
-  NO modifica usuarios.
+  NO modifica estadísticas.
   NO abre ni cierra transacciones.
 
-  El client recibido debe pertenecer a la transacción
-  activa del flujo que está confirmando el partido.
-
-  Flujo esperado:
-
-    matchRating.service.js
-        ↓
-    matchEloEvents.service.js
-        ↓
-    eloEventPersistence.service.js
-        ↓
-    elo_events
-
-  De esta manera:
-
-  - cálculo;
-  - planificación;
-  - persistencia;
-
-  quedan completamente separados.
+  Desde migration_017 todo evento Elo pertenece
+  obligatoriamente a una competición.
   ============================================================
 */
 
-
-/*
-  ============================================================
-  ERROR
-  ============================================================
-*/
 
 export class EloEventPersistenceError extends Error {
   constructor(
@@ -64,12 +37,6 @@ export class EloEventPersistenceError extends Error {
   }
 }
 
-
-/*
-  ============================================================
-  VALIDACIONES BÁSICAS
-  ============================================================
-*/
 
 const requireClient = (
   client,
@@ -170,9 +137,7 @@ const nonEmptyString = (
         "",
     ).trim();
 
-  if (
-    !normalized
-  ) {
+  if (!normalized) {
     throw new EloEventPersistenceError(
       `${field} no puede estar vacío.`,
       "invalid_string",
@@ -186,12 +151,6 @@ const nonEmptyString = (
   return normalized;
 };
 
-
-/*
-  ============================================================
-  NORMALIZAR EVENTO
-  ============================================================
-*/
 
 export const normalizeEloEvent = (
   event,
@@ -214,6 +173,12 @@ export const normalizeEloEvent = (
     positiveInteger(
       event.user_id,
       "event.user_id",
+    );
+
+  const competitionId =
+    positiveInteger(
+      event.competition_id,
+      "event.competition_id",
     );
 
   const matchId =
@@ -262,18 +227,6 @@ export const normalizeEloEvent = (
           event.description,
         );
 
-  /*
-    Invariante contable.
-
-    El evento debe cerrar exactamente:
-
-      before + change = after
-
-    Trabajamos con Elo entero en el sistema actual,
-    pero usamos tolerancia mínima para no acoplar
-    este servicio a esa decisión.
-  */
-
   const expectedAfter =
     eloBefore +
     eloChange;
@@ -291,6 +244,9 @@ export const normalizeEloEvent = (
       {
         user_id:
           userId,
+
+        competition_id:
+          competitionId,
 
         elo_before:
           eloBefore,
@@ -310,6 +266,9 @@ export const normalizeEloEvent = (
   return {
     user_id:
       userId,
+
+    competition_id:
+      competitionId,
 
     match_id:
       matchId,
@@ -334,12 +293,6 @@ export const normalizeEloEvent = (
 };
 
 
-/*
-  ============================================================
-  INSERTAR UN EVENTO
-  ============================================================
-*/
-
 export const insertEloEvent = async (
   client,
   event,
@@ -356,30 +309,35 @@ export const insertEloEvent = async (
   const result =
     await client.query(
       `
-        INSERT INTO elo_events (
-          user_id,
-          match_id,
-          challenge_id,
-          event_type,
-          elo_before,
-          elo_change,
-          elo_after,
-          description
-        )
-        VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          $7,
-          $8
-        )
-        RETURNING *
+      INSERT INTO elo_events (
+        user_id,
+        competition_id,
+        match_id,
+        challenge_id,
+        event_type,
+        elo_before,
+        elo_change,
+        elo_after,
+        description
+      )
+
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9
+      )
+
+      RETURNING *
       `,
       [
         normalized.user_id,
+        normalized.competition_id,
         normalized.match_id,
         normalized.challenge_id,
         normalized.event_type,
@@ -405,6 +363,9 @@ export const insertEloEvent = async (
         user_id:
           normalized.user_id,
 
+        competition_id:
+          normalized.competition_id,
+
         match_id:
           normalized.match_id,
 
@@ -417,31 +378,6 @@ export const insertEloEvent = async (
   return result.rows[0];
 };
 
-
-/*
-  ============================================================
-  VALIDAR PLAN DE PARTIDO
-  ============================================================
-
-  Esta validación protege específicamente el contrato
-  producido por matchEloEvents.service.js.
-
-  Todo partido completado debe tener exactamente:
-
-    2 x match_result
-
-  Puede además tener:
-
-    0, 1 o 2 x placement_completed
-
-  No limitamos aquí otros event_type porque este servicio
-  también puede reutilizarse para:
-    - challenge_rejection;
-    - inactivity_decay;
-    - cancellation;
-    - eventos administrativos.
-  ============================================================
-*/
 
 export const validateMatchEloEventPlan = (
   plan,
@@ -470,6 +406,24 @@ export const validateMatchEloEventPlan = (
       "event_plan_events_missing",
     );
   }
+
+  const competitionId =
+    positiveInteger(
+      plan.competition_id,
+      "plan.competition_id",
+    );
+
+  const matchId =
+    positiveInteger(
+      plan.match_id,
+      "plan.match_id",
+    );
+
+  const challengeId =
+    nullablePositiveInteger(
+      plan.challenge_id,
+      "plan.challenge_id",
+    );
 
   const events =
     plan.events.map(
@@ -521,15 +475,33 @@ export const validateMatchEloEventPlan = (
     );
   }
 
-  const matchId =
-    positiveInteger(
-      plan.match_id,
-      "plan.match_id",
-    );
-
   for (
-    const event of events
+    const event of
+    events
   ) {
+    if (
+      event.competition_id !==
+      competitionId
+    ) {
+      throw new EloEventPersistenceError(
+        "Todos los eventos del plan deben pertenecer a la misma competición.",
+        "event_competition_id_mismatch",
+        {
+          plan_competition_id:
+            competitionId,
+
+          event_competition_id:
+            event.competition_id,
+
+          user_id:
+            event.user_id,
+
+          event_type:
+            event.event_type,
+        },
+      );
+    }
+
     if (
       event.match_id !==
       matchId
@@ -543,6 +515,29 @@ export const validateMatchEloEventPlan = (
 
           event_match_id:
             event.match_id,
+
+          user_id:
+            event.user_id,
+
+          event_type:
+            event.event_type,
+        },
+      );
+    }
+
+    if (
+      event.challenge_id !==
+      challengeId
+    ) {
+      throw new EloEventPersistenceError(
+        "Todos los eventos del plan deben conservar el challenge_id del partido.",
+        "event_challenge_id_mismatch",
+        {
+          plan_challenge_id:
+            challengeId,
+
+          event_challenge_id:
+            event.challenge_id,
 
           user_id:
             event.user_id,
@@ -578,7 +573,7 @@ export const validateMatchEloEventPlan = (
 
   for (
     const placementEvent of
-      placementEvents
+    placementEvents
   ) {
     if (
       !matchResultUsers.includes(
@@ -600,14 +595,14 @@ export const validateMatchEloEventPlan = (
   }
 
   return {
+    competition_id:
+      competitionId,
+
     match_id:
       matchId,
 
     challenge_id:
-      nullablePositiveInteger(
-        plan.challenge_id,
-        "plan.challenge_id",
-      ),
+      challengeId,
 
     events,
 
@@ -619,12 +614,6 @@ export const validateMatchEloEventPlan = (
   };
 };
 
-
-/*
-  ============================================================
-  PERSISTIR PLAN COMPLETO
-  ============================================================
-*/
 
 export const persistMatchEloEventPlan = async (
   client,
@@ -642,26 +631,9 @@ export const persistMatchEloEventPlan = async (
   const insertedEvents =
     [];
 
-  /*
-    Importante:
-
-    No usamos Promise.all.
-
-    Queremos orden determinista dentro de la
-    misma transacción:
-
-      1. match_result P1
-      2. match_result P2
-      3. placement_completed P1 si existe
-      4. placement_completed P2 si existe
-
-    Ese es también el orden producido actualmente
-    por matchEloEvents.service.js.
-  */
-
   for (
     const event of
-      normalizedPlan.events
+    normalizedPlan.events
   ) {
     const inserted =
       await insertEloEvent(
@@ -675,11 +647,17 @@ export const persistMatchEloEventPlan = async (
   }
 
   return {
+    competition_id:
+      normalizedPlan
+        .competition_id,
+
     match_id:
-      normalizedPlan.match_id,
+      normalizedPlan
+        .match_id,
 
     challenge_id:
-      normalizedPlan.challenge_id,
+      normalizedPlan
+        .challenge_id,
 
     inserted_events:
       insertedEvents,

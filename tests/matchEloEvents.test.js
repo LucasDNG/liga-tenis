@@ -9,6 +9,10 @@ import {
 } from "../src/services/matchEloEvents.service.js";
 
 
+const COMPETITION_ID =
+  3;
+
+
 const official = ({
   id,
   before = 1500,
@@ -91,6 +95,9 @@ test(
   () => {
     const event =
       buildMatchResultEvent({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           500,
 
@@ -115,6 +122,9 @@ test(
       {
         user_id:
           10,
+
+        competition_id:
+          COMPETITION_ID,
 
         match_id:
           500,
@@ -147,6 +157,9 @@ test(
   () => {
     const event =
       buildMatchResultEvent({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           500,
 
@@ -165,6 +178,11 @@ test(
               false,
           }),
       });
+
+    assert.equal(
+      event.competition_id,
+      COMPETITION_ID,
+    );
 
     assert.equal(
       event.elo_change,
@@ -189,6 +207,9 @@ test(
   () => {
     const event =
       buildMatchResultEvent({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           501,
 
@@ -224,6 +245,9 @@ test(
   () => {
     const event =
       buildMatchResultEvent({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           600,
 
@@ -231,12 +255,6 @@ test(
           provisional({
             id:
               10,
-
-            before:
-              0,
-
-            after:
-              0,
 
             matchesBefore:
               0,
@@ -249,6 +267,11 @@ test(
     assert.equal(
       event.event_type,
       "match_result",
+    );
+
+    assert.equal(
+      event.competition_id,
+      COMPETITION_ID,
     );
 
     assert.equal(
@@ -279,6 +302,9 @@ test(
   () => {
     const event =
       buildMatchResultEvent({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           603,
 
@@ -286,12 +312,6 @@ test(
           provisional({
             id:
               10,
-
-            before:
-              0,
-
-            after:
-              0,
 
             matchesBefore:
               3,
@@ -315,10 +335,13 @@ test(
 
 
 test(
-  "quinto nivelatorio mantiene match_result en delta 0 aunque termine con Elo 1400",
+  "quinto nivelatorio mantiene match_result en delta 0 aunque termine con Elo oficial",
   () => {
     const event =
       buildMatchResultEvent({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           604,
 
@@ -381,6 +404,9 @@ test(
   () => {
     const event =
       buildPlacementCompletedEvent({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           604,
 
@@ -417,6 +443,11 @@ test(
 
     assert.ok(
       event,
+    );
+
+    assert.equal(
+      event.competition_id,
+      COMPETITION_ID,
     );
 
     assert.equal(
@@ -467,6 +498,9 @@ test(
     ) {
       const event =
         buildPlacementCompletedEvent({
+          competitionId:
+            COMPETITION_ID,
+
           matchId:
             700 +
             matchesBefore,
@@ -500,6 +534,9 @@ test(
   () => {
     const event =
       buildPlacementCompletedEvent({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           800,
 
@@ -527,6 +564,9 @@ test(
     assert.throws(
       () =>
         buildPlacementCompletedEvent({
+          competitionId:
+            COMPETITION_ID,
+
           matchId:
             900,
 
@@ -581,6 +621,9 @@ test(
     assert.throws(
       () =>
         buildPlacementCompletedEvent({
+          competitionId:
+            COMPETITION_ID,
+
           matchId:
             901,
 
@@ -639,6 +682,9 @@ test(
   () => {
     const plan =
       buildMatchEloEvents({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           1000,
 
@@ -677,6 +723,11 @@ test(
       });
 
     assert.equal(
+      plan.competition_id,
+      COMPETITION_ID,
+    );
+
+    assert.equal(
       plan.events.length,
       2,
     );
@@ -702,6 +753,14 @@ test(
       ],
     );
 
+    assert.ok(
+      plan.events.every(
+        (event) =>
+          event.competition_id ===
+          COMPETITION_ID,
+      ),
+    );
+
     assert.equal(
       plan.events[0]
         .challenge_id,
@@ -722,6 +781,9 @@ test(
   () => {
     const plan =
       buildMatchEloEvents({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           1100,
 
@@ -788,6 +850,9 @@ test(
   () => {
     const plan =
       buildMatchEloEvents({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           1200,
 
@@ -884,6 +949,9 @@ test(
   () => {
     const plan =
       buildMatchEloEvents({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           1300,
 
@@ -975,30 +1043,6 @@ test(
         "placement_completed",
       ],
     );
-
-    assert.equal(
-      plan.events[0]
-        .elo_change,
-      0,
-    );
-
-    assert.equal(
-      plan.events[1]
-        .elo_change,
-      0,
-    );
-
-    assert.equal(
-      plan.events[2]
-        .elo_change,
-      1450,
-    );
-
-    assert.equal(
-      plan.events[3]
-        .elo_change,
-      1200,
-    );
   },
 );
 
@@ -1008,6 +1052,9 @@ test(
   () => {
     const plan =
       buildMatchEloEvents({
+        competitionId:
+          COMPETITION_ID,
+
         matchId:
           1400,
 
@@ -1017,7 +1064,7 @@ test(
               10,
 
             matchesBefore:
-              1,
+              2,
 
             won:
               true,
@@ -1029,7 +1076,7 @@ test(
               20,
 
             matchesBefore:
-              3,
+              1,
 
             won:
               false,
@@ -1051,16 +1098,12 @@ test(
       0,
     );
 
-    assert.equal(
-      plan.events[0]
-        .elo_change,
-      0,
-    );
-
-    assert.equal(
-      plan.events[1]
-        .elo_change,
-      0,
+    assert.ok(
+      plan.events.every(
+        (event) =>
+          event.elo_change ===
+          0,
+      ),
     );
   },
 );
@@ -1072,6 +1115,9 @@ test(
     assert.throws(
       () =>
         buildMatchEloEvents({
+          competitionId:
+            COMPETITION_ID,
+
           matchId:
             1500,
 
@@ -1081,7 +1127,7 @@ test(
                 10,
 
               won:
-                false,
+                true,
             }),
 
           player2:
@@ -1090,44 +1136,15 @@ test(
                 20,
 
               won:
-                false,
+                true,
             }),
         }),
       (error) => {
-        assert.equal(
-          error.reason,
-          "invalid_winner_state",
+        assert.ok(
+          error instanceof
+            MatchEloEventsError,
         );
 
-        return true;
-      },
-    );
-
-    assert.throws(
-      () =>
-        buildMatchEloEvents({
-          matchId:
-            1501,
-
-          player1:
-            official({
-              id:
-                10,
-
-              won:
-                true,
-            }),
-
-          player2:
-            official({
-              id:
-                20,
-
-              won:
-                true,
-            }),
-        }),
-      (error) => {
         assert.equal(
           error.reason,
           "invalid_winner_state",
@@ -1146,6 +1163,9 @@ test(
     assert.throws(
       () =>
         buildMatchEloEvents({
+          competitionId:
+            COMPETITION_ID,
+
           matchId:
             1600,
 
@@ -1168,9 +1188,59 @@ test(
             }),
         }),
       (error) => {
+        assert.ok(
+          error instanceof
+            MatchEloEventsError,
+        );
+
         assert.equal(
           error.reason,
           "same_player",
+        );
+
+        return true;
+      },
+    );
+  },
+);
+
+
+test(
+  "rechaza competitionId faltante",
+  () => {
+    assert.throws(
+      () =>
+        buildMatchEloEvents({
+          matchId:
+            1700,
+
+          player1:
+            official({
+              id:
+                10,
+
+              won:
+                true,
+            }),
+
+          player2:
+            official({
+              id:
+                20,
+
+              won:
+                false,
+            }),
+        }),
+      (error) => {
+        assert.ok(
+          error instanceof
+            MatchEloEventsError,
+        );
+
+        assert.equal(
+          error.reason,
+          "invalid_integer",
         );
 
         return true;

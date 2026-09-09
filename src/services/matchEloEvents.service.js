@@ -17,6 +17,10 @@
     → uno para P1
     → uno para P2
 
+  Cada evento pertenece obligatoriamente a:
+
+    competition_id
+
   PROVISIONAL #1 A #4
 
     match_result:
@@ -43,11 +47,8 @@
   De esta manera mantenemos separados:
 
   - resultado deportivo;
+  - competición;
   - graduación del placement.
-
-  Esto además permite que replay pueda reconstruir
-  el historial sin interpretar lógica escondida
-  dentro del controller.
   ============================================================
 */
 
@@ -56,12 +57,6 @@ import {
   PLACEMENT_MATCHES,
 } from "./placementLevel.service.js";
 
-
-/*
-  ============================================================
-  ERROR
-  ============================================================
-*/
 
 export class MatchEloEventsError extends Error {
   constructor(
@@ -82,12 +77,6 @@ export class MatchEloEventsError extends Error {
   }
 }
 
-
-/*
-  ============================================================
-  NORMALIZADORES
-  ============================================================
-*/
 
 const toFiniteNumber = (
   value,
@@ -186,12 +175,6 @@ const normalizeNullablePositiveInteger = (
   );
 };
 
-
-/*
-  ============================================================
-  PLAYER CONTEXT
-  ============================================================
-*/
 
 const normalizePlayerEventContext = (
   value,
@@ -317,14 +300,9 @@ const normalizePlayerEventContext = (
 };
 
 
-/*
-  ============================================================
-  EVENTO
-  ============================================================
-*/
-
 const createEvent = ({
   userId,
+  competitionId,
   matchId,
   challengeId,
   eventType,
@@ -349,6 +327,12 @@ const createEvent = ({
       toPositiveInteger(
         userId,
         "userId",
+      ),
+
+    competition_id:
+      toPositiveInteger(
+        competitionId,
+        "competitionId",
       ),
 
     match_id:
@@ -385,12 +369,6 @@ const createEvent = ({
   };
 };
 
-
-/*
-  ============================================================
-  DESCRIPCIÓN MATCH_RESULT
-  ============================================================
-*/
 
 const getMatchResultDescription = ({
   player,
@@ -430,29 +408,18 @@ const getMatchResultDescription = ({
 };
 
 
-/*
-  ============================================================
-  MATCH_RESULT
-  ============================================================
-
-  Oficial:
-    refleja rating_after real.
-
-  Provisional:
-    SIEMPRE delta 0.
-
-  Incluso en el quinto nivelatorio.
-
-  La asignación oficial queda en
-  placement_completed.
-  ============================================================
-*/
-
 export const buildMatchResultEvent = ({
+  competitionId,
   matchId,
   challengeId = null,
   player,
 }) => {
+  const normalizedCompetitionId =
+    toPositiveInteger(
+      competitionId,
+      "competitionId",
+    );
+
   const normalizedPlayer =
     normalizePlayerEventContext(
       player,
@@ -470,6 +437,9 @@ export const buildMatchResultEvent = ({
   return createEvent({
     userId:
       normalizedPlayer.id,
+
+    competitionId:
+      normalizedCompetitionId,
 
     matchId,
 
@@ -496,17 +466,18 @@ export const buildMatchResultEvent = ({
 };
 
 
-/*
-  ============================================================
-  PLACEMENT_COMPLETED
-  ============================================================
-*/
-
 export const buildPlacementCompletedEvent = ({
+  competitionId,
   matchId,
   challengeId = null,
   player,
 }) => {
+  const normalizedCompetitionId =
+    toPositiveInteger(
+      competitionId,
+      "competitionId",
+    );
+
   const normalizedPlayer =
     normalizePlayerEventContext(
       player,
@@ -560,7 +531,8 @@ export const buildPlacementCompletedEvent = ({
 
   const targetElo =
     toFiniteNumber(
-      placement.target_elo,
+      placement
+        .target_elo,
       "placement.target_elo",
     );
 
@@ -604,6 +576,9 @@ export const buildPlacementCompletedEvent = ({
     userId:
       normalizedPlayer.id,
 
+    competitionId:
+      normalizedCompetitionId,
+
     matchId,
 
     challengeId,
@@ -630,18 +605,19 @@ export const buildPlacementCompletedEvent = ({
 };
 
 
-/*
-  ============================================================
-  PLAN COMPLETO DE UN PARTIDO
-  ============================================================
-*/
-
 export const buildMatchEloEvents = ({
+  competitionId,
   matchId,
   challengeId = null,
   player1,
   player2,
 }) => {
+  const normalizedCompetitionId =
+    toPositiveInteger(
+      competitionId,
+      "competitionId",
+    );
+
   const normalizedMatchId =
     toPositiveInteger(
       matchId,
@@ -689,6 +665,9 @@ export const buildMatchEloEvents = ({
 
   const events = [
     buildMatchResultEvent({
+      competitionId:
+        normalizedCompetitionId,
+
       matchId:
         normalizedMatchId,
 
@@ -699,6 +678,9 @@ export const buildMatchEloEvents = ({
     }),
 
     buildMatchResultEvent({
+      competitionId:
+        normalizedCompetitionId,
+
       matchId:
         normalizedMatchId,
 
@@ -711,6 +693,9 @@ export const buildMatchEloEvents = ({
 
   const player1PlacementEvent =
     buildPlacementCompletedEvent({
+      competitionId:
+        normalizedCompetitionId,
+
       matchId:
         normalizedMatchId,
 
@@ -722,6 +707,9 @@ export const buildMatchEloEvents = ({
 
   const player2PlacementEvent =
     buildPlacementCompletedEvent({
+      competitionId:
+        normalizedCompetitionId,
+
       matchId:
         normalizedMatchId,
 
@@ -747,13 +735,6 @@ export const buildMatchEloEvents = ({
     );
   }
 
-  /*
-    Invariante principal:
-
-    SIEMPRE debe haber exactamente
-    dos match_result.
-  */
-
   const matchResultEvents =
     events.filter(
       (event) =>
@@ -776,6 +757,9 @@ export const buildMatchEloEvents = ({
   }
 
   return {
+    competition_id:
+      normalizedCompetitionId,
+
     match_id:
       normalizedMatchId,
 
