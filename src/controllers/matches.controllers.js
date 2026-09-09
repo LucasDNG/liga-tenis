@@ -29,8 +29,19 @@ import {
 } from "../services/placementMatch.service.js";
 
 import {
-  getOfficialRanking,
-} from "../services/rankingOrder.service.js";
+  getOfficialCompetitionRanking,
+} from "../services/competitionRanking.service.js";
+
+import {
+  getSinglesCompetitionMatchContext,
+  resolveSinglesWinnerFromScore,
+  sendMatchControllerCompetitionError,
+} from "../services/matchControllerCompetition.service.js";
+
+import {
+  getCompetitionMatchSettlement,
+  settleSinglesCompetitionStats,
+} from "../services/competitionMatchSettlement.service.js";
 
 
 /*
@@ -39,26 +50,46 @@ import {
   PARTIDOS
   ============================================================
 
-  MODELO ACTUAL
+  AUTORIDAD DEPORTIVA
 
-  PROVISIONAL:
-  - primeros 5 partidos son nivelatorios;
-  - no usa K64;
-  - no acumula Elo partido a partido;
-  - las victorias construyen placement_percentile;
-  - las derrotas solamente afectan el récord;
-  - rival oficial vale su percentil oficial pre-partido;
-  - rival provisional vale su placement demostrado
-    pre-partido;
-  - al completar el quinto partido se asigna Elo oficial
-    según la zona real del ranking.
+  matches
+    → estado del partido
 
-  OFICIAL:
-  - conserva Elo normal K32;
-  - conserva regla vigente de derrota contra provisional;
-  - conserva regla especial de destronamiento del #1.
+  match_participants
+    → quién participa
+    → lado 1 / lado 2
 
-  El replay se ajustará en el bloque posterior.
+  competitions
+    → modalidad
+    → género
+    → ciudad
+
+  player_competition_stats
+    → Elo
+    → partidos
+    → victorias / derrotas
+    → games
+
+  placement_match_evidence
+    → nivelatorios por competición
+
+  competition_match_settlements
+    → idempotencia
+
+  elo_events
+    → historial Elo por competición
+
+  IMPORTANTE
+
+  Singles:
+    cálculo Elo habilitado.
+
+  Dobles:
+    estructura de participantes habilitada,
+    fórmula Elo todavía NO definida.
+
+  Por lo tanto ningún resultado de dobles se liquida
+  competitivamente todavía.
   ============================================================
 */
 
@@ -69,9 +100,357 @@ const TOO_FAST_RESULT_MINUTES =
 
 /*
   ============================================================
+  HELPERS
+  ============================================================
+*/
+
+
+const positiveInteger = (
+  value,
+) => {
+  const number =
+    Number(value);
+
+  return (
+    Number.isInteger(
+      number,
+    ) &&
+    number > 0
+  )
+    ? number
+    : null;
+};
+
+
+const rollbackQuietly = async (
+  client,
+) => {
+  try {
+    await client.query(
+      "ROLLBACK",
+    );
+  } catch {
+    // sin acción
+  }
+};
+
+
+const sendDoublesNotImplemented = (
+  res,
+  competition,
+) =>
+  res
+    .status(409)
+    .json({
+      message:
+        "El cálculo Elo de dobles todavía no está habilitado.",
+
+      reason:
+        "doubles_elo_not_implemented",
+
+      competition: {
+        id:
+          Number(
+            competition.id,
+          ),
+
+        format:
+          competition.format,
+
+        gender:
+          competition.gender,
+
+        city:
+          competition.city,
+
+        team_size:
+          Number(
+            competition.team_size,
+          ),
+      },
+    });
+
+
+const assertSinglesCompetition = (
+  competition,
+  res,
+) => {
+  if (
+    competition?.format ===
+      "singles" &&
+    Number(
+      competition
+        .team_size,
+    ) === 1
+  ) {
+    return true;
+  }
+
+  sendDoublesNotImplemented(
+    res,
+    competition,
+  );
+
+  return false;
+};
+
+
+const getLockedMatchForUser =
+  async (
+    client,
+    {
+      matchId,
+      userId,
+      status,
+      excludeSubmitter = false,
+    },
+  ) => {
+    const normalizedMatchId =
+      positiveInteger(
+        matchId,
+      );
+
+    const normalizedUserId =
+      positiveInteger(
+        userId,
+      );
+
+    if (
+      !normalizedMatchId ||
+      !normalizedUserId
+    ) {
+      return null;
+    }
+
+    const params = [
+      normalizedMatchId,
+      normalizedUserId,
+      status,
+    ];
+
+    let submitterCondition =
+      "";
+
+    if (
+      excludeSubmitter
+    ) {
+      submitterCondition = `
+        AND m.result_submitted_by <> $2
+      `;
+    }
+
+    const result =
+      await client.query(
+        `
+        SELECT
+          m.*,
+
+          c.id
+            AS competition_id_resolved,
+
+          c.format
+            AS competition_format,
+
+          c.gender
+            AS competition_gender,
+
+          c.city
+            AS competition_city,
+
+          c.name
+            AS competition_name,
+
+          c.team_size
+            AS competition_team_size,
+
+          c.placement_matches
+            AS competition_placement_matches,
+
+          c.active
+            AS competition_active
+
+        FROM matches m
+
+        JOIN competitions c
+          ON c.id =
+            m.competition_id
+
+        WHERE
+          m.id = $1
+
+          AND m.status = $3
+
+          AND m.annulled_at
+            IS NULL
+
+          ${submitterCondition}
+
+          AND EXISTS (
+            SELECT 1
+
+            FROM match_participants mp
+
+            WHERE
+              mp.match_id =
+                m.id
+
+              AND mp.user_id =
+                $2
+          )
+
+        FOR UPDATE OF m
+        `,
+        params,
+      );
+
+    if (
+      result.rowCount !== 1
+    ) {
+      return null;
+    }
+
+    const row =
+      result.rows[0];
+
+    return {
+      ...row,
+
+      competition: {
+        id:
+          Number(
+            row
+              .competition_id_resolved,
+          ),
+
+        format:
+          row
+            .competition_format,
+
+        gender:
+          row
+            .competition_gender,
+
+        city:
+          row
+            .competition_city,
+
+        name:
+          row
+            .competition_name,
+
+        team_size:
+          Number(
+            row
+              .competition_team_size,
+          ),
+
+        placement_matches:
+          Number(
+            row
+              .competition_placement_matches,
+          ),
+
+        active:
+          Boolean(
+            row
+              .competition_active,
+          ),
+      },
+    };
+  };
+
+
+const getSinglesWinnerIdFromSide =
+  async (
+    client,
+    matchId,
+    winnerSide,
+  ) => {
+    const result =
+      await client.query(
+        `
+        SELECT
+          user_id
+
+        FROM match_participants
+
+        WHERE
+          match_id = $1
+
+          AND side = $2
+
+          AND position = 1
+
+        LIMIT 1
+        `,
+        [
+          matchId,
+          winnerSide,
+        ],
+      );
+
+    if (
+      result.rowCount !== 1
+    ) {
+      return null;
+    }
+
+    return Number(
+      result.rows[0]
+        .user_id,
+    );
+  };
+
+
+const serializePlacement = (
+  placement,
+) => {
+  if (
+    !placement?.applies
+  ) {
+    return null;
+  }
+
+  return {
+    match:
+      placement
+        .placement_match_number,
+
+    completed:
+      Boolean(
+        placement
+          .completed,
+      ),
+
+    wins:
+      placement
+        .wins,
+
+    losses:
+      placement
+        .losses,
+
+    percentile:
+      placement
+        .placement_percentile,
+
+    target_position:
+      placement
+        .target_position,
+
+    target_elo:
+      placement
+        .target_elo,
+  };
+};
+
+
+/*
+  ============================================================
   MIS PARTIDOS
   ============================================================
 */
+
 
 export const getMyMatches =
   async (
@@ -80,56 +459,161 @@ export const getMyMatches =
     next,
   ) => {
     try {
+      const userId =
+        positiveInteger(
+          req.userId,
+        );
+
+      if (!userId) {
+        return res
+          .status(400)
+          .json({
+            message:
+              "Usuario inválido.",
+
+            reason:
+              "invalid_user_id",
+          });
+      }
+
       const result =
         await pool.query(
           `
           SELECT
             m.*,
 
-            p1.name
-              AS player1_name,
+            c.format
+              AS competition_format,
 
-            p1.phone
-              AS player1_phone,
+            c.gender
+              AS competition_gender,
 
-            p2.name
-              AS player2_name,
+            c.city
+              AS competition_city,
 
-            p2.phone
-              AS player2_phone,
+            c.name
+              AS competition_name,
+
+            c.team_size
+              AS competition_team_size,
+
+            side1_user.id
+              AS side1_player1_id,
+
+            side1_user.name
+              AS side1_player1_name,
+
+            side1_user.phone
+              AS side1_player1_phone,
+
+            side2_user.id
+              AS side2_player1_id,
+
+            side2_user.name
+              AS side2_player1_name,
+
+            side2_user.phone
+              AS side2_player1_phone,
 
             w.name
               AS winner_name,
 
             confirmer.name
-              AS result_confirmed_by_name
+              AS result_confirmed_by_name,
+
+            COALESCE(
+              (
+                SELECT
+                  json_agg(
+                    json_build_object(
+                      'user_id',
+                        participant_user.id,
+
+                      'name',
+                        participant_user.name,
+
+                      'first_name',
+                        participant_user.first_name,
+
+                      'last_name',
+                        participant_user.last_name,
+
+                      'phone',
+                        participant_user.phone,
+
+                      'side',
+                        participant.side,
+
+                      'position',
+                        participant.position
+                    )
+
+                    ORDER BY
+                      participant.side ASC,
+                      participant.position ASC
+                  )
+
+                FROM match_participants participant
+
+                JOIN users participant_user
+                  ON participant_user.id =
+                    participant.user_id
+
+                WHERE
+                  participant.match_id =
+                    m.id
+              ),
+              '[]'::json
+            )
+              AS participants
 
           FROM matches m
 
-          JOIN users p1
-            ON p1.id =
-               m.player1_id
+          JOIN competitions c
+            ON c.id =
+              m.competition_id
 
-          JOIN users p2
-            ON p2.id =
-               m.player2_id
+          JOIN match_participants mine
+            ON mine.match_id =
+              m.id
+
+            AND mine.user_id =
+              $1
+
+          LEFT JOIN match_participants side1
+            ON side1.match_id =
+              m.id
+
+            AND side1.side = 1
+
+            AND side1.position = 1
+
+          LEFT JOIN users side1_user
+            ON side1_user.id =
+              side1.user_id
+
+          LEFT JOIN match_participants side2
+            ON side2.match_id =
+              m.id
+
+            AND side2.side = 2
+
+            AND side2.position = 1
+
+          LEFT JOIN users side2_user
+            ON side2_user.id =
+              side2.user_id
 
           LEFT JOIN users w
             ON w.id =
-               m.winner_id
+              m.winner_id
 
           LEFT JOIN users confirmer
             ON confirmer.id =
-               m.result_confirmed_by
+              m.result_confirmed_by
 
           WHERE
-            (
-              m.player1_id = $1
-              OR
-              m.player2_id = $1
-            )
-
-            AND m.annulled_at
+            m.annulled_at
               IS NULL
 
           ORDER BY
@@ -137,13 +621,59 @@ export const getMyMatches =
             m.id DESC
           `,
           [
-            req.userId,
+            userId,
           ],
         );
 
-      res.json({
-        matches:
-          result.rows,
+      /*
+        Compatibilidad temporal con el frontend singles.
+
+        La autoridad ya es match_participants,
+        pero mantenemos player1_name/player2_name
+        mientras el frontend migra a participants.
+      */
+
+      const matches =
+        result.rows.map(
+          (
+            match,
+          ) => ({
+            ...match,
+
+            player1_id:
+              Number(
+                match
+                  .side1_player1_id ??
+                match.player1_id,
+              ),
+
+            player2_id:
+              Number(
+                match
+                  .side2_player1_id ??
+                match.player2_id,
+              ),
+
+            player1_name:
+              match
+                .side1_player1_name,
+
+            player1_phone:
+              match
+                .side1_player1_phone,
+
+            player2_name:
+              match
+                .side2_player1_name,
+
+            player2_phone:
+              match
+                .side2_player1_phone,
+          }),
+        );
+
+      return res.json({
+        matches,
       });
     } catch (error) {
       next(error);
@@ -156,6 +686,7 @@ export const getMyMatches =
   CARGAR RESULTADO
   ============================================================
 */
+
 
 export const submitMatchResult =
   async (
@@ -171,21 +702,16 @@ export const submitMatchResult =
         "BEGIN",
       );
 
-      const {
-        score,
-      } =
-        req.body;
-
       const parsed =
         parseMatchScore(
-          score,
+          req.body?.score,
         );
 
       if (
         parsed.error
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -199,42 +725,24 @@ export const submitMatchResult =
           });
       }
 
-      const matchResult =
-        await client.query(
-          `
-          SELECT *
+      const match =
+        await getLockedMatchForUser(
+          client,
+          {
+            matchId:
+              req.params.id,
 
-          FROM matches
+            userId:
+              req.userId,
 
-          WHERE
-            id = $1
-
-            AND status =
-              'pending'
-
-            AND annulled_at
-              IS NULL
-
-            AND (
-              player1_id = $2
-              OR
-              player2_id = $2
-            )
-
-          FOR UPDATE
-          `,
-          [
-            req.params.id,
-            req.userId,
-          ],
+            status:
+              "pending",
+          },
         );
 
-      if (
-        !matchResult
-          .rowCount
-      ) {
-        await client.query(
-          "ROLLBACK",
+      if (!match) {
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -248,15 +756,25 @@ export const submitMatchResult =
           });
       }
 
-      const match =
-        matchResult.rows[0];
+      if (
+        !assertSinglesCompetition(
+          match.competition,
+          res,
+        )
+      ) {
+        await rollbackQuietly(
+          client,
+        );
+
+        return;
+      }
 
       if (
         !match
           .scheduled_at
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -272,7 +790,8 @@ export const submitMatchResult =
 
       const scheduledTime =
         new Date(
-          match.scheduled_at,
+          match
+            .scheduled_at,
         ).getTime();
 
       if (
@@ -280,8 +799,8 @@ export const submitMatchResult =
           scheduledTime,
         )
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -302,8 +821,8 @@ export const submitMatchResult =
         scheduledTime >
         now
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -322,17 +841,27 @@ export const submitMatchResult =
       }
 
       const winnerId =
-        parsed
-          .winnerSide ===
-        1
-          ? Number(
-              match
-                .player1_id,
-            )
-          : Number(
-              match
-                .player2_id,
-            );
+        await getSinglesWinnerIdFromSide(
+          client,
+          match.id,
+          parsed.winnerSide,
+        );
+
+      if (!winnerId) {
+        await rollbackQuietly(
+          client,
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "No se pudo resolver el ganador desde los participantes del partido.",
+
+            reason:
+              "winner_resolution_failed",
+          });
+      }
 
       const updated =
         await client.query(
@@ -381,11 +910,11 @@ export const submitMatchResult =
         );
 
       if (
-        !updated
-          .rowCount
+        updated.rowCount !==
+        1
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -423,8 +952,19 @@ export const submitMatchResult =
           match.challenge_id,
 
           JSON.stringify({
+            competition_id:
+              Number(
+                match
+                  .competition
+                  .id,
+              ),
+
             winner_id:
               winnerId,
+
+            winner_side:
+              parsed
+                .winnerSide,
 
             score:
               parsed
@@ -475,15 +1015,15 @@ export const submitMatchResult =
           updated.rows[0],
       });
     } catch (error) {
-      try {
-        await client.query(
-          "ROLLBACK",
-        );
-      } catch {
-        // sin acción
-      }
+      await rollbackQuietly(
+        client,
+      );
 
-      next(error);
+      return sendMatchControllerCompetitionError(
+        error,
+        res,
+        next,
+      );
     } finally {
       client.release();
     }
@@ -495,6 +1035,7 @@ export const submitMatchResult =
   RECHAZAR RESULTADO
   ============================================================
 */
+
 
 export const rejectMatchResult =
   async (
@@ -510,44 +1051,27 @@ export const rejectMatchResult =
         "BEGIN",
       );
 
-      const found =
-        await client.query(
-          `
-          SELECT *
+      const current =
+        await getLockedMatchForUser(
+          client,
+          {
+            matchId:
+              req.params.id,
 
-          FROM matches
+            userId:
+              req.userId,
 
-          WHERE
-            id = $1
+            status:
+              "awaiting_confirmation",
 
-            AND status =
-              'awaiting_confirmation'
-
-            AND annulled_at
-              IS NULL
-
-            AND result_submitted_by
-              <> $2
-
-            AND (
-              player1_id = $2
-              OR
-              player2_id = $2
-            )
-
-          FOR UPDATE
-          `,
-          [
-            req.params.id,
-            req.userId,
-          ],
+            excludeSubmitter:
+              true,
+          },
         );
 
-      if (
-        !found.rowCount
-      ) {
-        await client.query(
-          "ROLLBACK",
+      if (!current) {
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -561,8 +1085,18 @@ export const rejectMatchResult =
           });
       }
 
-      const current =
-        found.rows[0];
+      if (
+        !assertSinglesCompetition(
+          current.competition,
+          res,
+        )
+      ) {
+        await rollbackQuietly(
+          client,
+        );
+
+        return;
+      }
 
       const result =
         await client.query(
@@ -608,10 +1142,11 @@ export const rejectMatchResult =
         );
 
       if (
-        !result.rowCount
+        result.rowCount !==
+        1
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -652,6 +1187,13 @@ export const rejectMatchResult =
           match.challenge_id,
 
           JSON.stringify({
+            competition_id:
+              Number(
+                current
+                  .competition
+                  .id,
+              ),
+
             rejection_count:
               match
                 .result_rejection_count,
@@ -705,15 +1247,15 @@ export const rejectMatchResult =
             .result_rejection_count,
       });
     } catch (error) {
-      try {
-        await client.query(
-          "ROLLBACK",
-        );
-      } catch {
-        // sin acción
-      }
+      await rollbackQuietly(
+        client,
+      );
 
-      next(error);
+      return sendMatchControllerCompetitionError(
+        error,
+        res,
+        next,
+      );
     } finally {
       client.release();
     }
@@ -725,6 +1267,7 @@ export const rejectMatchResult =
   CONFIRMAR RESULTADO
   ============================================================
 */
+
 
 export const confirmMatchResult =
   async (
@@ -741,47 +1284,32 @@ export const confirmMatchResult =
       );
 
       /*
+        ========================================================
         BLOQUEAR PARTIDO
+        ========================================================
       */
 
-      const found =
-        await client.query(
-          `
-          SELECT *
+      const lockedMatch =
+        await getLockedMatchForUser(
+          client,
+          {
+            matchId:
+              req.params.id,
 
-          FROM matches
+            userId:
+              req.userId,
 
-          WHERE
-            id = $1
+            status:
+              "awaiting_confirmation",
 
-            AND status =
-              'awaiting_confirmation'
-
-            AND result_submitted_by
-              <> $2
-
-            AND annulled_at
-              IS NULL
-
-            AND (
-              player1_id = $2
-              OR
-              player2_id = $2
-            )
-
-          FOR UPDATE
-          `,
-          [
-            req.params.id,
-            req.userId,
-          ],
+            excludeSubmitter:
+              true,
+          },
         );
 
-      if (
-        !found.rowCount
-      ) {
-        await client.query(
-          "ROLLBACK",
+      if (!lockedMatch) {
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -795,15 +1323,73 @@ export const confirmMatchResult =
           });
       }
 
-      const match =
-        found.rows[0];
+      if (
+        !assertSinglesCompetition(
+          lockedMatch.competition,
+          res,
+        )
+      ) {
+        await rollbackQuietly(
+          client,
+        );
+
+        return;
+      }
+
+      const competitionId =
+        Number(
+          lockedMatch
+            .competition
+            .id,
+        );
 
       /*
+        ========================================================
+        CONTEXTO SINGLES + STATS POR COMPETICIÓN
+        ========================================================
+      */
+
+      const context =
+        await getSinglesCompetitionMatchContext(
+          client,
+          {
+            matchId:
+              lockedMatch.id,
+
+            userId:
+              req.userId,
+
+            lockPlayers:
+              true,
+          },
+        );
+
+      const player1 =
+        context.player1;
+
+      const player2 =
+        context.player2;
+
+      const player1Id =
+        Number(
+          context
+            .player1_id,
+        );
+
+      const player2Id =
+        Number(
+          context
+            .player2_id,
+        );
+
+      /*
+        ========================================================
         REVALIDAR SCORE
+        ========================================================
       */
 
       let proposedScore =
-        match
+        lockedMatch
           .proposed_score;
 
       if (
@@ -829,8 +1415,8 @@ export const confirmMatchResult =
       if (
         parsed.error
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -849,27 +1435,20 @@ export const confirmMatchResult =
           .normalizedScore;
 
       const expectedWinnerId =
-        parsed
-          .winnerSide ===
-        1
-          ? Number(
-              match
-                .player1_id,
-            )
-          : Number(
-              match
-                .player2_id,
-            );
+        resolveSinglesWinnerFromScore(
+          context,
+          parsed.winnerSide,
+        );
 
       if (
         Number(
-          match
+          lockedMatch
             .proposed_winner_id,
         ) !==
         expectedWinnerId
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -883,147 +1462,6 @@ export const confirmMatchResult =
           });
       }
 
-      /*
-        BLOQUEAR JUGADORES
-      */
-
-      const playersResult =
-        await client.query(
-          `
-          SELECT
-            id,
-            name,
-            first_name,
-            last_name,
-            rating,
-            matches_played,
-            city,
-            gender,
-            role,
-            verification_status
-
-          FROM users
-
-          WHERE
-            id IN (
-              $1,
-              $2
-            )
-
-          ORDER BY
-            id ASC
-
-          FOR UPDATE
-          `,
-          [
-            match.player1_id,
-            match.player2_id,
-          ],
-        );
-
-      if (
-        playersResult
-          .rowCount !== 2
-      ) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        return res
-          .status(409)
-          .json({
-            message:
-              "No se pudieron cargar correctamente los dos jugadores del partido.",
-
-            reason:
-              "players_not_found",
-          });
-      }
-
-      const player1 =
-        playersResult.rows.find(
-          (player) =>
-            Number(
-              player.id,
-            ) ===
-            Number(
-              match
-                .player1_id,
-            ),
-        );
-
-      const player2 =
-        playersResult.rows.find(
-          (player) =>
-            Number(
-              player.id,
-            ) ===
-            Number(
-              match
-                .player2_id,
-            ),
-        );
-
-      if (
-        !player1 ||
-        !player2
-      ) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        return res
-          .status(409)
-          .json({
-            message:
-              "Los jugadores del partido no son válidos.",
-
-            reason:
-              "invalid_players",
-          });
-      }
-
-      if (
-        player1.role !==
-          "player" ||
-        player2.role !==
-          "player" ||
-        player1
-          .verification_status !==
-          "verified" ||
-        player2
-          .verification_status !==
-          "verified" ||
-        player1.city !==
-          player2.city ||
-        player1.gender !==
-          player2.gender
-      ) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        return res
-          .status(409)
-          .json({
-            message:
-              "Los jugadores ya no cumplen las condiciones de esta liga.",
-
-            reason:
-              "players_not_eligible",
-          });
-      }
-
-      const player1Id =
-        Number(
-          player1.id,
-        );
-
-      const player2Id =
-        Number(
-          player2.id,
-        );
-
       const winnerId =
         expectedWinnerId;
 
@@ -1033,17 +1471,11 @@ export const confirmMatchResult =
           ? player2Id
           : player1Id;
 
-      const winnerPlayer =
-        winnerId ===
-        player1Id
-          ? player1
-          : player2;
-
-      const loserPlayer =
-        loserId ===
-        player1Id
-          ? player1
-          : player2;
+      /*
+        ========================================================
+        DATOS PRE-PARTIDO POR COMPETICIÓN
+        ========================================================
+      */
 
       const player1RatingBefore =
         Number(
@@ -1089,18 +1521,18 @@ export const confirmMatchResult =
         player2MatchesBefore <
           0
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
           .status(409)
           .json({
             message:
-              "Los datos deportivos de los jugadores no son válidos.",
+              "Los datos deportivos de los jugadores no son válidos para esta competición.",
 
             reason:
-              "invalid_rating_data",
+              "invalid_competition_rating_data",
           });
       }
 
@@ -1116,31 +1548,98 @@ export const confirmMatchResult =
 
       /*
         ========================================================
+        IDEMPOTENCIA PREVIA
+        ========================================================
+      */
+
+      const existingSettlement =
+        await getCompetitionMatchSettlement(
+          client,
+          lockedMatch.id,
+          {
+            forUpdate:
+              true,
+          },
+        );
+
+      if (
+        existingSettlement
+      ) {
+        await rollbackQuietly(
+          client,
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Las estadísticas de este partido ya fueron aplicadas.",
+
+            reason:
+              "match_already_settled",
+          });
+      }
+
+      const existingElo =
+        await client.query(
+          `
+          SELECT
+            id
+
+          FROM elo_events
+
+          WHERE
+            match_id = $1
+
+            AND competition_id =
+              $2
+
+            AND event_type =
+              'match_result'
+
+          LIMIT 1
+          `,
+          [
+            lockedMatch.id,
+            competitionId,
+          ],
+        );
+
+      if (
+        existingElo.rowCount
+      ) {
+        await rollbackQuietly(
+          client,
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "Este partido ya tiene movimientos Elo registrados en esta competición.",
+
+            reason:
+              "elo_already_applied",
+          });
+      }
+
+      /*
+        ========================================================
         RANKING OFICIAL PRE-PARTIDO
         ========================================================
-
-        Debe tomarse antes de:
-
-        - guardar el partido;
-        - incrementar matches_played;
-        - graduar un provisional.
       */
 
       const rankingBefore =
-        await getOfficialRanking(
+        await getOfficialCompetitionRanking(
           client,
-          {
-            city:
-              player1.city,
-
-            gender:
-              player1.gender,
-          },
+          competitionId,
         );
 
       const player1RankBefore =
         rankingBefore.find(
-          (row) =>
+          (
+            row,
+          ) =>
             Number(
               row.id,
             ) ===
@@ -1150,7 +1649,9 @@ export const confirmMatchResult =
 
       const player2RankBefore =
         rankingBefore.find(
-          (row) =>
+          (
+            row,
+          ) =>
             Number(
               row.id,
             ) ===
@@ -1160,73 +1661,26 @@ export const confirmMatchResult =
 
       /*
         ========================================================
-        REFERENCIAS DE PLACEMENT PRE-PARTIDO
+        PLACEMENT PRE-PARTIDO
         ========================================================
-
-        ESTE ORDEN ES IMPORTANTE.
-
-        Si ambos son provisionales, el valor de P1 y P2
-        se calcula antes de guardar el resultado actual.
       */
 
       const placementContext =
         await preparePlacementMatchContext(
           client,
           {
+            competitionId,
+
             player1,
+
             player2,
           },
         );
 
       /*
-        EVITAR DOBLE PROCESAMIENTO
-      */
-
-      const existingElo =
-        await client.query(
-          `
-          SELECT id
-
-          FROM elo_events
-
-          WHERE
-            match_id = $1
-
-            AND event_type =
-              'match_result'
-
-          LIMIT 1
-          `,
-          [
-            match.id,
-          ],
-        );
-
-      if (
-        existingElo.rowCount
-      ) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        return res
-          .status(409)
-          .json({
-            message:
-              "Este partido ya tiene movimientos Elo registrados.",
-
-            reason:
-              "elo_already_applied",
-          });
-      }
-
-      /*
         ========================================================
         REGISTRAR EVIDENCIA NIVELATORIA
         ========================================================
-
-        Esto devuelve el placement final si alguno está
-        disputando su quinto partido.
       */
 
       const placementResult =
@@ -1234,7 +1688,9 @@ export const confirmMatchResult =
           client,
           {
             matchId:
-              match.id,
+              lockedMatch.id,
+
+            competitionId,
 
             player1,
 
@@ -1260,15 +1716,8 @@ export const confirmMatchResult =
 
       /*
         ========================================================
-        CALCULAR ELO FINAL
+        CALCULAR RATING FINAL
         ========================================================
-
-        Toda la política deportiva base vive ahora en
-        matchRating.service.js.
-
-        La regla especial de destronamiento del #1 se aplica
-        después, porque depende de la posición oficial previa
-        del ranking y no del cálculo Elo aislado.
       */
 
       const player1RatingResult =
@@ -1335,16 +1784,8 @@ export const confirmMatchResult =
 
       /*
         ========================================================
-        REGLA #1
+        REGLA DESTRONAMIENTO #1
         ========================================================
-
-        Solo aplica a un jugador que ya era oficial
-        antes del partido.
-
-        Si quien era #1 pierde:
-        debe quedar debajo del Elo pre-partido del #2.
-
-        No se aplica a un provisional que termina placement.
       */
 
       const loserRankBefore =
@@ -1361,12 +1802,14 @@ export const confirmMatchResult =
 
       const numberTwoBefore =
         rankingBefore.find(
-          (row) =>
+          (
+            row,
+          ) =>
             Number(
               row
                 .official_position,
             ) === 2,
-        ) ||
+        ) ??
         null;
 
       let dethroneApplied =
@@ -1395,7 +1838,7 @@ export const confirmMatchResult =
 
         if (
           loserId ===
-          player1Id &&
+            player1Id &&
           player1RatingAfter >
             dethroneCeiling
         ) {
@@ -1411,7 +1854,7 @@ export const confirmMatchResult =
 
         if (
           loserId ===
-          player2Id &&
+            player2Id &&
           player2RatingAfter >
             dethroneCeiling
         ) {
@@ -1427,7 +1870,9 @@ export const confirmMatchResult =
       }
 
       /*
+        ========================================================
         INVARIANTES
+        ========================================================
       */
 
       if (
@@ -1442,8 +1887,8 @@ export const confirmMatchResult =
         player2RatingAfter <
           0
       ) {
-        await client.query(
-          "ROLLBACK",
+        await rollbackQuietly(
+          client,
         );
 
         return res
@@ -1459,245 +1904,25 @@ export const confirmMatchResult =
 
       /*
         ========================================================
-        ACTUALIZAR USUARIOS
-        ========================================================
-      */
-
-      const updatedPlayer1 =
-        await client.query(
-          `
-          UPDATE users
-
-          SET
-            rating = $1,
-
-            matches_played =
-              matches_played + 1,
-
-            updated_at =
-              CURRENT_TIMESTAMP
-
-          WHERE
-            id = $2
-
-            AND rating = $3
-
-            AND matches_played =
-              $4
-
-          RETURNING
-            id,
-            rating,
-            matches_played
-          `,
-          [
-            player1RatingAfter,
-            player1Id,
-            player1RatingBefore,
-            player1MatchesBefore,
-          ],
-        );
-
-      const updatedPlayer2 =
-        await client.query(
-          `
-          UPDATE users
-
-          SET
-            rating = $1,
-
-            matches_played =
-              matches_played + 1,
-
-            updated_at =
-              CURRENT_TIMESTAMP
-
-          WHERE
-            id = $2
-
-            AND rating = $3
-
-            AND matches_played =
-              $4
-
-          RETURNING
-            id,
-            rating,
-            matches_played
-          `,
-          [
-            player2RatingAfter,
-            player2Id,
-            player2RatingBefore,
-            player2MatchesBefore,
-          ],
-        );
-
-      if (
-        updatedPlayer1
-          .rowCount !== 1 ||
-        updatedPlayer2
-          .rowCount !== 1
-      ) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        return res
-          .status(409)
-          .json({
-            message:
-              "Los datos deportivos cambiaron durante la confirmación. No se aplicó el resultado.",
-
-            reason:
-              "rating_state_changed",
-          });
-      }
-
-      /*
-        ========================================================
-        COMPLETAR PARTIDO
-        ========================================================
-      */
-
-      const completedMatch =
-        await client.query(
-          `
-          UPDATE matches
-
-          SET
-            winner_id =
-              proposed_winner_id,
-
-            score =
-              $1,
-
-            status =
-              'completed',
-
-            completed_at =
-              CURRENT_TIMESTAMP,
-
-            result_confirmed_at =
-              CURRENT_TIMESTAMP,
-
-            result_confirmed_by =
-              $2
-
-          WHERE
-            id = $3
-
-            AND status =
-              'awaiting_confirmation'
-
-            AND annulled_at
-              IS NULL
-
-          RETURNING *
-          `,
-          [
-            JSON.stringify(
-              proposedScore,
-            ),
-
-            req.userId,
-
-            match.id,
-          ],
-        );
-
-      if (
-        !completedMatch
-          .rowCount
-      ) {
-        await client.query(
-          "ROLLBACK",
-        );
-
-        return res
-          .status(409)
-          .json({
-            message:
-              "El estado del partido cambió antes de poder confirmarlo.",
-
-            reason:
-              "match_state_changed",
-          });
-      }
-
-      /*
-        CERRAR DESAFÍO
-      */
-
-      if (
-        match.challenge_id
-      ) {
-        const challenge =
-          await client.query(
-            `
-            UPDATE challenges
-
-            SET
-              status =
-                'completed',
-
-              resolved_at =
-                CURRENT_TIMESTAMP
-
-            WHERE
-              id = $1
-
-              AND status =
-                'accepted'
-
-            RETURNING id
-            `,
-            [
-              match
-                .challenge_id,
-            ],
-          );
-
-        if (
-          !challenge.rowCount
-        ) {
-          await client.query(
-            "ROLLBACK",
-          );
-
-          return res
-            .status(409)
-            .json({
-              message:
-                "El desafío asociado no se encuentra en un estado válido para finalizar.",
-
-              reason:
-                "challenge_state_invalid",
-            });
-        }
-      }
-
-      /*
-        ========================================================
-        EVENTOS ELO
+        PLAN DE EVENTOS ELO
         ========================================================
 
-        matchEloEvents.service.js decide qué eventos deben
-        existir. eloEventPersistence.service.js solamente los
-        persiste dentro de esta misma transacción.
+        Se construye ANTES del settlement porque necesita
+        los valores pre-partido.
 
-        Invariante:
-        - exactamente 2 x match_result;
-        - 0..2 x placement_completed.
+        Se persiste dentro de la misma transacción.
       */
 
       const eloEventPlan =
         buildMatchEloEvents({
+          competitionId,
+
           matchId:
-            match.id,
+            lockedMatch.id,
 
           challengeId:
-            match.challenge_id,
+            lockedMatch
+              .challenge_id,
 
           player1: {
             id:
@@ -1752,10 +1977,192 @@ export const confirmMatchResult =
           },
         });
 
-      await persistMatchEloEventPlan(
-        client,
-        eloEventPlan,
-      );
+      /*
+        ========================================================
+        COMPLETAR PARTIDO
+        ========================================================
+      */
+
+      const completedMatch =
+        await client.query(
+          `
+          UPDATE matches
+
+          SET
+            winner_id =
+              proposed_winner_id,
+
+            score =
+              $1,
+
+            status =
+              'completed',
+
+            completed_at =
+              CURRENT_TIMESTAMP,
+
+            result_confirmed_at =
+              CURRENT_TIMESTAMP,
+
+            result_confirmed_by =
+              $2
+
+          WHERE
+            id = $3
+
+            AND status =
+              'awaiting_confirmation'
+
+            AND annulled_at
+              IS NULL
+
+          RETURNING *
+          `,
+          [
+            JSON.stringify(
+              proposedScore,
+            ),
+
+            req.userId,
+
+            lockedMatch.id,
+          ],
+        );
+
+      if (
+        completedMatch.rowCount !==
+        1
+      ) {
+        await rollbackQuietly(
+          client,
+        );
+
+        return res
+          .status(409)
+          .json({
+            message:
+              "El estado del partido cambió antes de poder confirmarlo.",
+
+            reason:
+              "match_state_changed",
+          });
+      }
+
+      /*
+        ========================================================
+        SETTLEMENT DE STATS POR COMPETICIÓN
+        ========================================================
+
+        Este reemplaza definitivamente:
+
+          UPDATE users
+          SET rating = ...
+              matches_played = ...
+
+        users.rating queda solamente como dato legacy durante
+        la transición.
+
+        Toda autoridad competitiva nueva vive en
+        player_competition_stats.
+      */
+
+      const settlement =
+        await settleSinglesCompetitionStats(
+          client,
+          {
+            matchId:
+              lockedMatch.id,
+
+            winnerId,
+
+            score:
+              proposedScore,
+
+            ratingByUserId: {
+              [player1Id]:
+                player1RatingAfter,
+
+              [player2Id]:
+                player2RatingAfter,
+            },
+
+            lockedPlayers:
+              context.players,
+          },
+        );
+
+      /*
+        ========================================================
+        EVENTOS ELO
+        ========================================================
+      */
+
+      const persistedElo =
+        await persistMatchEloEventPlan(
+          client,
+          eloEventPlan,
+        );
+
+      /*
+        ========================================================
+        CERRAR DESAFÍO
+        ========================================================
+      */
+
+      if (
+        lockedMatch
+          .challenge_id
+      ) {
+        const challenge =
+          await client.query(
+            `
+            UPDATE challenges
+
+            SET
+              status =
+                'completed',
+
+              resolved_at =
+                CURRENT_TIMESTAMP
+
+            WHERE
+              id = $1
+
+              AND competition_id =
+                $2
+
+              AND status =
+                'accepted'
+
+            RETURNING id
+            `,
+            [
+              lockedMatch
+                .challenge_id,
+
+              competitionId,
+            ],
+          );
+
+        if (
+          challenge.rowCount !==
+          1
+        ) {
+          await rollbackQuietly(
+            client,
+          );
+
+          return res
+            .status(409)
+            .json({
+              message:
+                "El desafío asociado no se encuentra en un estado válido para finalizar.",
+
+              reason:
+                "challenge_state_invalid",
+            });
+        }
+      }
 
       /*
         ========================================================
@@ -1783,10 +2190,14 @@ export const confirmMatchResult =
         `,
         [
           req.userId,
-          match.id,
-          match.challenge_id,
+          lockedMatch.id,
+          lockedMatch
+            .challenge_id,
 
           JSON.stringify({
+            competition_id:
+              competitionId,
+
             winner_id:
               winnerId,
 
@@ -1795,6 +2206,16 @@ export const confirmMatchResult =
 
             score:
               proposedScore,
+
+            settlement_id:
+              settlement
+                .settlement
+                ?.id ??
+              null,
+
+            elo_events_inserted:
+              persistedElo
+                .inserted_count,
 
             player1: {
               id:
@@ -1830,40 +2251,9 @@ export const confirmMatchResult =
                 player1SpecialPenalty,
 
               placement:
-                player1Placement
-                  ?.applies
-                  ? {
-                      completed:
-                        Boolean(
-                          player1Placement
-                            .completed,
-                        ),
-
-                      match_number:
-                        player1Placement
-                          .placement_match_number,
-
-                      wins:
-                        player1Placement
-                          .wins,
-
-                      losses:
-                        player1Placement
-                          .losses,
-
-                      placement_percentile:
-                        player1Placement
-                          .placement_percentile,
-
-                      target_position:
-                        player1Placement
-                          .target_position,
-
-                      target_elo:
-                        player1Placement
-                          .target_elo,
-                    }
-                  : null,
+                serializePlacement(
+                  player1Placement,
+                ),
             },
 
             player2: {
@@ -1900,40 +2290,9 @@ export const confirmMatchResult =
                 player2SpecialPenalty,
 
               placement:
-                player2Placement
-                  ?.applies
-                  ? {
-                      completed:
-                        Boolean(
-                          player2Placement
-                            .completed,
-                        ),
-
-                      match_number:
-                        player2Placement
-                          .placement_match_number,
-
-                      wins:
-                        player2Placement
-                          .wins,
-
-                      losses:
-                        player2Placement
-                          .losses,
-
-                      placement_percentile:
-                        player2Placement
-                          .placement_percentile,
-
-                      target_position:
-                        player2Placement
-                          .target_position,
-
-                      target_elo:
-                        player2Placement
-                          .target_elo,
-                    }
-                  : null,
+                serializePlacement(
+                  player2Placement,
+                ),
             },
 
             number_one_dethrone: {
@@ -1963,20 +2322,20 @@ export const confirmMatchResult =
       );
 
       /*
+        ========================================================
         ANTIFRAUDE
+        ========================================================
       */
 
       await checkFrequentOpponents(
         client,
         {
           matchId:
-            match.id,
+            lockedMatch.id,
 
-          player1Id:
-            player1Id,
+          player1Id,
 
-          player2Id:
-            player2Id,
+          player2Id,
         },
       );
 
@@ -1984,12 +2343,18 @@ export const confirmMatchResult =
         client,
         {
           matchId:
-            match.id,
+            lockedMatch.id,
 
           playerId:
             winnerId,
         },
       );
+
+      /*
+        ========================================================
+        COMMIT
+        ========================================================
+      */
 
       await client.query(
         "COMMIT",
@@ -2023,6 +2388,31 @@ export const confirmMatchResult =
         message:
           "Resultado confirmado y ranking actualizado",
 
+        competition: {
+          id:
+            competitionId,
+
+          format:
+            lockedMatch
+              .competition
+              .format,
+
+          gender:
+            lockedMatch
+              .competition
+              .gender,
+
+          city:
+            lockedMatch
+              .competition
+              .city,
+
+          name:
+            lockedMatch
+              .competition
+              .name,
+        },
+
         elo_change: {
           winner:
             winnerRatingAfter -
@@ -2043,76 +2433,14 @@ export const confirmMatchResult =
 
         placement: {
           player1:
-            player1Placement
-              ?.applies
-              ? {
-                  match:
-                    player1Placement
-                      .placement_match_number,
-
-                  completed:
-                    Boolean(
-                      player1Placement
-                        .completed,
-                    ),
-
-                  wins:
-                    player1Placement
-                      .wins,
-
-                  losses:
-                    player1Placement
-                      .losses,
-
-                  percentile:
-                    player1Placement
-                      .placement_percentile,
-
-                  target_position:
-                    player1Placement
-                      .target_position,
-
-                  target_elo:
-                    player1Placement
-                      .target_elo,
-                }
-              : null,
+            serializePlacement(
+              player1Placement,
+            ),
 
           player2:
-            player2Placement
-              ?.applies
-              ? {
-                  match:
-                    player2Placement
-                      .placement_match_number,
-
-                  completed:
-                    Boolean(
-                      player2Placement
-                        .completed,
-                    ),
-
-                  wins:
-                    player2Placement
-                      .wins,
-
-                  losses:
-                    player2Placement
-                      .losses,
-
-                  percentile:
-                    player2Placement
-                      .placement_percentile,
-
-                  target_position:
-                    player2Placement
-                      .target_position,
-
-                  target_elo:
-                    player2Placement
-                      .target_elo,
-                }
-              : null,
+            serializePlacement(
+              player2Placement,
+            ),
         },
 
         special_rules: {
@@ -2129,19 +2457,35 @@ export const confirmMatchResult =
             player2SpecialPenalty,
         },
 
+        settlement: {
+          id:
+            settlement
+              .settlement
+              ?.id ??
+            null,
+
+          competition_id:
+            settlement
+              .competition_id,
+
+          winning_side:
+            settlement
+              .winning_side,
+        },
+
         rotation_unlocked:
           true,
       });
     } catch (error) {
-      try {
-        await client.query(
-          "ROLLBACK",
-        );
-      } catch {
-        // sin acción
-      }
+      await rollbackQuietly(
+        client,
+      );
 
-      next(error);
+      return sendMatchControllerCompetitionError(
+        error,
+        res,
+        next,
+      );
     } finally {
       client.release();
     }
