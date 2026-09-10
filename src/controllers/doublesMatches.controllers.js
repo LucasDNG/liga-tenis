@@ -80,7 +80,8 @@ const auditEvent =
       matchId,
       challengeId,
       eventType,
-      details = {},
+      details =
+        {},
     },
   ) => {
     await client.query(
@@ -207,38 +208,41 @@ const getLockedDoublesMatch =
       return null;
     }
 
-    const row =
-      result.rows[0];
-
     return {
-      ...row,
+      ...result.rows[0],
 
       id:
-        Number(row.id),
+        Number(
+          result.rows[0].id,
+        ),
 
       competition_id:
         Number(
-          row.competition_id,
+          result.rows[0]
+            .competition_id,
         ),
 
       side1_pair_id:
         Number(
-          row.side1_pair_id,
+          result.rows[0]
+            .side1_pair_id,
         ),
 
       side2_pair_id:
         Number(
-          row.side2_pair_id,
+          result.rows[0]
+            .side2_pair_id,
         ),
 
       viewer_side:
         Number(
-          row.viewer_side,
+          result.rows[0]
+            .viewer_side,
         ),
 
       placement_matches:
         Number(
-          row
+          result.rows[0]
             .competition_placement_matches,
         ),
     };
@@ -415,17 +419,113 @@ const validateScheduledMatch = (
 };
 
 
-/*
-  ============================================================
-  CARGAR RESULTADO DE DOBLES
-  ============================================================
+const serializeSettlementSide = (
+  settlementSide,
+) => {
+  const pairAfter =
+    settlementSide
+      .pair_after;
 
-  Cualquiera de los 2 integrantes de cualquiera
-  de los lados puede cargar el resultado.
+  const placement =
+    settlementSide
+      .placement;
 
-  La propuesta pertenece al LADO, no al usuario.
-  ============================================================
-*/
+  return {
+    pair_id:
+      Number(
+        pairAfter.id,
+      ),
+
+    mode:
+      settlementSide.mode,
+
+    rating:
+      Number(
+        pairAfter.rating,
+      ),
+
+    elo_before:
+      Number(
+        settlementSide
+          .rating
+          ?.rating_before ??
+        0,
+      ),
+
+    elo_change:
+      Number(
+        settlementSide
+          .rating
+          ?.elo_change ??
+        0,
+      ),
+
+    elo_after:
+      Number(
+        settlementSide
+          .rating
+          ?.rating_after ??
+        pairAfter.rating,
+      ),
+
+    matches_played:
+      Number(
+        pairAfter
+          .matches_played,
+      ),
+
+    wins:
+      Number(
+        pairAfter.wins,
+      ),
+
+    losses:
+      Number(
+        pairAfter.losses,
+      ),
+
+    games_won:
+      Number(
+        pairAfter
+          .games_won,
+      ),
+
+    games_lost:
+      Number(
+        pairAfter
+          .games_lost,
+      ),
+
+    provisional:
+      Number(
+        pairAfter
+          .matches_played,
+      ) < 5,
+
+    placement_match_number:
+      settlementSide
+        .placement_match_number,
+
+    placement_completed:
+      settlementSide.mode ===
+      "placement_completion",
+
+    placement_percentile:
+      placement
+        ?.placement_percentile ??
+      null,
+
+    target_position:
+      placement
+        ?.target_position ??
+      null,
+
+    target_elo:
+      placement
+        ?.target_elo ??
+      null,
+  };
+};
 
 
 export const submitDoublesMatchResult =
@@ -579,14 +679,6 @@ export const submitDoublesMatchResult =
               "winner_side_invalid",
           });
       }
-
-      /*
-        proposed_winner_id se mantiene por compatibilidad
-        con la estructura histórica.
-
-        En dobles la autoridad deportiva real es:
-        winnerSide + side1_pair_id / side2_pair_id.
-      */
 
       const proposedWinnerId =
         await getFirstPlayerOnSide(
@@ -752,19 +844,6 @@ export const submitDoublesMatchResult =
   };
 
 
-/*
-  ============================================================
-  RECHAZAR RESULTADO DE DOBLES
-  ============================================================
-
-  Regla:
-  - mismo lado que cargó: NO puede rechazar;
-  - cualquiera del lado contrario: SÍ;
-  - vuelve a pending.
-  ============================================================
-*/
-
-
 export const rejectDoublesMatchResult =
   async (
     req,
@@ -865,13 +944,16 @@ export const rejectDoublesMatchResult =
       }
 
       const rejectedSubmissionBy =
-        match.result_submitted_by;
+        match
+          .result_submitted_by;
 
       const rejectedWinnerId =
-        match.proposed_winner_id;
+        match
+          .proposed_winner_id;
 
       const rejectedScore =
-        match.proposed_score;
+        match
+          .proposed_score;
 
       const result =
         await client.query(
@@ -916,25 +998,6 @@ export const rejectDoublesMatchResult =
             match.id,
           ],
         );
-
-      if (
-        result.rowCount !==
-        1
-      ) {
-        await rollbackQuietly(
-          client,
-        );
-
-        return res
-          .status(409)
-          .json({
-            message:
-              "El estado del resultado cambió. Actualizá la página.",
-
-            reason:
-              "result_state_changed",
-          });
-      }
 
       await auditEvent(
         client,
@@ -1002,26 +1065,6 @@ export const rejectDoublesMatchResult =
       client.release();
     }
   };
-
-
-/*
-  ============================================================
-  CONFIRMAR RESULTADO DE DOBLES
-  ============================================================
-
-  Una confirmación del lado rival alcanza.
-
-  Al confirmar:
-  - se determina winnerSide;
-  - se liquida Elo de las dos parejas;
-  - se actualizan W/L;
-  - se actualizan games;
-  - se crean pair_elo_events;
-  - se crea settlement;
-  - partido completed;
-  - desafío completed.
-  ============================================================
-*/
 
 
 export const confirmDoublesMatchResult =
@@ -1197,9 +1240,11 @@ export const confirmDoublesMatchResult =
         typeof match.proposed_score ===
         "string"
           ? JSON.parse(
-              match.proposed_score,
+              match
+                .proposed_score,
             )
-          : match.proposed_score;
+          : match
+              .proposed_score;
 
       const settlement =
         await settleDoublesPairMatch(
@@ -1209,13 +1254,16 @@ export const confirmDoublesMatchResult =
               match.id,
 
             competitionId:
-              match.competition_id,
+              match
+                .competition_id,
 
             side1PairId:
-              match.side1_pair_id,
+              match
+                .side1_pair_id,
 
             side2PairId:
-              match.side2_pair_id,
+              match
+                .side2_pair_id,
 
             winnerSide,
 
@@ -1229,14 +1277,10 @@ export const confirmDoublesMatchResult =
 
       const winnerPairId =
         winnerSide === 1
-          ? match.side1_pair_id
-          : match.side2_pair_id;
-
-      /*
-        winner_id se mantiene por compatibilidad
-        con frontend/transparencia histórica.
-        En dobles la autoridad es winnerPairId.
-      */
+          ? match
+              .side1_pair_id
+          : match
+              .side2_pair_id;
 
       const winnerId =
         await getFirstPlayerOnSide(
@@ -1342,10 +1386,21 @@ export const confirmDoublesMatchResult =
               'accepted'
           `,
           [
-            match.challenge_id,
+            match
+              .challenge_id,
           ],
         );
       }
+
+      const side1 =
+        serializeSettlementSide(
+          settlement.side1,
+        );
+
+      const side2 =
+        serializeSettlementSide(
+          settlement.side2,
+        );
 
       await auditEvent(
         client,
@@ -1356,14 +1411,16 @@ export const confirmDoublesMatchResult =
             match.id,
 
           challengeId:
-            match.challenge_id,
+            match
+              .challenge_id,
 
           eventType:
             "doubles_match_result_confirmed",
 
           details: {
             competition_id:
-              match.competition_id,
+              match
+                .competition_id,
 
             submitted_side:
               submittedSide,
@@ -1380,47 +1437,9 @@ export const confirmDoublesMatchResult =
             score:
               normalizedScore,
 
-            side1_pair_id:
-              match.side1_pair_id,
+            side1,
 
-            side1_elo_before:
-              settlement
-                .side1
-                .rating
-                .rating_before,
-
-            side1_elo_change:
-              settlement
-                .side1
-                .rating
-                .elo_change,
-
-            side1_elo_after:
-              settlement
-                .side1
-                .rating
-                .rating_after,
-
-            side2_pair_id:
-              match.side2_pair_id,
-
-            side2_elo_before:
-              settlement
-                .side2
-                .rating
-                .rating_before,
-
-            side2_elo_change:
-              settlement
-                .side2
-                .rating
-                .elo_change,
-
-            side2_elo_after:
-              settlement
-                .side2
-                .rating
-                .rating_after,
+            side2,
           },
         },
       );
@@ -1446,75 +1465,9 @@ export const confirmDoublesMatchResult =
           games:
             settlement.games,
 
-          side1: {
-            pair_id:
-              match.side1_pair_id,
+          side1,
 
-            elo_before:
-              settlement
-                .side1
-                .rating
-                .rating_before,
-
-            elo_change:
-              settlement
-                .side1
-                .rating
-                .elo_change,
-
-            elo_after:
-              settlement
-                .side1
-                .rating
-                .rating_after,
-
-            matches_played:
-              settlement
-                .side1
-                .pair_after
-                .matches_played,
-
-            placement_completed:
-              settlement
-                .side1
-                .rating
-                .placement_completed,
-          },
-
-          side2: {
-            pair_id:
-              match.side2_pair_id,
-
-            elo_before:
-              settlement
-                .side2
-                .rating
-                .rating_before,
-
-            elo_change:
-              settlement
-                .side2
-                .rating
-                .elo_change,
-
-            elo_after:
-              settlement
-                .side2
-                .rating
-                .rating_after,
-
-            matches_played:
-              settlement
-                .side2
-                .pair_after
-                .matches_played,
-
-            placement_completed:
-              settlement
-                .side2
-                .rating
-                .placement_completed,
-          },
+          side2,
         },
       });
     } catch (error) {

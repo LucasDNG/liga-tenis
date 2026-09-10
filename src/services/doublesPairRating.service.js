@@ -1,14 +1,14 @@
 export const DOUBLES_INITIAL_ELO =
-  1000;
-
-export const DOUBLES_PROVISIONAL_K =
-  48;
+  0;
 
 export const DOUBLES_OFFICIAL_K =
   32;
 
 export const DEFAULT_PLACEMENT_MATCHES =
   5;
+
+export const OFFICIAL_ELO_FLOOR =
+  100;
 
 
 export class DoublesPairRatingError
@@ -91,6 +91,30 @@ const positiveInteger = (
 };
 
 
+export const isProvisionalPair = ({
+  matchesPlayed,
+  placementMatches =
+    DEFAULT_PLACEMENT_MATCHES,
+}) => {
+  const matches =
+    integerAtLeastZero(
+      matchesPlayed,
+      "matchesPlayed",
+    );
+
+  const placement =
+    positiveInteger(
+      placementMatches,
+      "placementMatches",
+    );
+
+  return (
+    matches <
+    placement
+  );
+};
+
+
 export const expectedScore = (
   ownRating,
   opponentRating,
@@ -124,319 +148,304 @@ export const expectedScore = (
 };
 
 
-export const isProvisionalPair = ({
-  matchesPlayed,
-  placementMatches =
-    DEFAULT_PLACEMENT_MATCHES,
-}) => {
-  const matches =
+export const getOfficialPairRatingFloor = (
+  rating,
+) => {
+  const normalizedRating =
     integerAtLeastZero(
-      matchesPlayed,
-      "matchesPlayed",
-    );
-
-  const placement =
-    positiveInteger(
-      placementMatches,
-      "placementMatches",
+      rating,
+      "rating",
     );
 
   return (
-    matches <
-    placement
+    normalizedRating >=
+      OFFICIAL_ELO_FLOOR
+      ? OFFICIAL_ELO_FLOOR
+      : 0
   );
 };
+
+
+export const calculateOfficialPairMatchRating =
+  ({
+    rating,
+    opponentRating,
+    won,
+  }) => {
+    const normalizedRating =
+      integerAtLeastZero(
+        rating,
+        "rating",
+      );
+
+    const normalizedOpponentRating =
+      integerAtLeastZero(
+        opponentRating,
+        "opponentRating",
+      );
+
+    if (
+      typeof won !==
+      "boolean"
+    ) {
+      throw new DoublesPairRatingError(
+        "won debe ser boolean.",
+        "invalid_match_result",
+        400,
+        {
+          won,
+        },
+      );
+    }
+
+    const expectation =
+      expectedScore(
+        normalizedRating,
+        normalizedOpponentRating,
+      );
+
+    const actual =
+      won
+        ? 1
+        : 0;
+
+    const rawChange =
+      Math.round(
+        DOUBLES_OFFICIAL_K *
+        (
+          actual -
+          expectation
+        ),
+      );
+
+    const floor =
+      getOfficialPairRatingFloor(
+        normalizedRating,
+      );
+
+    const ratingAfter =
+      Math.max(
+        floor,
+        normalizedRating +
+        rawChange,
+      );
+
+    return {
+      rating_before:
+        normalizedRating,
+
+      opponent_rating:
+        normalizedOpponentRating,
+
+      expected_score:
+        expectation,
+
+      actual_score:
+        actual,
+
+      k_factor:
+        DOUBLES_OFFICIAL_K,
+
+      raw_change:
+        rawChange,
+
+      elo_change:
+        ratingAfter -
+        normalizedRating,
+
+      rating_after:
+        ratingAfter,
+
+      floor,
+    };
+  };
+
+
+export const calculateOfficialDoublesMatchRatings =
+  ({
+    side1Rating,
+    side2Rating,
+    winnerSide,
+  }) => {
+    const normalizedWinnerSide =
+      Number(
+        winnerSide,
+      );
+
+    if (
+      normalizedWinnerSide !==
+        1 &&
+      normalizedWinnerSide !==
+        2
+    ) {
+      throw new DoublesPairRatingError(
+        "winnerSide debe ser 1 o 2.",
+        "invalid_winner_side",
+        400,
+        {
+          winnerSide,
+        },
+      );
+    }
+
+    return {
+      winner_side:
+        normalizedWinnerSide,
+
+      side1:
+        calculateOfficialPairMatchRating({
+          rating:
+            side1Rating,
+
+          opponentRating:
+            side2Rating,
+
+          won:
+            normalizedWinnerSide ===
+            1,
+        }),
+
+      side2:
+        calculateOfficialPairMatchRating({
+          rating:
+            side2Rating,
+
+          opponentRating:
+            side1Rating,
+
+          won:
+            normalizedWinnerSide ===
+            2,
+        }),
+    };
+  };
 
 
 export const getPairKFactor = ({
   matchesPlayed,
   placementMatches =
     DEFAULT_PLACEMENT_MATCHES,
-}) =>
-  isProvisionalPair({
+}) => {
+  if (
+    isProvisionalPair({
+      matchesPlayed,
+      placementMatches,
+    })
+  ) {
+    return null;
+  }
+
+  return DOUBLES_OFFICIAL_K;
+};
+
+
+export const calculatePairMatchRating =
+  ({
+    rating,
+    opponentRating,
     matchesPlayed,
-    placementMatches,
-  })
-    ? DOUBLES_PROVISIONAL_K
-    : DOUBLES_OFFICIAL_K;
+    placementMatches =
+      DEFAULT_PLACEMENT_MATCHES,
+    won,
+  }) => {
+    if (
+      isProvisionalPair({
+        matchesPlayed,
+        placementMatches,
+      })
+    ) {
+      throw new DoublesPairRatingError(
+        "Una pareja provisional no usa Elo partido a partido. Debe completar su placement.",
+        "pair_still_in_placement",
+        409,
+        {
+          matches_played:
+            Number(
+              matchesPlayed,
+            ),
 
+          placement_matches:
+            Number(
+              placementMatches,
+            ),
+        },
+      );
+    }
 
-export const getPairRatingFloor = ({
-  rating,
-  matchesPlayed,
-  placementMatches =
-    DEFAULT_PLACEMENT_MATCHES,
-}) => {
-  const normalizedRating =
-    integerAtLeastZero(
+    return calculateOfficialPairMatchRating({
       rating,
-      "rating",
-    );
-
-  const provisional =
-    isProvisionalPair({
-      matchesPlayed,
-      placementMatches,
-    });
-
-  if (provisional) {
-    return 0;
-  }
-
-  return (
-    normalizedRating >= 100
-      ? 100
-      : 0
-  );
-};
-
-
-export const calculatePairMatchRating = ({
-  rating,
-  opponentRating,
-  matchesPlayed,
-  placementMatches =
-    DEFAULT_PLACEMENT_MATCHES,
-  won,
-}) => {
-  const normalizedRating =
-    integerAtLeastZero(
-      rating,
-      "rating",
-    );
-
-  const normalizedOpponentRating =
-    integerAtLeastZero(
       opponentRating,
-      "opponentRating",
-    );
-
-  const normalizedMatchesPlayed =
-    integerAtLeastZero(
-      matchesPlayed,
-      "matchesPlayed",
-    );
-
-  const normalizedPlacementMatches =
-    positiveInteger(
-      placementMatches,
-      "placementMatches",
-    );
-
-  if (
-    typeof won !==
-    "boolean"
-  ) {
-    throw new DoublesPairRatingError(
-      "won debe ser boolean.",
-      "invalid_match_result",
-      400,
-      {
-        won,
-      },
-    );
-  }
-
-  const provisionalBefore =
-    isProvisionalPair({
-      matchesPlayed:
-        normalizedMatchesPlayed,
-
-      placementMatches:
-        normalizedPlacementMatches,
+      won,
     });
-
-  const k =
-    getPairKFactor({
-      matchesPlayed:
-        normalizedMatchesPlayed,
-
-      placementMatches:
-        normalizedPlacementMatches,
-    });
-
-  const expectation =
-    expectedScore(
-      normalizedRating,
-      normalizedOpponentRating,
-    );
-
-  const actual =
-    won
-      ? 1
-      : 0;
-
-  const rawChange =
-    Math.round(
-      k *
-      (
-        actual -
-        expectation
-      ),
-    );
-
-  const floor =
-    getPairRatingFloor({
-      rating:
-        normalizedRating,
-
-      matchesPlayed:
-        normalizedMatchesPlayed,
-
-      placementMatches:
-        normalizedPlacementMatches,
-    });
-
-  const ratingAfter =
-    Math.max(
-      floor,
-      normalizedRating +
-        rawChange,
-    );
-
-  const eloChange =
-    ratingAfter -
-    normalizedRating;
-
-  const matchesPlayedAfter =
-    normalizedMatchesPlayed +
-    1;
-
-  const placementCompleted =
-    provisionalBefore &&
-    matchesPlayedAfter >=
-      normalizedPlacementMatches;
-
-  return {
-    rating_before:
-      normalizedRating,
-
-    opponent_rating:
-      normalizedOpponentRating,
-
-    expected_score:
-      expectation,
-
-    actual_score:
-      actual,
-
-    k_factor:
-      k,
-
-    raw_change:
-      rawChange,
-
-    elo_change:
-      eloChange,
-
-    rating_after:
-      ratingAfter,
-
-    matches_played_before:
-      normalizedMatchesPlayed,
-
-    matches_played_after:
-      matchesPlayedAfter,
-
-    provisional_before:
-      provisionalBefore,
-
-    provisional_after:
-      matchesPlayedAfter <
-      normalizedPlacementMatches,
-
-    placement_completed:
-      placementCompleted,
-
-    floor,
   };
-};
 
 
-export const calculateDoublesMatchRatings = ({
-  side1Rating,
-  side2Rating,
-  side1MatchesPlayed,
-  side2MatchesPlayed,
-  placementMatches =
-    DEFAULT_PLACEMENT_MATCHES,
-  winnerSide,
-}) => {
-  const normalizedWinnerSide =
-    Number(
+export const calculateDoublesMatchRatings =
+  ({
+    side1Rating,
+    side2Rating,
+    side1MatchesPlayed,
+    side2MatchesPlayed,
+    placementMatches =
+      DEFAULT_PLACEMENT_MATCHES,
+    winnerSide,
+  }) => {
+    if (
+      isProvisionalPair({
+        matchesPlayed:
+          side1MatchesPlayed,
+
+        placementMatches,
+      }) ||
+      isProvisionalPair({
+        matchesPlayed:
+          side2MatchesPlayed,
+
+        placementMatches,
+      })
+    ) {
+      throw new DoublesPairRatingError(
+        "El partido incluye una pareja provisional y debe pasar por el motor de placement.",
+        "doubles_placement_required",
+        409,
+        {
+          side1_matches_played:
+            Number(
+              side1MatchesPlayed,
+            ),
+
+          side2_matches_played:
+            Number(
+              side2MatchesPlayed,
+            ),
+
+          placement_matches:
+            Number(
+              placementMatches,
+            ),
+        },
+      );
+    }
+
+    return calculateOfficialDoublesMatchRatings({
+      side1Rating,
+      side2Rating,
       winnerSide,
-    );
-
-  if (
-    normalizedWinnerSide !== 1 &&
-    normalizedWinnerSide !== 2
-  ) {
-    throw new DoublesPairRatingError(
-      "winnerSide debe ser 1 o 2.",
-      "invalid_winner_side",
-      400,
-      {
-        winnerSide,
-      },
-    );
-  }
-
-  const side1 =
-    calculatePairMatchRating({
-      rating:
-        side1Rating,
-
-      opponentRating:
-        side2Rating,
-
-      matchesPlayed:
-        side1MatchesPlayed,
-
-      placementMatches,
-
-      won:
-        normalizedWinnerSide ===
-        1,
     });
-
-  const side2 =
-    calculatePairMatchRating({
-      rating:
-        side2Rating,
-
-      opponentRating:
-        side1Rating,
-
-      matchesPlayed:
-        side2MatchesPlayed,
-
-      placementMatches,
-
-      won:
-        normalizedWinnerSide ===
-        2,
-    });
-
-  return {
-    winner_side:
-      normalizedWinnerSide,
-
-    side1,
-
-    side2,
   };
-};
 
 
 export default {
   DOUBLES_INITIAL_ELO,
-  DOUBLES_PROVISIONAL_K,
   DOUBLES_OFFICIAL_K,
   DEFAULT_PLACEMENT_MATCHES,
+  OFFICIAL_ELO_FLOOR,
   expectedScore,
   isProvisionalPair,
+  getOfficialPairRatingFloor,
+  calculateOfficialPairMatchRating,
+  calculateOfficialDoublesMatchRatings,
   getPairKFactor,
-  getPairRatingFloor,
   calculatePairMatchRating,
   calculateDoublesMatchRatings,
 };

@@ -69,21 +69,6 @@ const requireClient = (
 };
 
 
-/*
-  ============================================================
-  IDENTIDAD CANÓNICA DE PAREJA
-  ============================================================
-
-  La pareja 10/20 es exactamente la misma
-  identidad competitiva que 20/10.
-
-  Siempre persistimos:
-  player1_id = menor ID
-  player2_id = mayor ID
-  ============================================================
-*/
-
-
 export const canonicalizePairPlayerIds =
   (
     playerAId,
@@ -115,10 +100,16 @@ export const canonicalizePairPlayerIds =
 
     return {
       player1_id:
-        Math.min(a, b),
+        Math.min(
+          a,
+          b,
+        ),
 
       player2_id:
-        Math.max(a, b),
+        Math.max(
+          a,
+          b,
+        ),
     };
   };
 
@@ -206,18 +197,13 @@ export const getOtherPairMemberId =
 
         pair_id:
           pair.id
-            ? Number(pair.id)
+            ? Number(
+                pair.id,
+              )
             : null,
       },
     );
   };
-
-
-/*
-  ============================================================
-  COMPETICIÓN
-  ============================================================
-*/
 
 
 const getDoublesCompetition =
@@ -351,13 +337,6 @@ const getDoublesCompetition =
   };
 
 
-/*
-  ============================================================
-  VALIDACIÓN DE JUGADORES
-  ============================================================
-*/
-
-
 const getEligiblePairPlayers =
   async (
     client,
@@ -401,8 +380,12 @@ const getEligiblePairPlayers =
     ) {
       const foundIds =
         result.rows.map(
-          (row) =>
-            Number(row.id),
+          (
+            row,
+          ) =>
+            Number(
+              row.id,
+            ),
         );
 
       const missingIds =
@@ -410,7 +393,9 @@ const getEligiblePairPlayers =
           player1Id,
           player2Id,
         ].filter(
-          (id) =>
+          (
+            id,
+          ) =>
             !foundIds.includes(
               id,
             ),
@@ -441,7 +426,9 @@ const getEligiblePairPlayers =
           403,
           {
             user_id:
-              Number(user.id),
+              Number(
+                user.id,
+              ),
 
             role:
               user.role,
@@ -459,10 +446,13 @@ const getEligiblePairPlayers =
           403,
           {
             user_id:
-              Number(user.id),
+              Number(
+                user.id,
+              ),
 
             verification_status:
-              user.verification_status,
+              user
+                .verification_status,
           },
         );
       }
@@ -477,7 +467,9 @@ const getEligiblePairPlayers =
           403,
           {
             user_id:
-              Number(user.id),
+              Number(
+                user.id,
+              ),
 
             user_city:
               user.city,
@@ -498,7 +490,9 @@ const getEligiblePairPlayers =
           403,
           {
             user_id:
-              Number(user.id),
+              Number(
+                user.id,
+              ),
 
             user_gender:
               user.gender,
@@ -512,13 +506,6 @@ const getEligiblePairPlayers =
 
     return result.rows;
   };
-
-
-/*
-  ============================================================
-  BUSCAR POR ID
-  ============================================================
-*/
 
 
 export const getCompetitionPairById =
@@ -578,13 +565,6 @@ export const getCompetitionPairById =
       null
     );
   };
-
-
-/*
-  ============================================================
-  BUSCAR POR DOS JUGADORES
-  ============================================================
-*/
 
 
 export const getCompetitionPair =
@@ -663,21 +643,6 @@ export const getCompetitionPair =
   };
 
 
-/*
-  ============================================================
-  CREAR O REUTILIZAR PAREJA
-  ============================================================
-
-  - valida competición dobles;
-  - valida ambos usuarios;
-  - canonicaliza A/B;
-  - si ya existe, la reutiliza;
-  - si no existe, rating inicial 1000;
-  - nunca resetea estadísticas.
-  ============================================================
-*/
-
-
 export const ensureCompetitionPair =
   async (
     client,
@@ -728,9 +693,14 @@ export const ensureCompetitionPair =
     );
 
     /*
-      ON CONFLICT garantiza que dos requests
-      simultáneos no puedan crear dos veces
-      la misma pareja.
+      Nueva pareja:
+      - rating 0;
+      - 0/5 nivelatorios;
+      - no posee Elo oficial todavía.
+
+      Si la combinación ya existía,
+      ON CONFLICT no toca absolutamente
+      ningún dato competitivo.
     */
 
     await client.query(
@@ -751,7 +721,7 @@ export const ensureCompetitionPair =
         $1,
         $2,
         $3,
-        1000,
+        0,
         0,
         0,
         0,

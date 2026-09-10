@@ -1,7 +1,18 @@
 import {
-  calculateDoublesMatchRatings,
+  PLACEMENT_MATCHES,
+} from "./placementLevel.service.js";
+
+import {
+  calculateOfficialPairMatchRating,
   DoublesPairRatingError,
 } from "./doublesPairRating.service.js";
+
+import {
+  getPairPlacementOpponentReference,
+  insertPairPlacementEvidence,
+  calculateCompletedPairPlacement,
+  DoublesPairPlacementError,
+} from "./doublesPairPlacement.service.js";
 
 
 export class DoublesPairSettlementError
@@ -84,7 +95,7 @@ const nonNegativeInteger = (
 };
 
 
-const requireClient = (
+const assertClient = (
   client,
 ) => {
   if (
@@ -94,7 +105,7 @@ const requireClient = (
   ) {
     throw new DoublesPairSettlementError(
       "Se requiere un cliente PostgreSQL válido.",
-      "invalid_database_client",
+      "database_client_missing",
       500,
     );
   }
@@ -107,7 +118,9 @@ const normalizePair = (
   ...row,
 
   id:
-    Number(row.id),
+    Number(
+      row.id,
+    ),
 
   competition_id:
     Number(
@@ -154,6 +167,35 @@ const normalizePair = (
       row.games_lost,
     ),
 });
+
+
+const normalizeServiceError = (
+  error,
+) => {
+  if (
+    error instanceof
+      DoublesPairSettlementError
+  ) {
+    return error;
+  }
+
+  if (
+    error instanceof
+      DoublesPairRatingError ||
+    error instanceof
+      DoublesPairPlacementError
+  ) {
+    return new DoublesPairSettlementError(
+      error.message,
+      error.reason,
+      error.statusCode ??
+        409,
+      error.details,
+    );
+  }
+
+  return error;
+};
 
 
 const lockPair =
@@ -258,6 +300,7 @@ const insertPairEloEvent =
       pairId,
       competitionId,
       matchId,
+      eventType,
       eloBefore,
       eloChange,
       eloAfter,
@@ -281,17 +324,18 @@ const insertPairEloEvent =
         $1,
         $2,
         $3,
-        'match_result',
         $4,
         $5,
         $6,
-        $7
+        $7,
+        $8
       )
       `,
       [
         pairId,
         competitionId,
         matchId,
+        eventType,
         eloBefore,
         eloChange,
         eloAfter,
@@ -356,7 +400,9 @@ const updatePairStats =
         `,
         [
           ratingAfter,
-          won,
+          Boolean(
+            won,
+          ),
           gamesWon,
           gamesLost,
           pairId,
@@ -381,6 +427,94 @@ const updatePairStats =
     return normalizePair(
       result.rows[0],
     );
+  };
+
+
+const overwritePairRating =
+  async (
+    client,
+    {
+      pairId,
+      rating,
+    },
+  ) => {
+    const result =
+      await client.query(
+        `
+        UPDATE competition_pairs
+
+        SET
+          rating = $1,
+
+          updated_at =
+            CURRENT_TIMESTAMP
+
+        WHERE
+          id = $2
+
+        RETURNING
+          *
+        `,
+        [
+          rating,
+          pairId,
+        ],
+      );
+
+    if (
+      result.rowCount !==
+      1
+    ) {
+      throw new DoublesPairSettlementError(
+        "No se pudo asignar el Elo inicial de placement.",
+        "placement_rating_update_failed",
+        500,
+        {
+          pair_id:
+            pairId,
+        },
+      );
+    }
+
+    return normalizePair(
+      result.rows[0],
+    );
+  };
+
+
+const createSettlement =
+  async (
+    client,
+    {
+      matchId,
+      competitionId,
+    },
+  ) => {
+    const result =
+      await client.query(
+        `
+        INSERT INTO competition_match_settlements (
+          match_id,
+          competition_id,
+          settled_at
+        )
+
+        VALUES (
+          $1,
+          $2,
+          CURRENT_TIMESTAMP
+        )
+
+        RETURNING
+          *
+        `,
+        [
+          matchId,
+          competitionId,
+        ],
+      );
+
+    return result.rows[0];
   };
 
 
@@ -417,7 +551,9 @@ export const calculateGamesBySide = (
       !set ||
       typeof set !==
         "object" ||
-      Array.isArray(set)
+      Array.isArray(
+        set,
+      )
     ) {
       throw new DoublesPairSettlementError(
         "Set inválido.",
@@ -455,6 +591,145 @@ export const calculateGamesBySide = (
 };
 
 
+const buildPairPlan =
+  async (
+    client,
+    {
+      pair,
+      opponent,
+      competitionId,
+      matchId,
+      won,
+    },
+  ) => {
+    const provisional =
+      pair.matches_played <
+      PLACEMENT_MATCHES;
+
+    if (
+      !provisional
+    ) {
+      const rating =
+        calculateOfficialPairMatchRating({
+          rating:
+            pair.rating,
+
+          opponentRating:
+            opponent.rating,
+
+          won,
+        });
+
+      return {
+        mode:
+          "official",
+
+        provisional_before:
+          false,
+
+        placement_match_number:
+          null,
+
+        placement_reference:
+          null,
+
+        rating_before:
+          pair.rating,
+
+        rating_after_match:
+          rating
+            .rating_after,
+
+        rating,
+
+        placement:
+          null,
+      };
+    }
+
+    const reference =
+      await getPairPlacementOpponentReference(
+        client,
+        {
+          opponent,
+
+          competitionId,
+        },
+      );
+
+    const placementMatchNumber =
+      pair.matches_played +
+      1;
+
+    await insertPairPlacementEvidence(
+      client,
+      {
+        pairId:
+          pair.id,
+
+        competitionId,
+
+        matchId,
+
+        opponentPairId:
+          opponent.id,
+
+        placementMatchNumber,
+
+        won,
+
+        reference,
+      },
+    );
+
+    return {
+      mode:
+        placementMatchNumber ===
+        PLACEMENT_MATCHES
+          ? "placement_completion"
+          : "placement",
+
+      provisional_before:
+        true,
+
+      placement_match_number:
+        placementMatchNumber,
+
+      placement_reference:
+        reference,
+
+      rating_before:
+        pair.rating,
+
+      /*
+        Mientras sigue provisional:
+        Elo visible = 0.
+      */
+
+      rating_after_match:
+        0,
+
+      rating:
+        {
+          rating_before:
+            pair.rating,
+
+          rating_after:
+            0,
+
+          elo_change:
+            -pair.rating,
+
+          k_factor:
+            null,
+        },
+
+      placement:
+        null,
+    };
+  };
+
+
 export const settleDoublesPairMatch =
   async (
     client,
@@ -468,358 +743,677 @@ export const settleDoublesPairMatch =
       placementMatches,
     },
   ) => {
-    requireClient(
+    assertClient(
       client,
     );
 
-    const normalizedMatchId =
-      positiveInteger(
-        matchId,
-        "matchId",
-      );
+    try {
+      const normalizedMatchId =
+        positiveInteger(
+          matchId,
+          "matchId",
+        );
 
-    const normalizedCompetitionId =
-      positiveInteger(
-        competitionId,
-        "competitionId",
-      );
+      const normalizedCompetitionId =
+        positiveInteger(
+          competitionId,
+          "competitionId",
+        );
 
-    const normalizedSide1PairId =
-      positiveInteger(
-        side1PairId,
-        "side1PairId",
-      );
+      const normalizedSide1PairId =
+        positiveInteger(
+          side1PairId,
+          "side1PairId",
+        );
 
-    const normalizedSide2PairId =
-      positiveInteger(
-        side2PairId,
-        "side2PairId",
-      );
+      const normalizedSide2PairId =
+        positiveInteger(
+          side2PairId,
+          "side2PairId",
+        );
 
-    const normalizedPlacementMatches =
-      positiveInteger(
-        placementMatches,
-        "placementMatches",
-      );
+      const normalizedPlacementMatches =
+        positiveInteger(
+          placementMatches,
+          "placementMatches",
+        );
 
-    const normalizedWinnerSide =
-      Number(
-        winnerSide,
-      );
+      if (
+        normalizedPlacementMatches !==
+        PLACEMENT_MATCHES
+      ) {
+        throw new DoublesPairSettlementError(
+          `Dobles debe utilizar ${PLACEMENT_MATCHES} partidos nivelatorios.`,
+          "invalid_placement_match_count",
+          409,
+          {
+            placement_matches:
+              normalizedPlacementMatches,
+          },
+        );
+      }
 
-    if (
-      normalizedWinnerSide !== 1 &&
-      normalizedWinnerSide !== 2
-    ) {
-      throw new DoublesPairSettlementError(
-        "winnerSide debe ser 1 o 2.",
-        "invalid_winner_side",
-        400,
-        {
+      const normalizedWinnerSide =
+        Number(
           winnerSide,
-        },
-      );
-    }
+        );
 
-    if (
-      normalizedSide1PairId ===
-      normalizedSide2PairId
-    ) {
-      throw new DoublesPairSettlementError(
-        "Una pareja no puede jugar contra sí misma.",
-        "same_pair_match",
-        409,
-      );
-    }
+      if (
+        normalizedWinnerSide !==
+          1 &&
+        normalizedWinnerSide !==
+          2
+      ) {
+        throw new DoublesPairSettlementError(
+          "winnerSide debe ser 1 o 2.",
+          "invalid_winner_side",
+          400,
+          {
+            winnerSide,
+          },
+        );
+      }
 
-    const existingSettlement =
-      await getExistingSettlement(
-        client,
-        normalizedMatchId,
-      );
+      if (
+        normalizedSide1PairId ===
+        normalizedSide2PairId
+      ) {
+        throw new DoublesPairSettlementError(
+          "Una pareja no puede jugar contra sí misma.",
+          "same_pair_match",
+          409,
+        );
+      }
 
-    if (
-      existingSettlement
-    ) {
-      throw new DoublesPairSettlementError(
-        "El partido ya fue liquidado competitivamente.",
-        "match_already_settled",
-        409,
-        {
-          match_id:
-            normalizedMatchId,
+      const existingSettlement =
+        await getExistingSettlement(
+          client,
+          normalizedMatchId,
+        );
 
-          settled_at:
-            existingSettlement
-              .settled_at,
-        },
-      );
-    }
+      if (
+        existingSettlement
+      ) {
+        throw new DoublesPairSettlementError(
+          "El partido ya fue liquidado competitivamente.",
+          "match_already_settled",
+          409,
+          {
+            match_id:
+              normalizedMatchId,
 
-    /*
-      Bloqueamos siempre en orden de ID.
-      Esto evita deadlocks si dos operaciones
-      intentan tomar las mismas parejas.
-    */
+            settled_at:
+              existingSettlement
+                .settled_at,
+          },
+        );
+      }
 
-    const orderedPairIds =
-      [
-        normalizedSide1PairId,
-        normalizedSide2PairId,
-      ].sort(
-        (a, b) =>
-          a - b,
-      );
+      /*
+        Lock determinista:
+        evita deadlocks.
+      */
 
-    const lockedById =
-      new Map();
+      const pairIds =
+        [
+          normalizedSide1PairId,
+          normalizedSide2PairId,
+        ].sort(
+          (
+            a,
+            b,
+          ) =>
+            a - b,
+        );
 
-    for (
-      const pairId of
-      orderedPairIds
-    ) {
-      const pair =
-        await lockPair(
+      const pairs =
+        new Map();
+
+      for (
+        const pairId of
+        pairIds
+      ) {
+        const pair =
+          await lockPair(
+            client,
+            {
+              pairId,
+
+              competitionId:
+                normalizedCompetitionId,
+            },
+          );
+
+        pairs.set(
+          pairId,
+          pair,
+        );
+      }
+
+      const side1Pair =
+        pairs.get(
+          normalizedSide1PairId,
+        );
+
+      const side2Pair =
+        pairs.get(
+          normalizedSide2PairId,
+        );
+
+      const side1Won =
+        normalizedWinnerSide ===
+        1;
+
+      const side2Won =
+        !side1Won;
+
+      const games =
+        calculateGamesBySide(
+          normalizedScore,
+        );
+
+      /*
+        MUY IMPORTANTE:
+
+        Las dos referencias se congelan
+        usando el estado PREVIO al partido.
+
+        Si ambos eran provisionales,
+        ninguno "ve" al otro como oficial
+        aunque ambos completen 5/5
+        simultáneamente.
+      */
+
+      const side1Plan =
+        await buildPairPlan(
           client,
           {
-            pairId,
+            pair:
+              side1Pair,
+
+            opponent:
+              side2Pair,
+
+            competitionId:
+              normalizedCompetitionId,
+
+            matchId:
+              normalizedMatchId,
+
+            won:
+              side1Won,
+          },
+        );
+
+      const side2Plan =
+        await buildPairPlan(
+          client,
+          {
+            pair:
+              side2Pair,
+
+            opponent:
+              side1Pair,
+
+            competitionId:
+              normalizedCompetitionId,
+
+            matchId:
+              normalizedMatchId,
+
+            won:
+              side2Won,
+          },
+        );
+
+      /*
+        Primero aplicamos estadísticas.
+
+        Las parejas todavía provisionales
+        permanecen rating 0.
+
+        Las oficiales reciben Elo K32.
+      */
+
+      let side1Updated =
+        await updatePairStats(
+          client,
+          {
+            pairId:
+              side1Pair.id,
+
+            ratingAfter:
+              side1Plan
+                .rating_after_match,
+
+            won:
+              side1Won,
+
+            gamesWon:
+              games.side1_games,
+
+            gamesLost:
+              games.side2_games,
+          },
+        );
+
+      let side2Updated =
+        await updatePairStats(
+          client,
+          {
+            pairId:
+              side2Pair.id,
+
+            ratingAfter:
+              side2Plan
+                .rating_after_match,
+
+            won:
+              side2Won,
+
+            gamesWon:
+              games.side2_games,
+
+            gamesLost:
+              games.side1_games,
+          },
+        );
+
+      /*
+        Placement completion.
+
+        Si ambos llegan a 5/5 en el mismo
+        partido, ambos calculan su ingreso
+        contra el ranking oficial ANTERIOR,
+        excluyendo a las dos parejas de este
+        encuentro.
+
+        Así el orden de ejecución dentro de
+        la transacción no altera el resultado.
+      */
+
+      const completingPairIds =
+        [];
+
+      if (
+        side1Plan.mode ===
+        "placement_completion"
+      ) {
+        completingPairIds.push(
+          side1Pair.id,
+        );
+      }
+
+      if (
+        side2Plan.mode ===
+        "placement_completion"
+      ) {
+        completingPairIds.push(
+          side2Pair.id,
+        );
+      }
+
+      if (
+        side1Plan.mode ===
+        "placement_completion"
+      ) {
+        const placement =
+          await calculateCompletedPairPlacement(
+            client,
+            {
+              pairId:
+                side1Pair.id,
+
+              competitionId:
+                normalizedCompetitionId,
+
+              excludePairIds:
+                completingPairIds,
+            },
+          );
+
+        side1Plan.placement =
+          placement;
+
+        side1Plan.rating_after_match =
+          placement.target_elo;
+
+        side1Plan.rating = {
+          rating_before:
+            0,
+
+          rating_after:
+            placement
+              .target_elo,
+
+          elo_change:
+            placement
+              .target_elo,
+
+          k_factor:
+            null,
+
+          placement_completed:
+            true,
+
+          target_position:
+            placement
+              .target_position,
+
+          placement_percentile:
+            placement
+              .placement_percentile,
+        };
+
+        side1Updated =
+          await overwritePairRating(
+            client,
+            {
+              pairId:
+                side1Pair.id,
+
+              rating:
+                placement
+                  .target_elo,
+            },
+          );
+
+        await insertPairEloEvent(
+          client,
+          {
+            pairId:
+              side1Pair.id,
+
+            competitionId:
+              normalizedCompetitionId,
+
+            matchId:
+              normalizedMatchId,
+
+            eventType:
+              "placement_completed",
+
+            eloBefore:
+              0,
+
+            eloChange:
+              placement
+                .target_elo,
+
+            eloAfter:
+              placement
+                .target_elo,
+
+            description:
+              `Placement de pareja completado en partido #${normalizedMatchId}. Percentil ${placement.placement_percentile}. Posición objetivo #${placement.target_position}.`,
+          },
+        );
+      } else if (
+        side1Plan.mode ===
+        "official"
+      ) {
+        await insertPairEloEvent(
+          client,
+          {
+            pairId:
+              side1Pair.id,
+
+            competitionId:
+              normalizedCompetitionId,
+
+            matchId:
+              normalizedMatchId,
+
+            eventType:
+              "match_result",
+
+            eloBefore:
+              side1Plan
+                .rating
+                .rating_before,
+
+            eloChange:
+              side1Plan
+                .rating
+                .elo_change,
+
+            eloAfter:
+              side1Plan
+                .rating
+                .rating_after,
+
+            description:
+              side1Won
+                ? `Victoria de pareja en partido #${normalizedMatchId}`
+                : `Derrota de pareja en partido #${normalizedMatchId}`,
+          },
+        );
+      }
+
+      if (
+        side2Plan.mode ===
+        "placement_completion"
+      ) {
+        const placement =
+          await calculateCompletedPairPlacement(
+            client,
+            {
+              pairId:
+                side2Pair.id,
+
+              competitionId:
+                normalizedCompetitionId,
+
+              excludePairIds:
+                completingPairIds,
+            },
+          );
+
+        side2Plan.placement =
+          placement;
+
+        side2Plan.rating_after_match =
+          placement.target_elo;
+
+        side2Plan.rating = {
+          rating_before:
+            0,
+
+          rating_after:
+            placement
+              .target_elo,
+
+          elo_change:
+            placement
+              .target_elo,
+
+          k_factor:
+            null,
+
+          placement_completed:
+            true,
+
+          target_position:
+            placement
+              .target_position,
+
+          placement_percentile:
+            placement
+              .placement_percentile,
+        };
+
+        side2Updated =
+          await overwritePairRating(
+            client,
+            {
+              pairId:
+                side2Pair.id,
+
+              rating:
+                placement
+                  .target_elo,
+            },
+          );
+
+        await insertPairEloEvent(
+          client,
+          {
+            pairId:
+              side2Pair.id,
+
+            competitionId:
+              normalizedCompetitionId,
+
+            matchId:
+              normalizedMatchId,
+
+            eventType:
+              "placement_completed",
+
+            eloBefore:
+              0,
+
+            eloChange:
+              placement
+                .target_elo,
+
+            eloAfter:
+              placement
+                .target_elo,
+
+            description:
+              `Placement de pareja completado en partido #${normalizedMatchId}. Percentil ${placement.placement_percentile}. Posición objetivo #${placement.target_position}.`,
+          },
+        );
+      } else if (
+        side2Plan.mode ===
+        "official"
+      ) {
+        await insertPairEloEvent(
+          client,
+          {
+            pairId:
+              side2Pair.id,
+
+            competitionId:
+              normalizedCompetitionId,
+
+            matchId:
+              normalizedMatchId,
+
+            eventType:
+              "match_result",
+
+            eloBefore:
+              side2Plan
+                .rating
+                .rating_before,
+
+            eloChange:
+              side2Plan
+                .rating
+                .elo_change,
+
+            eloAfter:
+              side2Plan
+                .rating
+                .rating_after,
+
+            description:
+              side2Won
+                ? `Victoria de pareja en partido #${normalizedMatchId}`
+                : `Derrota de pareja en partido #${normalizedMatchId}`,
+          },
+        );
+      }
+
+      /*
+        En partidos 1-4 del placement no creamos
+        pair_elo_event porque el Elo sigue en 0.
+
+        La evidencia queda registrada en
+        pair_placement_match_evidence.
+      */
+
+      const settlement =
+        await createSettlement(
+          client,
+          {
+            matchId:
+              normalizedMatchId,
 
             competitionId:
               normalizedCompetitionId,
           },
         );
 
-      lockedById.set(
-        pairId,
-        pair,
-      );
-    }
+      return {
+        settlement,
 
-    const side1Pair =
-      lockedById.get(
-        normalizedSide1PairId,
-      );
+        winner_side:
+          normalizedWinnerSide,
 
-    const side2Pair =
-      lockedById.get(
-        normalizedSide2PairId,
-      );
+        games,
 
-    const games =
-      calculateGamesBySide(
-        normalizedScore,
-      );
+        side1: {
+          pair_before:
+            side1Pair,
 
-    let ratingPlan;
+          pair_after:
+            side1Updated,
 
-    try {
-      ratingPlan =
-        calculateDoublesMatchRatings({
-          side1Rating:
-            side1Pair.rating,
+          mode:
+            side1Plan.mode,
 
-          side2Rating:
-            side2Pair.rating,
+          placement_match_number:
+            side1Plan
+              .placement_match_number,
 
-          side1MatchesPlayed:
-            side1Pair
-              .matches_played,
+          placement_reference:
+            side1Plan
+              .placement_reference,
 
-          side2MatchesPlayed:
-            side2Pair
-              .matches_played,
+          placement:
+            side1Plan
+              .placement,
 
-          placementMatches:
-            normalizedPlacementMatches,
+          rating:
+            side1Plan
+              .rating,
+        },
 
-          winnerSide:
-            normalizedWinnerSide,
-        });
+        side2: {
+          pair_before:
+            side2Pair,
+
+          pair_after:
+            side2Updated,
+
+          mode:
+            side2Plan.mode,
+
+          placement_match_number:
+            side2Plan
+              .placement_match_number,
+
+          placement_reference:
+            side2Plan
+              .placement_reference,
+
+          placement:
+            side2Plan
+              .placement,
+
+          rating:
+            side2Plan
+              .rating,
+        },
+      };
     } catch (error) {
-      if (
-        error instanceof
-        DoublesPairRatingError
-      ) {
-        throw new DoublesPairSettlementError(
-          error.message,
-          error.reason,
-          error.statusCode,
-          error.details,
-        );
-      }
-
-      throw error;
+      throw normalizeServiceError(
+        error,
+      );
     }
-
-    const side1Won =
-      normalizedWinnerSide ===
-      1;
-
-    const side2Won =
-      normalizedWinnerSide ===
-      2;
-
-    const side1Updated =
-      await updatePairStats(
-        client,
-        {
-          pairId:
-            side1Pair.id,
-
-          ratingAfter:
-            ratingPlan.side1
-              .rating_after,
-
-          won:
-            side1Won,
-
-          gamesWon:
-            games.side1_games,
-
-          gamesLost:
-            games.side2_games,
-        },
-      );
-
-    const side2Updated =
-      await updatePairStats(
-        client,
-        {
-          pairId:
-            side2Pair.id,
-
-          ratingAfter:
-            ratingPlan.side2
-              .rating_after,
-
-          won:
-            side2Won,
-
-          gamesWon:
-            games.side2_games,
-
-          gamesLost:
-            games.side1_games,
-        },
-      );
-
-    await insertPairEloEvent(
-      client,
-      {
-        pairId:
-          side1Pair.id,
-
-        competitionId:
-          normalizedCompetitionId,
-
-        matchId:
-          normalizedMatchId,
-
-        eloBefore:
-          ratingPlan.side1
-            .rating_before,
-
-        eloChange:
-          ratingPlan.side1
-            .elo_change,
-
-        eloAfter:
-          ratingPlan.side1
-            .rating_after,
-
-        description:
-          side1Won
-            ? `Victoria de pareja en partido #${normalizedMatchId}`
-            : `Derrota de pareja en partido #${normalizedMatchId}`,
-      },
-    );
-
-    await insertPairEloEvent(
-      client,
-      {
-        pairId:
-          side2Pair.id,
-
-        competitionId:
-          normalizedCompetitionId,
-
-        matchId:
-          normalizedMatchId,
-
-        eloBefore:
-          ratingPlan.side2
-            .rating_before,
-
-        eloChange:
-          ratingPlan.side2
-            .elo_change,
-
-        eloAfter:
-          ratingPlan.side2
-            .rating_after,
-
-        description:
-          side2Won
-            ? `Victoria de pareja en partido #${normalizedMatchId}`
-            : `Derrota de pareja en partido #${normalizedMatchId}`,
-      },
-    );
-
-    const settlementResult =
-      await client.query(
-        `
-        INSERT INTO competition_match_settlements (
-          match_id,
-          competition_id,
-          settled_at
-        )
-
-        VALUES (
-          $1,
-          $2,
-          CURRENT_TIMESTAMP
-        )
-
-        RETURNING
-          *
-        `,
-        [
-          normalizedMatchId,
-          normalizedCompetitionId,
-        ],
-      );
-
-    return {
-      settlement:
-        settlementResult.rows[0],
-
-      winner_side:
-        normalizedWinnerSide,
-
-      games,
-
-      side1: {
-        pair_before:
-          side1Pair,
-
-        pair_after:
-          side1Updated,
-
-        rating:
-          ratingPlan.side1,
-      },
-
-      side2: {
-        pair_before:
-          side2Pair,
-
-        pair_after:
-          side2Updated,
-
-        rating:
-          ratingPlan.side2,
-      },
-    };
   };
 
 
