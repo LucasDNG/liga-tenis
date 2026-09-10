@@ -1,11 +1,16 @@
-import { Router } from "express";
+import {
+  Router,
+} from "express";
+
+import {
+  getRankingCompetitions,
+} from "../controllers/ranking.controllers.js";
 
 import {
   getRanking,
-  getRankingCompetitions,
   getHistoricalElo,
   getOfficialRankingOnly,
-} from "../controllers/ranking.controllers.js";
+} from "../controllers/rankingDispatcher.controllers.js";
 
 
 const router =
@@ -18,6 +23,7 @@ const router =
   ============================================================
 */
 
+
 router.get(
   "/ranking/competitions",
   getRankingCompetitions,
@@ -29,20 +35,19 @@ router.get(
   RANKING COMPLETO
   ============================================================
 
-  Ejemplos:
+  Singles:
+    /ranking?format=singles&gender=male
+    /ranking?format=singles&gender=female
 
-  /ranking
-    → singles male por compatibilidad
+  Dobles:
+    /ranking?format=doubles&gender=male
+    /ranking?format=doubles&gender=female
 
-  /ranking?format=singles&gender=male
-
-  /ranking?format=singles&gender=female
-
-  /ranking?format=doubles&gender=male
-
-  /ranking?format=doubles&gender=female
+  Sin format:
+    singles por compatibilidad.
   ============================================================
 */
+
 
 router.get(
   "/ranking",
@@ -56,6 +61,7 @@ router.get(
   ============================================================
 */
 
+
 router.get(
   "/ranking/official",
   getOfficialRankingOnly,
@@ -64,9 +70,17 @@ router.get(
 
 /*
   ============================================================
-  HISTÓRICO ELO POR COMPETICIÓN
+  HISTÓRICO ELO
+  ============================================================
+
+  Singles:
+    elo_events
+
+  Dobles:
+    pair_elo_events
   ============================================================
 */
+
 
 router.get(
   "/ranking/historical-elo",
