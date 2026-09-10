@@ -4,10 +4,13 @@ import {
 
 import {
   getMyMatches,
+} from "../controllers/matches.controllers.js";
+
+import {
   submitMatchResult,
   confirmMatchResult,
   rejectMatchResult,
-} from "../controllers/matches.controllers.js";
+} from "../controllers/matchResultsDispatcher.controllers.js";
 
 import {
   cancelMatchUnilaterally,
@@ -30,10 +33,35 @@ router.use(
 );
 
 
+/*
+  ============================================================
+  MIS PARTIDOS
+  ============================================================
+*/
+
+
 router.get(
   "/matches",
   getMyMatches,
 );
+
+
+/*
+  ============================================================
+  RESULTADOS
+  ============================================================
+
+  El dispatcher resuelve automáticamente:
+
+  singles
+    → controlador histórico de singles
+
+  doubles
+    → controlador por lados/parejas
+
+  El frontend utiliza exactamente los mismos endpoints.
+  ============================================================
+*/
 
 
 router.patch(
@@ -60,6 +88,7 @@ router.patch(
   ============================================================
 */
 
+
 router.patch(
   "/matches/:id/cancel",
   cancelMatchUnilaterally,
@@ -71,6 +100,7 @@ router.patch(
   CANCELACIÓN DE COMÚN ACUERDO
   ============================================================
 */
+
 
 router.patch(
   "/matches/:id/cancel-request",

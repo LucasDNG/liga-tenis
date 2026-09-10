@@ -18,9 +18,7 @@ const positiveInteger = (
     Number(value);
 
   if (
-    !Number.isInteger(
-      number,
-    ) ||
+    !Number.isInteger(number) ||
     number <= 0
   ) {
     throw new DoublesChallengeError(
@@ -79,6 +77,21 @@ export const createDoublesMatchFromChallenge =
       );
     }
 
+    if (
+      !challenge.venue ||
+      !challenge.scheduled_at
+    ) {
+      throw new DoublesChallengeError(
+        "El desafío debe tener lugar, fecha y hora antes de crear el partido.",
+        "challenge_schedule_missing",
+        409,
+        {
+          challenge_id:
+            normalizedChallengeId,
+        },
+      );
+    }
+
     const existingMatch =
       await client.query(
         `
@@ -88,7 +101,9 @@ export const createDoublesMatchFromChallenge =
           competition_id,
           side1_pair_id,
           side2_pair_id,
-          status
+          status,
+          venue,
+          scheduled_at
 
         FROM matches
 
@@ -117,6 +132,9 @@ export const createDoublesMatchFromChallenge =
 
         match:
           existingMatch.rows[0],
+
+        participants:
+          null,
       };
     }
 
@@ -178,10 +196,10 @@ export const createDoublesMatchFromChallenge =
     );
 
     /*
-      player1_id/player2_id se mantienen por compatibilidad
-      temporal con código histórico de singles.
+      player1_id / player2_id permanecen
+      temporalmente por compatibilidad.
 
-      La autoridad del partido de dobles está en:
+      Autoridad real:
       - match_participants
       - side1_pair_id
       - side2_pair_id
@@ -197,6 +215,8 @@ export const createDoublesMatchFromChallenge =
           player2_id,
           side1_pair_id,
           side2_pair_id,
+          venue,
+          scheduled_at,
           status
         )
 
@@ -207,7 +227,9 @@ export const createDoublesMatchFromChallenge =
           $4,
           $5,
           $6,
-          'accepted'
+          $7,
+          $8,
+          'pending'
         )
 
         RETURNING
@@ -215,6 +237,7 @@ export const createDoublesMatchFromChallenge =
         `,
         [
           normalizedChallengeId,
+
           competitionId,
 
           Number(
@@ -228,7 +251,12 @@ export const createDoublesMatchFromChallenge =
           ),
 
           challengerPairId,
+
           challengedPairId,
+
+          challenge.venue,
+
+          challenge.scheduled_at,
         ],
       );
 
