@@ -1,0 +1,1364 @@
+/* =========================================================
+   LA RED
+   DOBLES — RANKING DE PAREJAS
+   ========================================================= */
+
+
+/* =========================================================
+   AVISOS
+   ========================================================= */
+
+.doubles-success-notice {
+  border-left-color: #58745b !important;
+  background: #f4f8f2 !important;
+}
+
+.doubles-error-notice {
+  border-left-color: #a94e3d !important;
+  background: #fff4f1 !important;
+}
+
+
+/* =========================================================
+   PANEL PRINCIPAL DE PAREJAS
+   ========================================================= */
+
+.doubles-control-section {
+  margin-bottom: 30px;
+  padding: 24px;
+
+  background:
+    rgba(
+      255,
+      253,
+      249,
+      0.96
+    );
+
+  border:
+    1px solid
+    #ddc8ba;
+
+  border-top:
+    4px solid
+    #56705a;
+
+  border-radius:
+    9px;
+
+  box-shadow:
+    0 10px 26px
+    rgba(
+      80,
+      48,
+      30,
+      0.09
+    );
+}
+
+
+.doubles-control-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+
+  gap: 24px;
+
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+
+  border-bottom:
+    1px solid
+    #eaded6;
+}
+
+
+.doubles-control-heading > div {
+  min-width: 0;
+}
+
+
+.doubles-control-heading span {
+  display: block;
+
+  margin-bottom: 7px;
+
+  color:
+    #56705a;
+
+  font-size: 10px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.14em;
+}
+
+
+.doubles-control-heading h2 {
+  margin: 0;
+
+  color:
+    #2f251f;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      30px,
+      3.5vw,
+      42px
+    );
+
+  line-height: 1;
+}
+
+
+.doubles-control-heading p {
+  max-width: 570px;
+
+  margin:
+    12px 0 0;
+
+  color:
+    #67574e;
+
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+
+.doubles-form-pair-button {
+  min-height: 46px;
+
+  flex:
+    0 0 auto;
+
+  padding:
+    0 20px;
+
+  border:
+    1px solid
+    #48604d;
+
+  border-radius:
+    6px;
+
+  background:
+    #56705a;
+
+  color:
+    #ffffff;
+
+  font-size: 11px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.07em;
+
+  cursor: pointer;
+
+  transition:
+    transform
+      0.16s ease,
+    background
+      0.16s ease;
+}
+
+
+.doubles-form-pair-button:hover {
+  background:
+    #425947;
+
+  transform:
+    translateY(-1px);
+}
+
+
+/* =========================================================
+   FORMAR PAREJA
+   ========================================================= */
+
+.doubles-form-panel {
+  margin-bottom: 24px;
+  padding: 20px;
+
+  background:
+    #f7eee8;
+
+  border:
+    1px solid
+    #d8c1b2;
+
+  border-radius:
+    8px;
+}
+
+
+.doubles-form-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 22px;
+
+  margin-bottom: 18px;
+}
+
+
+.doubles-form-heading > div {
+  min-width: 0;
+}
+
+
+.doubles-form-heading span {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color:
+    #a75b39;
+
+  font-size: 9px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.12em;
+}
+
+
+.doubles-form-heading h2 {
+  margin: 0;
+
+  color:
+    #342720;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 27px;
+}
+
+
+.doubles-form-heading p {
+  max-width: 620px;
+
+  margin:
+    9px 0 0;
+
+  color:
+    #68564c;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  line-height: 1.55;
+}
+
+
+.doubles-form-close {
+  width: 38px;
+  height: 38px;
+
+  flex:
+    0 0 38px;
+
+  border:
+    1px solid
+    #d3b9aa;
+
+  border-radius:
+    50%;
+
+  background:
+    #fffaf6;
+
+  color:
+    #684c3e;
+
+  font-size: 23px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+
+.doubles-form {
+  display: grid;
+
+  grid-template-columns:
+    minmax(
+      0,
+      1fr
+    )
+    auto;
+
+  gap: 14px;
+
+  align-items: end;
+}
+
+
+.doubles-form label {
+  display: grid;
+
+  gap: 7px;
+}
+
+
+.doubles-form label > span {
+  color:
+    #76584a;
+
+  font-size: 9px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.11em;
+}
+
+
+.doubles-form select,
+.doubles-dialog-select select {
+  width: 100%;
+  min-height: 48px;
+
+  padding:
+    0 13px;
+
+  border:
+    1px solid
+    #cdb5a6;
+
+  border-radius:
+    6px;
+
+  outline: none;
+
+  background:
+    #fffdf9;
+
+  color:
+    #382b24;
+
+  font-size: 14px;
+  font-weight: 700;
+}
+
+
+.doubles-form select:focus,
+.doubles-dialog-select select:focus {
+  border-color:
+    #c6683f;
+
+  box-shadow:
+    0 0 0 3px
+    rgba(
+      198,
+      104,
+      63,
+      0.1
+    );
+}
+
+
+.doubles-form-actions {
+  display: flex;
+
+  gap: 8px;
+}
+
+
+.doubles-primary-button,
+.doubles-secondary-button {
+  min-height: 46px;
+
+  padding:
+    0 16px;
+
+  border-radius:
+    6px;
+
+  font-size: 10px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.07em;
+
+  cursor: pointer;
+}
+
+
+.doubles-primary-button {
+  border:
+    1px solid
+    #a85131;
+
+  background:
+    #c6683f;
+
+  color:
+    #ffffff;
+}
+
+
+.doubles-primary-button:hover:not(:disabled) {
+  background:
+    #ad5735;
+}
+
+
+.doubles-primary-button:disabled {
+  opacity: 0.5;
+
+  cursor:
+    not-allowed;
+}
+
+
+.doubles-secondary-button {
+  border:
+    1px solid
+    #cfb9aa;
+
+  background:
+    #fffaf6;
+
+  color:
+    #5f493d;
+}
+
+
+.doubles-secondary-button:hover:not(:disabled) {
+  background:
+    #f4e9e1;
+}
+
+
+.doubles-empty-inline {
+  margin-top: 14px;
+  padding: 12px;
+
+  background:
+    #fffaf6;
+
+  border:
+    1px dashed
+    #ceb7a9;
+
+  border-radius:
+    6px;
+
+  color:
+    #725e53;
+
+  font-size: 12px;
+}
+
+
+/* =========================================================
+   MIS PAREJAS
+   ========================================================= */
+
+.doubles-my-pairs-heading {
+  display: flex;
+  align-items: center;
+
+  gap: 9px;
+
+  margin-bottom: 12px;
+}
+
+
+.doubles-my-pairs-heading span {
+  color:
+    #725a4d;
+
+  font-size: 9px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.12em;
+}
+
+
+.doubles-my-pairs-heading strong {
+  min-width: 27px;
+  min-height: 27px;
+
+  display: grid;
+  place-items: center;
+
+  background:
+    #342820;
+
+  border-radius:
+    50%;
+
+  color:
+    #ffffff;
+
+  font-size: 11px;
+}
+
+
+.doubles-my-pairs-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(
+        0,
+        1fr
+      )
+    );
+
+  gap: 12px;
+}
+
+
+.doubles-my-pair-card {
+  min-width: 0;
+
+  padding: 16px;
+
+  background:
+    #fffaf6;
+
+  border:
+    1px solid
+    #d9c5b8;
+
+  border-top:
+    3px solid
+    #56705a;
+
+  border-radius:
+    7px;
+}
+
+
+.doubles-my-pair-card.compact {
+  padding: 12px;
+}
+
+
+.doubles-my-pair-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 10px;
+
+  margin-bottom: 14px;
+}
+
+
+.doubles-my-pair-top > span:first-child {
+  color:
+    #8a6c5d;
+
+  font-size: 8px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.1em;
+}
+
+
+.doubles-placement-badge,
+.doubles-official-badge {
+  min-height: 23px;
+
+  display: inline-flex;
+  align-items: center;
+
+  padding:
+    0 8px;
+
+  border-radius:
+    999px;
+
+  font-size: 7px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.07em;
+}
+
+
+.doubles-placement-badge {
+  background:
+    #f4e4d8;
+
+  border:
+    1px solid
+    #deb99f;
+
+  color:
+    #a45333;
+}
+
+
+.doubles-official-badge {
+  background:
+    #edf3ec;
+
+  border:
+    1px solid
+    #b9cbb8;
+
+  color:
+    #4b694e;
+}
+
+
+.doubles-pair-members {
+  display: grid;
+
+  gap: 6px;
+}
+
+
+.doubles-pair-member {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  min-width: 0;
+}
+
+
+.doubles-pair-member::before {
+  content: "";
+
+  width: 6px;
+  height: 6px;
+
+  flex:
+    0 0 6px;
+
+  border-radius:
+    50%;
+
+  background:
+    #c6683f;
+}
+
+
+.doubles-pair-member-link,
+.doubles-pair-member > span {
+  min-width: 0;
+
+  overflow: hidden;
+
+  color:
+    #392c25;
+
+  font-size: 13px;
+  font-weight: 800;
+
+  text-decoration: none;
+
+  text-overflow:
+    ellipsis;
+
+  white-space:
+    nowrap;
+}
+
+
+.doubles-pair-member-link:hover {
+  color:
+    #c6683f;
+}
+
+
+.doubles-pair-member em {
+  padding:
+    3px 6px;
+
+  background:
+    #342820;
+
+  border-radius:
+    999px;
+
+  color:
+    #ffffff;
+
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 900;
+
+  letter-spacing:
+    0.06em;
+}
+
+
+.doubles-my-pair-stats {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      1fr
+    );
+
+  gap: 6px;
+
+  margin-top: 16px;
+  padding-top: 12px;
+
+  border-top:
+    1px solid
+    #eaded6;
+}
+
+
+.doubles-my-pair-stats div {
+  display: grid;
+
+  gap: 3px;
+}
+
+
+.doubles-my-pair-stats strong {
+  color:
+    #3a2c25;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 18px;
+}
+
+
+.doubles-my-pair-stats span {
+  color:
+    #806a5e;
+
+  font-size: 7px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.08em;
+}
+
+
+.doubles-no-pairs {
+  display: grid;
+
+  gap: 4px;
+
+  padding: 18px;
+
+  background:
+    #faf4ef;
+
+  border:
+    1px dashed
+    #d3bdaf;
+
+  border-radius:
+    7px;
+}
+
+
+.doubles-no-pairs strong {
+  color:
+    #3e3029;
+
+  font-size: 14px;
+}
+
+
+.doubles-no-pairs span {
+  color:
+    #786459;
+
+  font-size: 12px;
+}
+
+
+/* =========================================================
+   FILAS DEL RANKING
+   ========================================================= */
+
+.doubles-ranking-row {
+  min-height: 108px;
+}
+
+
+.doubles-ranking-row.my-pair {
+  background:
+    #f2f6f0;
+}
+
+
+.doubles-ranking-row.my-pair:hover {
+  background:
+    #edf3eb;
+}
+
+
+.doubles-ranking-pair-cell {
+  gap: 7px;
+}
+
+
+.doubles-ranking-pair-name {
+  max-width: 100%;
+
+  overflow: hidden;
+
+  color:
+    #362921;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 16px;
+  font-weight: 700;
+
+  text-overflow:
+    ellipsis;
+
+  white-space:
+    nowrap;
+}
+
+
+.doubles-ranking-pair-cell
+.doubles-pair-members {
+  gap: 3px;
+}
+
+
+.doubles-ranking-pair-cell
+.doubles-pair-member-link,
+.doubles-ranking-pair-cell
+.doubles-pair-member > span {
+  font-size: 11px;
+}
+
+
+.doubles-row-flags {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 5px;
+}
+
+
+.doubles-own-label,
+.doubles-blocked-label {
+  min-height: 27px;
+
+  display: inline-flex;
+  align-items: center;
+
+  padding:
+    0 9px;
+
+  border-radius:
+    999px;
+
+  font-size: 7px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.07em;
+}
+
+
+.doubles-own-label {
+  background:
+    #e6eee5;
+
+  border:
+    1px solid
+    #bacab8;
+
+  color:
+    #48604b;
+}
+
+
+.doubles-blocked-label {
+  background:
+    #eee9e5;
+
+  border:
+    1px solid
+    #d6cbc4;
+
+  color:
+    #806f64;
+}
+
+
+/* =========================================================
+   HISTÓRICO DE PAREJAS
+   ========================================================= */
+
+.historical-pair-name {
+  color:
+    #392b24;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 18px;
+  font-weight: 700;
+
+  line-height: 1.25;
+}
+
+
+.historical-elo-card
+.doubles-pair-members {
+  margin-top: 10px;
+}
+
+
+.historical-elo-card
+.doubles-pair-member-link,
+.historical-elo-card
+.doubles-pair-member > span {
+  font-size: 10px;
+}
+
+
+/* =========================================================
+   MODAL DESAFIAR PAREJA
+   ========================================================= */
+
+.doubles-dialog-backdrop {
+  position: fixed;
+  z-index: 5000;
+
+  inset: 0;
+
+  display: grid;
+  place-items: center;
+
+  padding: 20px;
+
+  background:
+    rgba(
+      31,
+      22,
+      18,
+      0.72
+    );
+
+  backdrop-filter:
+    blur(5px);
+}
+
+
+.doubles-dialog {
+  width:
+    min(
+      100%,
+      520px
+    );
+
+  max-height:
+    calc(
+      100vh -
+      40px
+    );
+
+  overflow-y: auto;
+
+  padding: 24px;
+
+  background:
+    #fffaf6;
+
+  border:
+    1px solid
+    #d8c1b3;
+
+  border-top:
+    4px solid
+    #c6683f;
+
+  border-radius:
+    10px;
+
+  box-shadow:
+    0 28px 70px
+    rgba(
+      20,
+      12,
+      8,
+      0.32
+    );
+}
+
+
+.doubles-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 20px;
+}
+
+
+.doubles-dialog-header span {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color:
+    #b65d38;
+
+  font-size: 9px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.12em;
+}
+
+
+.doubles-dialog-header h3 {
+  margin: 0;
+
+  color:
+    #32261f;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 30px;
+}
+
+
+.doubles-dialog-header button {
+  width: 38px;
+  height: 38px;
+
+  border:
+    1px solid
+    #d5c0b3;
+
+  border-radius:
+    50%;
+
+  background:
+    #f8eee8;
+
+  color:
+    #6a5145;
+
+  font-size: 22px;
+
+  cursor: pointer;
+}
+
+
+.doubles-dialog-target {
+  display: grid;
+
+  gap: 5px;
+
+  margin:
+    22px 0;
+
+  padding: 16px;
+
+  background:
+    #342820;
+
+  border-radius:
+    7px;
+}
+
+
+.doubles-dialog-target span {
+  color:
+    #d8b9a8;
+
+  font-size: 8px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.1em;
+}
+
+
+.doubles-dialog-target strong {
+  color:
+    #ffffff;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size: 18px;
+}
+
+
+.doubles-dialog-target small {
+  color:
+    #dfc9bc;
+
+  font-size: 10px;
+  font-weight: 700;
+}
+
+
+.doubles-dialog-select {
+  display: grid;
+
+  gap: 7px;
+}
+
+
+.doubles-dialog-select > span {
+  color:
+    #755b4d;
+
+  font-size: 9px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.1em;
+}
+
+
+.doubles-dialog-warning {
+  margin-top: 13px;
+  padding: 12px;
+
+  background:
+    #fff1ec;
+
+  border:
+    1px solid
+    #e0b6a8;
+
+  border-radius:
+    6px;
+
+  color:
+    #8d4937;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  line-height: 1.5;
+}
+
+
+.doubles-dialog-actions {
+  display: flex;
+
+  gap: 8px;
+
+  margin-top: 20px;
+}
+
+
+/* =========================================================
+   PRIMERA PAREJA
+   ========================================================= */
+
+.doubles-first-pair-cta {
+  margin-bottom: 30px;
+
+  padding: 28px;
+
+  text-align: center;
+
+  background:
+    #342820;
+
+  border:
+    1px solid
+    #4d3b31;
+
+  border-radius:
+    9px;
+
+  color:
+    #ffffff;
+}
+
+
+.doubles-first-pair-cta > span {
+  display: block;
+
+  margin-bottom: 8px;
+
+  color:
+    #dbb29d;
+
+  font-size: 9px;
+  font-weight: 900;
+
+  letter-spacing:
+    0.13em;
+}
+
+
+.doubles-first-pair-cta h2 {
+  max-width: 600px;
+
+  margin:
+    0 auto;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      27px,
+      4vw,
+      40px
+    );
+
+  line-height: 1.06;
+}
+
+
+.doubles-first-pair-cta p {
+  max-width: 590px;
+
+  margin:
+    14px auto 20px;
+
+  color:
+    #dfcec4;
+
+  font-size: 13px;
+
+  line-height: 1.6;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (
+  max-width: 900px
+) {
+  .doubles-my-pairs-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(
+          0,
+          1fr
+        )
+      );
+  }
+
+  .doubles-control-heading {
+    align-items:
+      flex-start;
+
+    flex-direction:
+      column;
+  }
+
+  .doubles-form {
+    grid-template-columns:
+      1fr;
+  }
+}
+
+
+@media (
+  max-width: 720px
+) {
+  .doubles-control-section {
+    padding: 18px;
+  }
+
+  .doubles-my-pairs-grid {
+    grid-template-columns:
+      1fr;
+  }
+
+  .doubles-form-actions {
+    flex-direction:
+      column;
+  }
+
+  .doubles-form-actions
+  button {
+    width: 100%;
+  }
+
+  .doubles-dialog-actions {
+    flex-direction:
+      column;
+  }
+
+  .doubles-dialog-actions
+  button {
+    width: 100%;
+  }
+}
+
+
+@media (
+  max-width: 560px
+) {
+  .doubles-control-section {
+    padding:
+      16px 14px;
+  }
+
+  .doubles-form-panel {
+    padding: 15px;
+  }
+
+  .doubles-form-heading h2 {
+    font-size: 24px;
+  }
+
+  .doubles-form-pair-button {
+    width: 100%;
+  }
+
+  .doubles-dialog {
+    padding: 18px;
+  }
+
+  .doubles-dialog-header h3 {
+    font-size: 25px;
+  }
+
+  .doubles-my-pair-stats strong {
+    font-size: 16px;
+  }
+
+  .doubles-ranking-pair-name {
+    white-space: normal;
+  }
+}
