@@ -297,11 +297,11 @@ test('production migration is idempotent and leaves abandonment schema ready',as
   }finally{client.release();}
 });
 
-test('health check verifies PostgreSQL and wheel-v2 engine instead of returning static green',async()=>{
+test('health check verifies PostgreSQL and wheel-v3 engine instead of returning static green',async()=>{
   const healthy=await readHealth(testPool);
   assert.equal(healthy.ok,true);
   assert.equal(healthy.database,'ok');
-  assert.equal(healthy.engine,'wheel-v2');
+  assert.equal(healthy.engine,'wheel-v3');
   await testPool.query(`UPDATE app_settings SET value='"broken-engine"'::jsonb WHERE key='engine'`);
   await assert.rejects(()=>readHealth(testPool),/Motor competitivo inesperado/);
 });
@@ -391,7 +391,7 @@ test('database preflight passes healthy state and fails closed for paused clock 
   assert.ok(admin.id);
   const healthy=await databasePreflight(testPool,{requireTls:false});
   assert.equal(healthy.ok,true);
-  assert.equal(healthy.engine,'wheel-v2');
+  assert.equal(healthy.engine,'wheel-v3');
   assert.equal(healthy.clockPaused,false);
   assert.equal(healthy.migrationReady,true);
   assert.equal(healthy.activeCommercialVenues,0);

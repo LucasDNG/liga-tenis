@@ -21,7 +21,7 @@ Si un resumen de chat contradice el repo, manda el repo. Si dos documentos se co
 ## Estado técnico actual
 
 - package: `5.0.9`.
-- motor único: `wheel-v2`.
+- motor de una base nueva: `wheel-v3`. `wheel-v2` queda solo para el camino de cutover.
 - runtime objetivo: Node 22.
 - PostgreSQL de CI: 16.
 - tests puros: 70/70 verdes en el último checkpoint verificado.

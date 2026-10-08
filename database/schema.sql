@@ -6,7 +6,7 @@ CREATE TABLE app_settings(
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO app_settings(key,value) VALUES
- ('engine','"wheel-v2"'::jsonb),
+ ('engine','"wheel-v3"'::jsonb),
  ('timezone','"America/Argentina/Buenos_Aires"'::jsonb),
  ('league_clock_paused','false'::jsonb),
  ('league_clock_pause_started_at','null'::jsonb);
@@ -85,8 +85,8 @@ CREATE TABLE leagues(
   active boolean NOT NULL DEFAULT true
 );
 INSERT INTO leagues(slug,name,gender) VALUES
- ('masculino','LA RED Masculina','male'),
- ('femenino','LA RED Femenina','female');
+ ('masculino','LA RED Tenis Masculina','male'),
+ ('femenino','LA RED Tenis Femenina','female');
 
 CREATE TABLE categories(
   id bigserial PRIMARY KEY,

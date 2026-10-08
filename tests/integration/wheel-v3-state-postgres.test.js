@@ -27,6 +27,7 @@ after(async()=>{await pool.end();await appPool.end();});
 async function maleLeague(){return (await pool.query("SELECT id FROM leagues WHERE slug='masculino'")).rows[0];}
 async function category(number,slug='masculino'){return (await pool.query('SELECT c.* FROM categories c JOIN leagues l ON l.id=c.league_id WHERE l.slug=$1 AND c.number=$2',[slug,number])).rows[0];}
 async function seedPair(position=1,categoryNumber=3){const l=await maleLeague();const c=await category(categoryNumber);return (await pool.query('INSERT INTO pairs(league_id,category_id,position) VALUES($1,$2,$3) RETURNING *',[l.id,c.id,position])).rows[0];}
+async function useLegacyEngine(){await pool.query(`UPDATE app_settings SET value='"wheel-v2"'::jsonb WHERE key='engine'`);}
 async function seedPairWithMembers(position=1,categoryNumber=3,{memberCategories=[categoryNumber,categoryNumber],tag=0}={}){
   const p=await seedPair(position,categoryNumber);
   const base=60000000+categoryNumber*1000+position*10+tag*2;
@@ -41,9 +42,9 @@ async function seedPairWithMembers(position=1,categoryNumber=3,{memberCategories
   return {...p,members:users};
 }
 
-test('clean schema stays on wheel-v2 while exposing Wheel v3 preparation state',async()=>{
+test('clean schema starts on wheel-v3 and exposes its preparation state',async()=>{
   const engine=(await pool.query("SELECT value#>>'{}' value FROM app_settings WHERE key='engine'")).rows[0].value;
-  assert.equal(engine,'wheel-v2');
+  assert.equal(engine,'wheel-v3');
   for(const name of ['league_wheel_state','pair_wheel_state','pair_duo_state','first_place_reigns']){
     assert.equal((await pool.query('SELECT to_regclass($1) name',[`public.${name}`])).rows[0].name,name);
   }
@@ -434,7 +435,7 @@ test('PostgreSQL category planner uses v3 wait, roles and last real opponent wit
     assert.ok(attacker.position>defender.position);
   }
   const engine=(await pool.query("SELECT value#>>'{}' value FROM app_settings WHERE key='engine'")).rows[0].value;
-  assert.equal(engine,'wheel-v2');
+  assert.equal(engine,'wheel-v3');
 });
 
 
@@ -503,7 +504,7 @@ test('isolated Wheel v3 assignment writer persists roles and 30-day DB-authored 
   assert.equal(roles.at(-1).role,'attack');
 
   const engine=(await pool.query("SELECT value#>>'{}' value FROM app_settings WHERE key='engine'")).rows[0].value;
-  assert.equal(engine,'wheel-v2');
+  assert.equal(engine,'wheel-v3');
 });
 
 test('isolated Wheel v3 assignment writer is serialized by category and does not double-assign pairs',async()=>{
@@ -2177,12 +2178,9 @@ test('administrative victory never advances promotion counter or resets real wai
 });
 
 
-test('competitive runtime selector keeps wheel-v2 by default and exposes wheel-v3 facade only after explicit engine switch',async()=>{
+test('competitive runtime selector starts on wheel-v3 and can still read a legacy wheel-v2 switch',async()=>{
   const {competitiveEngine}=await import('../../src/competitionRuntime.js');
   const runtime=await import('../../src/wheelRuntime.js');
-  assert.equal(await competitiveEngine(),'wheel-v2');
-
-  await pool.query("UPDATE app_settings SET value=to_jsonb($1::text) WHERE key='engine'",['wheel-v3']);
   assert.equal(await competitiveEngine(),'wheel-v3');
 
   const ranking=await runtime.ranking();
@@ -2270,6 +2268,7 @@ test('self failure and new no-show are rejected after first result load',async()
 
 
 test('cutover gate is green only with drained wheel-v2 sporting state',async()=>{
+  await useLegacyEngine();
   let state=await wheelV3CutoverReadiness(pool);
   assert.equal(state.engine,'wheel-v2');
   assert.equal(state.ready,true);
@@ -2297,6 +2296,7 @@ test('cutover gate is green only with drained wheel-v2 sporting state',async()=>
 });
 
 test('cutover gate refuses pending pair transitions and global clock pause',async()=>{
+  await useLegacyEngine();
   const pair=await seedPairWithMembers(1,6,{tag:242});
   await pool.query(
     "INSERT INTO pair_pause_requests(pair_id,requested_by_user_id,status) VALUES($1,$2,'pending')",
@@ -2315,6 +2315,7 @@ test('cutover gate refuses pending pair transitions and global clock pause',asyn
 
 
 test('atomic cutover acquires wheel locks, rechecks readiness and switches only inside its transaction',async()=>{
+  await useLegacyEngine();
   const admin=await seedAdmin(40);
   const releaseSha='0123456789abcdef0123456789abcdef01234567';
   const client=await pool.connect();
@@ -2334,6 +2335,7 @@ test('atomic cutover acquires wheel locks, rechecks readiness and switches only 
 });
 
 test('atomic cutover refuses to switch while a live legacy assignment exists',async()=>{
+  await useLegacyEngine();
   const admin=await seedAdmin(41);
   const releaseSha='0123456789abcdef0123456789abcdef01234567';
   const c=await category(2);
@@ -2383,6 +2385,7 @@ test('post-cutover operational readiness accepts valid Wheel v3 state and reject
 
 
 test('audited cutover records verified admin and release SHA in the same transaction',async()=>{
+  await useLegacyEngine();
   const admin=(await pool.query(
     "INSERT INTO users(first_name,last_name,dni,phone,password_hash,gender,role,verification_status) VALUES('Cutover','Admin','79999999','79999999','x','male','admin','verified') RETURNING id"
   )).rows[0];
@@ -2411,6 +2414,7 @@ test('audited cutover records verified admin and release SHA in the same transac
 });
 
 test('audited cutover rejects a non-admin actor',async()=>{
+  await useLegacyEngine();
   const player=(await pool.query(
     "INSERT INTO users(first_name,last_name,dni,phone,password_hash,gender,role,verification_status) VALUES('Cutover','Player','79999998','79999998','x','male','player','verified') RETURNING id"
   )).rows[0];
@@ -2427,6 +2431,7 @@ test('audited cutover rejects a non-admin actor',async()=>{
 
 
 test('cutover engine refuses missing audit identity or malformed release SHA before switching',async()=>{
+  await useLegacyEngine();
   const admin=await seedAdmin(42);
   const client=await pool.connect();
   try{
@@ -2446,6 +2451,7 @@ test('cutover engine refuses missing audit identity or malformed release SHA bef
 
 
 test('cutover audit supports explicit compatible frontend and backend releases with different SHAs',async()=>{
+  await useLegacyEngine();
   const admin=await seedAdmin(43);
   const backendReleaseSha='0123456789abcdef0123456789abcdef01234567';
   const frontendReleaseSha='89abcdef0123456789abcdef0123456789abcdef';
@@ -2467,6 +2473,7 @@ test('cutover audit supports explicit compatible frontend and backend releases w
 
 
 test('cutover waits for an in-flight competitive write protected by the shared barrier',async()=>{
+  await useLegacyEngine();
   const admin=await seedAdmin(50);
   const backendReleaseSha='0123456789abcdef0123456789abcdef01234567';
   const frontendReleaseSha='89abcdef0123456789abcdef0123456789abcdef';
@@ -2508,6 +2515,7 @@ test('cutover waits for an in-flight competitive write protected by the shared b
 });
 
 test('competitive write arriving during cutover waits and re-reads wheel-v3 after commit',async()=>{
+  await useLegacyEngine();
   const admin=await seedAdmin(51);
   const backendReleaseSha='0123456789abcdef0123456789abcdef01234567';
   const frontendReleaseSha='89abcdef0123456789abcdef0123456789abcdef';
