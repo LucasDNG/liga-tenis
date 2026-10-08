@@ -1,0 +1,53 @@
+name: LA RED WhatsApp production test
+
+on:
+  workflow_dispatch:
+    inputs:
+      phone:
+        description: Número de destino en formato internacional
+        required: true
+        type: string
+      confirmation:
+        description: Escribir exactamente SEND-WHATSAPP-TEST
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  whatsapp-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      NODE_ENV: production
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+      FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL }}
+      ADMIN_TOTP_SECRET: ${{ secrets.PROD_ADMIN_TOTP_SECRET }}
+      WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.PROD_WHATSAPP_PHONE_NUMBER_ID }}
+      WHATSAPP_ACCESS_TOKEN: ${{ secrets.PROD_WHATSAPP_ACCESS_TOKEN }}
+      WHATSAPP_TEMPLATE_NAME: ${{ vars.PROD_WHATSAPP_TEMPLATE_NAME }}
+      WHATSAPP_GRAPH_VERSION: ${{ vars.PROD_WHATSAPP_GRAPH_VERSION }}
+      WHATSAPP_TEMPLATE_LANGUAGE: ${{ vars.PROD_WHATSAPP_TEMPLATE_LANGUAGE }}
+      WHATSAPP_TEST_PHONE: ${{ inputs.phone }}
+      CONFIRM_WHATSAPP_TEST: YES
+    steps:
+      - name: Validate WhatsApp test confirmation
+        shell: bash
+        env:
+          WHATSAPP_TEST_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [ "$WHATSAPP_TEST_CONFIRMATION" = "SEND-WHATSAPP-TEST" ] || {
+            echo "Confirmation must be exactly SEND-WHATSAPP-TEST"
+            exit 1
+          }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm run preflight:full
+      - run: npm run whatsapp:test:prod

@@ -1,170 +1,43 @@
-const CACHE_NAME =
-  "liga-tenis-v2";
+const CACHE='la-red-v7';
+self.addEventListener('install',e=>e.waitUntil((async()=>{
+  const cache=await caches.open(CACHE);
+  await cache.addAll([
+    '/',
+    '/manifest.webmanifest',
+    '/favicon.png',
+    '/icon-192.png',
+    '/icon-512.png'
+  ]);
+  await self.skipWaiting();
+})()));
 
-const APP_SHELL = [
-  "/",
-  "/manifest.webmanifest",
-  "/favicon.png",
-  "/icon-192.png",
-  "/icon-512.png",
-];
+self.addEventListener('activate',e=>e.waitUntil((async()=>{
+  const keys=await caches.keys();
+  await Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)));
+  await self.clients.claim();
+})()));
 
-self.addEventListener(
-  "install",
-  (event) => {
-    event.waitUntil(
-      caches
-        .open(CACHE_NAME)
-        .then((cache) =>
-          cache.addAll(
-            APP_SHELL,
-          ),
-        ),
-    );
+self.addEventListener('fetch',e=>{
+  const url=new URL(e.request.url);
+  if(
+    e.request.method!=='GET' ||
+    url.origin!==self.location.origin ||
+    url.pathname.startsWith('/api/')
+  ) return;
 
-    self.skipWaiting();
-  },
-);
+  e.respondWith((async()=>{
+    try{
+      return await fetch(e.request);
+    }catch{
+      const exact=await caches.match(e.request);
+      if(exact)return exact;
 
-self.addEventListener(
-  "activate",
-  (event) => {
-    event.waitUntil(
-      caches
-        .keys()
-        .then((keys) =>
-          Promise.all(
-            keys
-              .filter(
-                (key) =>
-                  key !==
-                  CACHE_NAME,
-              )
-              .map((key) =>
-                caches.delete(
-                  key,
-                ),
-              ),
-          ),
-        ),
-    );
+      if(e.request.mode==='navigate'){
+        const shell=await caches.match('/');
+        if(shell)return shell;
+      }
 
-    self.clients.claim();
-  },
-);
-
-self.addEventListener(
-  "fetch",
-  (event) => {
-    const request =
-      event.request;
-
-    if (
-      request.method !== "GET"
-    ) {
-      return;
+      return Response.error();
     }
-
-    const url =
-      new URL(
-        request.url,
-      );
-
-    /*
-      Nunca cacheamos llamadas
-      al backend/API.
-
-      Ranking, partidos,
-      desafíos y Elo deben
-      mantenerse siempre frescos.
-    */
-    if (
-      url.pathname.startsWith(
-        "/api/",
-      )
-    ) {
-      return;
-    }
-
-    /*
-      Navegaciones:
-      primero internet.
-
-      Si no hay conexión,
-      usamos la app cacheada.
-    */
-    if (
-      request.mode ===
-      "navigate"
-    ) {
-      event.respondWith(
-        fetch(request).catch(
-          () =>
-            caches.match(
-              "/",
-            ),
-        ),
-      );
-
-      return;
-    }
-
-    /*
-      Recursos estáticos:
-      cache primero.
-    */
-    event.respondWith(
-      caches
-        .match(request)
-        .then(
-          (
-            cachedResponse,
-          ) => {
-            if (
-              cachedResponse
-            ) {
-              return cachedResponse;
-            }
-
-            return fetch(
-              request,
-            ).then(
-              (
-                networkResponse,
-              ) => {
-                if (
-                  !networkResponse ||
-                  networkResponse.status !==
-                    200 ||
-                  networkResponse.type ===
-                    "opaque"
-                ) {
-                  return networkResponse;
-                }
-
-                const copy =
-                  networkResponse.clone();
-
-                caches
-                  .open(
-                    CACHE_NAME,
-                  )
-                  .then(
-                    (
-                      cache,
-                    ) => {
-                      cache.put(
-                        request,
-                        copy,
-                      );
-                    },
-                  );
-
-                return networkResponse;
-              },
-            );
-          },
-        ),
-    );
-  },
-);
+  })());
+});

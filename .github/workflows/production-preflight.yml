@@ -1,0 +1,72 @@
+name: LA RED production preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: core valida infraestructura; full agrega WhatsApp y es obligatorio antes del release
+        required: true
+        default: core
+        type: choice
+        options:
+          - core
+          - full
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      NODE_ENV: production
+      PREFLIGHT_MODE: ${{ inputs.mode }}
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+      FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL }}
+      ADMIN_TOTP_SECRET: ${{ secrets.PROD_ADMIN_TOTP_SECRET }}
+      WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.PROD_WHATSAPP_PHONE_NUMBER_ID }}
+      WHATSAPP_ACCESS_TOKEN: ${{ secrets.PROD_WHATSAPP_ACCESS_TOKEN }}
+      WHATSAPP_TEMPLATE_NAME: ${{ vars.PROD_WHATSAPP_TEMPLATE_NAME }}
+      WHATSAPP_GRAPH_VERSION: ${{ vars.PROD_WHATSAPP_GRAPH_VERSION }}
+      WHATSAPP_TEMPLATE_LANGUAGE: ${{ vars.PROD_WHATSAPP_TEMPLATE_LANGUAGE }}
+    steps:
+      - name: Validate production environment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          required=(
+            DATABASE_URL
+            JWT_SECRET
+            FRONTEND_URL
+            ADMIN_TOTP_SECRET
+          )
+          if [ "${PREFLIGHT_MODE}" = "full" ]; then
+            required+=(
+              WHATSAPP_PHONE_NUMBER_ID
+              WHATSAPP_ACCESS_TOKEN
+              WHATSAPP_TEMPLATE_NAME
+              WHATSAPP_GRAPH_VERSION
+              WHATSAPP_TEMPLATE_LANGUAGE
+            )
+          fi
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing %s preflight inputs:\n' "${PREFLIGHT_MODE}"
+            printf ' - %s\n' "${missing[@]}"
+            exit 1
+          fi
+          echo "${PREFLIGHT_MODE} preflight inputs are present; values are not printed."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm run preflight:prod

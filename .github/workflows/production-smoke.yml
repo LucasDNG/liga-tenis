@@ -1,0 +1,39 @@
+name: LA RED production smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      PROD_API_URL: ${{ vars.PROD_API_URL }}
+      PROD_FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL }}
+    steps:
+      - name: Validate production smoke inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in PROD_API_URL PROD_FRONTEND_URL; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing production smoke variables:\n'
+            printf ' - %s\n' "${missing[@]}"
+            exit 1
+          fi
+          echo "Production smoke variables are present; values are not printed."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm run smoke:prod
