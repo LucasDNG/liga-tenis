@@ -12,6 +12,16 @@ import {
   useAuth,
 } from "../context/AuthContext";
 
+import {
+  canConfirmOrRejectMatchResult,
+  canEditMatchScore,
+  canRequestMatchCancellation,
+  getSubmittedSide,
+  getWinnerLabel,
+  isMatchResultBlocked,
+  submittedByMySide,
+} from "../matchResultAccess";
+
 import "./MatchesPage.css";
 
 
@@ -783,18 +793,6 @@ export default function MatchesPage() {
         return;
       }
 
-      if (
-        match
-          .competition_format ===
-        "doubles"
-      ) {
-        setMessage(
-          "Los resultados competitivos de dobles todavía no están habilitados porque falta definir la distribución Elo entre compañeros.",
-        );
-
-        return;
-      }
-
       const rawScore =
         scores[
           match.id
@@ -907,18 +905,6 @@ export default function MatchesPage() {
         return;
       }
 
-      if (
-        match
-          .competition_format ===
-        "doubles"
-      ) {
-        setMessage(
-          "La confirmación competitiva de dobles todavía no está habilitada.",
-        );
-
-        return;
-      }
-
       try {
         setMessage(
           "",
@@ -1020,6 +1006,18 @@ export default function MatchesPage() {
         return;
       }
 
+      if (
+        match
+          .competition_format ===
+        "doubles"
+      ) {
+        setMessage(
+          "La cancelación de partidos de dobles todavía no está habilitada.",
+        );
+
+        return;
+      }
+
       const reason =
         window.prompt(
           "Motivo de la cancelación. Tu rival deberá aceptar para que ninguno reciba penalización:",
@@ -1092,6 +1090,18 @@ export default function MatchesPage() {
       if (
         actionLoading
       ) {
+        return;
+      }
+
+      if (
+        match
+          .competition_format ===
+        "doubles"
+      ) {
+        setMessage(
+          "La cancelación de partidos de dobles todavía no está habilitada.",
+        );
+
         return;
       }
 
@@ -1544,12 +1554,40 @@ export default function MatchesPage() {
                     .competition_format ===
                   "doubles";
 
+                const mySide =
+                  getMySide(
+                    match,
+                    myId,
+                  );
+
+                const submittedSide =
+                  getSubmittedSide(
+                    match,
+                  );
+
                 const submittedByMe =
                   Number(
                     match
                       .result_submitted_by,
                   ) ===
                   myId;
+
+                const waitingForRivalConfirmation =
+                  submittedByMySide({
+                    mySide,
+                    submittedSide,
+                    submittedByMe,
+                  });
+
+                const rivalCanResolveResult =
+                  canConfirmOrRejectMatchResult({
+                    status:
+                      match.status,
+
+                    mySide,
+                    submittedSide,
+                    submittedByMe,
+                  });
 
                 const score =
                   scores[
@@ -1580,14 +1618,6 @@ export default function MatchesPage() {
                   scheduledTime <=
                     Date.now();
 
-                const resultBlocked =
-                  match.status ===
-                    "pending" &&
-                  (
-                    !matchStarted ||
-                    isDoubles
-                  );
-
                 const hasCancellationRequest =
                   Boolean(
                     match
@@ -1595,6 +1625,34 @@ export default function MatchesPage() {
                   ) &&
                   match.status ===
                     "pending";
+
+                const resultBlocked =
+                  isMatchResultBlocked({
+                    status:
+                      match.status,
+
+                    matchStarted,
+                  });
+
+                const showScoreEditor =
+                  canEditMatchScore({
+                    status:
+                      match.status,
+
+                    hasCancellationRequest,
+                  });
+
+                const showCancellationActions =
+                  canRequestMatchCancellation({
+                    status:
+                      match.status,
+
+                    format:
+                      match
+                        .competition_format,
+
+                    hasCancellationRequest,
+                  });
 
                 const cancellationRequestedByMe =
                   hasCancellationRequest &&
@@ -1637,13 +1695,31 @@ export default function MatchesPage() {
                   `${match.id}-cancel-reject`;
 
                 const resultTooltip =
-                  isDoubles
-                    ? "El resultado competitivo de dobles todavía no está habilitado."
-                    : !validScheduledTime
-                      ? "Este partido todavía no tiene un horario registrado."
-                      : `El resultado se habilita el ${formatDateTime(
-                          match.scheduled_at,
-                        )}.`;
+                  !validScheduledTime
+                    ? "Este partido todavía no tiene un horario registrado."
+                    : `El resultado se habilita el ${formatDateTime(
+                        match.scheduled_at,
+                      )}.`;
+
+                const winnerLabel =
+                  getWinnerLabel({
+                    format:
+                      match
+                        .competition_format,
+
+                    winnerId:
+                      match
+                        .winner_id,
+
+                    winnerName:
+                      match
+                        .winner_name,
+
+                    side1,
+                    side2,
+                    side1Name,
+                    side2Name,
+                  });
 
                 return (
                   <article
@@ -1696,22 +1772,27 @@ export default function MatchesPage() {
                     </div>
 
 
-                    {isDoubles && (
+                    {isDoubles &&
+                      (
+                        match.status ===
+                          "pending" ||
+                        match.status ===
+                          "awaiting_confirmation"
+                      ) && (
                       <div className="match-waiting">
                         <strong>
-                          Dobles
+                          Elo de la pareja
                         </strong>
 
                         <p>
-                          Los cuatro
-                          participantes ya
-                          pertenecen a esta
-                          competición.
-                          El resultado Elo
-                          se habilitará cuando
-                          quede definida la
-                          fórmula individual
-                          para compañeros.
+                          El resultado
+                          actualiza el Elo
+                          de cada pareja.
+                          Cualquiera de los
+                          cuatro puede
+                          cargarlo y la
+                          pareja rival tiene
+                          que confirmarlo.
                         </p>
                       </div>
                     )}
@@ -1785,9 +1866,26 @@ export default function MatchesPage() {
                       )}
 
 
-                    {match.status ===
-                      "pending" &&
-                      !hasCancellationRequest && (
+                    {isDoubles &&
+                      match.status ===
+                        "pending" && (
+                        <div className="match-waiting">
+                          <strong>
+                            Cancelación
+                          </strong>
+
+                          <p>
+                            La cancelación
+                            de partidos de
+                            dobles todavía
+                            no está
+                            habilitada.
+                          </p>
+                        </div>
+                      )}
+
+
+                    {showCancellationActions && (
                         <div className="match-cancellation-actions">
                           <div>
                             <span className="match-kicker">
@@ -1848,6 +1946,7 @@ export default function MatchesPage() {
 
                     {match.status ===
                       "pending" &&
+                      !isDoubles &&
                       cancellationRequestedByMe && (
                         <div className="match-cancellation-box waiting">
                           <span className="match-kicker">
@@ -1896,6 +1995,7 @@ export default function MatchesPage() {
 
                     {match.status ===
                       "pending" &&
+                      !isDoubles &&
                       incomingCancellationRequest && (
                         <div className="match-cancellation-box incoming">
                           <span className="match-kicker">
@@ -1976,10 +2076,7 @@ export default function MatchesPage() {
                       )}
 
 
-                    {match.status ===
-                      "pending" &&
-                      !hasCancellationRequest &&
-                      !isDoubles && (
+                    {showScoreEditor && (
                         <div className="match-score-editor">
 
                           <div className="score-row score-title">
@@ -2143,18 +2240,17 @@ export default function MatchesPage() {
                             side2Name,
                           )}
 
-                          {submittedByMe ? (
+                          {waitingForRivalConfirmation ||
+                          !rivalCanResolveResult ? (
                             <div className="match-waiting">
                               <strong>
                                 Esperando confirmación
                               </strong>
 
                               <p>
-                                El resultado ya
-                                fue enviado. El
-                                otro lado debe
-                                confirmarlo o
-                                rechazarlo.
+                                {isDoubles
+                                  ? "El resultado ya fue enviado. La pareja rival debe confirmarlo o rechazarlo."
+                                  : "El resultado ya fue enviado. El otro jugador debe confirmarlo o rechazarlo."}
                               </p>
                             </div>
                           ) : (
@@ -2165,8 +2261,7 @@ export default function MatchesPage() {
                                 disabled={
                                   Boolean(
                                     actionLoading,
-                                  ) ||
-                                  isDoubles
+                                  )
                                 }
                                 onClick={() =>
                                   confirm(
@@ -2214,8 +2309,7 @@ export default function MatchesPage() {
                             Ganador:{" "}
                             <strong>
                               {
-                                match
-                                  .winner_name
+                                winnerLabel
                               }
                             </strong>
                           </h3>
