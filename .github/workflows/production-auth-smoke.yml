@@ -1,0 +1,37 @@
+name: LA RED authenticated production smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authenticated-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      NODE_ENV: production
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+      PROD_API_URL: ${{ vars.PROD_API_URL }}
+      PROD_FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL }}
+    steps:
+      - name: Validate authenticated smoke inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in DATABASE_URL JWT_SECRET PROD_API_URL PROD_FRONTEND_URL; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required input: $name"
+              exit 1
+            fi
+          done
+          echo "Authenticated smoke inputs are present; values are not printed."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm run smoke:auth:prod

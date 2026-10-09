@@ -1,0 +1,68 @@
+name: Wheel v3 production cutover
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_sha:
+        description: SHA exacto que debe servir Render
+        required: true
+        type: string
+      frontend_sha:
+        description: SHA exacto que debe servir Vercel
+        required: true
+        type: string
+      confirmation:
+        description: Escribir exactamente ACTIVATE-WHEEL-V3
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      NODE_ENV: production
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+      FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL }}
+      ADMIN_TOTP_SECRET: ${{ secrets.PROD_ADMIN_TOTP_SECRET }}
+      PROD_API_URL: ${{ vars.PROD_API_URL }}
+      PROD_FRONTEND_URL: ${{ vars.PROD_FRONTEND_URL }}
+      EXPECTED_BACKEND_SHA: ${{ inputs.backend_sha }}
+      EXPECTED_FRONTEND_SHA: ${{ inputs.frontend_sha }}
+      CONFIRM_WHEEL_V3_CUTOVER: YES
+    steps:
+      - name: Validate destructive cutover confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ inputs.confirmation }}" = "ACTIVATE-WHEEL-V3" ] || {
+            echo "Confirmation must be exactly ACTIVATE-WHEEL-V3"
+            exit 1
+          }
+          for name in DATABASE_URL JWT_SECRET FRONTEND_URL ADMIN_TOTP_SECRET PROD_API_URL PROD_FRONTEND_URL EXPECTED_BACKEND_SHA EXPECTED_FRONTEND_SHA; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required input: $name"
+              exit 1
+            fi
+          done
+          [[ "$EXPECTED_BACKEND_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "Invalid backend SHA"; exit 1; }
+          [[ "$EXPECTED_FRONTEND_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "Invalid frontend SHA"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+
+      - name: Revalidate production immediately before cutover
+        run: npm run precutover:wheel-v3
+
+      - name: Activate Wheel v3 atomically
+        run: npm run activate:wheel-v3
+
+      - name: Verify production after cutover
+        run: npm run postcutover:wheel-v3
