@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {argentinaInputToIso,toArgentinaInput,assignmentPairName,resultScoreText,canEditResult} from '../frontend/src/leagueUi.js';
+import {argentinaInputToIso,toArgentinaInput,assignmentPairName,resultScoreText,matchScoreText,canEditResult} from '../frontend/src/leagueUi.js';
 
 test('schedule and actual played time carry Argentina offset across timezone/day boundaries',()=>{
   assert.equal(argentinaInputToIso('2026-09-29T21:30'),'2026-09-30T00:30:00.000Z');
@@ -25,4 +25,7 @@ test('review labels preserve canonical A/B score orientation for either particip
   assert.equal(assignmentPairName(assignment.pair_b_id,pair,assignment),'Mi pareja');
   assert.equal(resultScoreText({result_type:'normal',score:{sets:[{pairA:4,pairB:6},{pairA:6,pairB:3},{pairA:8,pairB:10,kind:'match_tiebreak'}]}}),'4–6 · 6–3 · 8–10 (super tie-break)');
   assert.equal(resultScoreText({result_type:'injury_abandonment',score:null}),'Lesión / abandono');
+  assert.equal(matchScoreText({score:{sets:[{pairA:6,pairB:4},{pairA:7,pairB:5}]}}),'6–4 · 7–5');
+  assert.equal(matchScoreText({score:null}),'');
+  assert.equal(matchScoreText({result_type:'administrative_forfeit',score:{sets:[{pairA:6,pairB:0},{pairA:6,pairB:0}]}}),'6–0 · 6–0');
 });

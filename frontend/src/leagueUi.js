@@ -20,9 +20,15 @@ export function assignmentPairName(id,pair,assignment){
   return Number(id)===Number(pair.id)?pair.players:assignment.rival.players;
 }
 
+export function matchScoreText(match){
+  const sets=match?.score?.sets;
+  if(!Array.isArray(sets)||sets.length===0)return '';
+  return sets.map(s=>`${s.pairA}–${s.pairB}${s.kind==='match_tiebreak'?' (super tie-break)':''}`).join(' · ');
+}
+
 export function resultScoreText(version){
-  if(version.result_type==='injury_abandonment')return 'Lesión / abandono';
-  return (version.score?.sets||[]).map(s=>`${s.pairA}–${s.pairB}${s.kind==='match_tiebreak'?' (super tie-break)':''}`).join(' · ');
+  if(version?.result_type==='injury_abandonment')return 'Lesión / abandono';
+  return matchScoreText(version);
 }
 
 export function canEditResult(assignment){

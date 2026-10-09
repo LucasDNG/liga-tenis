@@ -443,6 +443,18 @@ main{min-width:0}
 }
 .card h2,.card h3{margin:10px 0;line-height:1.15}
 .card p{color:var(--muted)}
+.match-score{
+  margin:8px 0 0;
+  color:#f4fbff;
+  font-size:20px;
+  font-weight:700;
+  letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;
+}
+.card h3 span{color:var(--muted);font-weight:600}
+.card h3 .match-winner{color:#fff}
+.compact .match-score{margin:0;font-size:18px}
+.results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
 .compact{
   min-height:72px;
   display:flex;
@@ -648,7 +660,7 @@ hr{margin:22px 0;border:0;border-top:1px solid var(--line)}
   .home-rules{padding:65px 17px}
   .rules-title h2{font-size:55px}
   .home-content,.page,.section{width:calc(100% - 24px);padding-top:46px}
-  .grid2,.grid3{grid-template-columns:1fr}
+  .grid2,.grid3,.results-grid{grid-template-columns:1fr}
   .page h1,.center h1{font-size:clamp(44px,15vw,58px)}
   .center{padding-top:34px}
   .auth{padding:26px 20px}

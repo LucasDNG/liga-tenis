@@ -64,6 +64,12 @@ test('extension extraordinaria queda condicionada fuera de Wheel v3',()=>{
   assert.match(frontSource,/!isV3&&a\.extraordinary_used/);
 });
 
+test('resultados públicos muestran el marcador de sets',()=>{
+  assert.match(frontSource,/matchScoreText\(m\)/);
+  assert.match(frontSource,/className="match-score"/);
+  assert.match(frontSource,/className=\{Number\(m\.winner_pair_id\)===Number\(m\.pair_a_id\)\?'match-winner':undefined\}/);
+});
+
 test('result review shows submitted versions and keeps the response form reachable',()=>{
   assert.match(frontSource,/\[a\.myVersion,a\.otherVersion\]\.filter\(Boolean\)\.map/);
   assert.match(frontSource,/resultScoreText\(v\)/);
